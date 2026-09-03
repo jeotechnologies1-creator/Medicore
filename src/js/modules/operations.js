@@ -98,7 +98,7 @@
                         <StatCard title="Low Stock" value={inventory.filter(d => d.status === 'low_stock').length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Expiring Soon" value={inventory.filter(d => {
                             const expiry = new Date(d.expiryDate);
-                            const threeMonths = new Date('2026-09-01');
+                            const threeMonths = new Date();
                             threeMonths.setMonth(threeMonths.getMonth() + 3);
                             return expiry <= threeMonths;
                         }).length} icon={Icons.Clock} color="red" />
@@ -169,7 +169,7 @@
                                     { key: 'unitPrice', title: 'Price', render: (row) => formatCurrency(row.unitPrice) },
                                     { key: 'expiryDate', title: 'Expiry', render: (row) => {
                                         const expiry = new Date(row.expiryDate);
-                                        const today = new Date('2026-09-01');
+                                        const today = new Date();
                                         const diff = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
                                         return (
                                             <span className={diff < 90 ? 'text-red-600 font-medium' : diff < 180 ? 'text-amber-600' : 'text-slate-600'}>
@@ -795,4 +795,3 @@
                 </div>
             );
         };
-

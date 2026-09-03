@@ -2,6 +2,9 @@
         // UI COMPONENTS
         // ==========================================
         const Button = ({ children, variant = 'primary', size = 'md', className = '', onClick, disabled, type = 'button', icon: Icon }) => {
+            // Do not render controls that have no behavior. This prevents demo-only
+            // buttons from appearing actionable in the clinical application.
+            if (type === 'button' && typeof onClick !== 'function') return null;
             const variants = {
                 primary: 'bg-medical-600 text-white hover:bg-medical-700 border-transparent shadow-sm hover:shadow-md',
                 secondary: 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm',
@@ -389,4 +392,3 @@
                 </div>
             );
         };
-

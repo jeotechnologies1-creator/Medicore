@@ -1,13 +1,14 @@
         // ==========================================
         const AppointmentsModule = () => {
             const [view, setView] = useState('list');
-            const [selectedDate, setSelectedDate] = useState('2026-09-01');
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
             const [showNewAppointment, setShowNewAppointment] = useState(false);
+            const [saveError, setSaveError] = useState('');
             const [appointments, setAppointments] = useState(hydrateSeedData().appointments || []);
             const [appointmentForm, setAppointmentForm] = useState({
                 patientId: '',
-                doctorId: 'u2',
-                date: '2026-09-01',
+                doctorId: '',
+                date: new Date().toISOString().slice(0, 10),
                 time: '09:00',
                 type: 'consultation',
                 department: 'general',
@@ -18,6 +19,7 @@
 
             const handleScheduleAppointment = async () => {
                 if (!appointmentForm.patientId) return;
+                setSaveError('');
                 const payload = {
                     id: 'apt_' + Date.now(),
                     patientId: appointmentForm.patientId,
@@ -32,7 +34,7 @@
                 };
                 const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
                 if (client) {
-                    const { data, error } = await client.from('appointments').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, appointment_date: payload.date, appointment_time: payload.time, appointment_type: payload.type }]).select();
+                    const { data, error } = await client.from('appointments').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId || null, appointment_date: payload.date, appointment_time: payload.time, appointment_type: payload.type }]).select();
                     if (!error && data && data[0]) {
                         const mapped = {
                             ...payload,
@@ -51,11 +53,20 @@
                         setShowNewAppointment(false);
                         return;
                     }
+                    setSaveError(error?.message || 'The appointment could not be saved.');
+                    return;
                 }
-                const next = [...appointments, payload];
+                setSaveError('Supabase is not configured. No appointment was created.');
+            };
+
+            const handleCheckIn = async (appointment) => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) { setSaveError('Supabase is not configured.'); return; }
+                const { error } = await client.from('appointments').update({ status: 'checked_in' }).eq('id', appointment.id);
+                if (error) { setSaveError(error.message); return; }
+                const next = appointments.map(item => item.id === appointment.id ? { ...item, status: 'checked_in' } : item);
                 persistSeedTable('appointments', next);
                 setAppointments(next);
-                setShowNewAppointment(false);
             };
 
             const timeSlots = Array.from({ length: 24 }, (_, i) => {
@@ -117,10 +128,7 @@
                                 ]}
                                 data={filteredAppointments.sort((a, b) => a.time.localeCompare(b.time))}
                                 actions={(row) => (
-                                    <>
-                                        {row.status === 'scheduled' && <Button variant="primary" size="sm">Check In</Button>}
-                                        <Button variant="ghost" size="sm" icon={Icons.MoreHorizontal} />
-                                    </>
+                                    row.status === 'scheduled' && <Button variant="primary" size="sm" onClick={() => handleCheckIn(row)}>Check In</Button>
                                 )}
                             />
                         ) : (
@@ -134,15 +142,17 @@
                                         {timeSlots.slice(8, 18).map(time => (
                                             <React.Fragment key={time}>
                                                 <div className="text-xs text-slate-400 py-2">{time}</div>
-                                                {Array.from({ length: 7 }, (_, i) => (
-                                                    <div key={i} className="border border-slate-100 rounded p-1 min-h-[40px] hover:bg-slate-50 transition-colors">
-                                                        {Math.random() > 0.7 && (
-                                                            <div className="bg-medical-100 text-medical-700 text-xs rounded px-1.5 py-0.5 truncate">
-                                                                {seedData.patients[Math.floor(Math.random() * 50)].firstName}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                                {Array.from({ length: 7 }, (_, i) => {
+                                                    const date = new Date(selectedDate + 'T00:00:00');
+                                                    date.setDate(date.getDate() - date.getDay() + 1 + i);
+                                                    const dayAppointments = appointments.filter(appointment => appointment.date === date.toISOString().slice(0, 10) && appointment.time === time);
+                                                    return <div key={i} className="border border-slate-100 rounded p-1 min-h-[40px] hover:bg-slate-50 transition-colors">
+                                                        {dayAppointments.map(appointment => {
+                                                            const patient = seedData.patients.find(p => p.id === appointment.patientId);
+                                                            return <div key={appointment.id} className="bg-medical-100 text-medical-700 text-xs rounded px-1.5 py-0.5 truncate">{patient ? `${patient.firstName} ${patient.lastName}` : 'Appointment'}</div>;
+                                                        })}
+                                                    </div>;
+                                                })}
                                             </React.Fragment>
                                         ))}
                                     </div>
@@ -164,9 +174,10 @@
                         }
                     >
                         <div className="space-y-4">
+                            {saveError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>}
                             <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Department" value={appointmentForm.department} onChange={(e) => setAppointmentForm(prev => ({ ...prev, department: e.target.value }))} options={[{ value: '', label: 'Select department...' }, { value: 'cardiology', label: 'Cardiology' }, { value: 'orthopedics', label: 'Orthopedics' }, { value: 'general', label: 'General Medicine' }, { value: 'pediatrics', label: 'Pediatrics' }]} />
-                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, { value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(seedData.users || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={appointmentForm.date} onChange={(e) => setAppointmentForm(prev => ({ ...prev, date: e.target.value }))} />
                                 <Input label="Time" type="time" value={appointmentForm.time} onChange={(e) => setAppointmentForm(prev => ({ ...prev, time: e.target.value }))} />
@@ -593,4 +604,3 @@
                 </div>
             );
         };
-

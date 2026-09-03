@@ -289,7 +289,7 @@
                         <StatCard title="Low Stock" value={inventory.filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Expiring" value={inventory.filter(item => {
                             const expiry = new Date(item.expiryDate || '2027-01-01');
-                            const now = new Date('2026-09-01');
+                            const now = new Date();
                             return expiry > now && (expiry - now) / (1000 * 60 * 60 * 24) <= 90;
                         }).length} icon={Icons.Clock} color="red" />
                         <StatCard title="Value" value={formatCurrency(inventory.reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0))} icon={Icons.DollarSign} color="emerald" />
@@ -371,4 +371,3 @@
                 </div>
             );
         };
-

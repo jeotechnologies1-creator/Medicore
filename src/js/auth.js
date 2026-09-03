@@ -153,7 +153,6 @@
                                         <input type="checkbox" className="rounded border-slate-300 text-medical-600 focus:ring-medical-500" />
                                         <span className="text-slate-600">Remember me</span>
                                     </label>
-                                    <button type="button" className="text-medical-600 hover:text-medical-700 font-medium">Forgot password?</button>
                                 </div>
                                 <Button type="submit" variant="primary" size="lg" className="w-full justify-center" disabled={loading}>
                                     {loading ? (
@@ -166,10 +165,6 @@
                             </form>
                         </Card>
 
-                        <div className="mt-6 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-center">
-                            <p className="text-xs font-medium uppercase tracking-wide text-medical-700">Secure sign-in</p>
-                            <p className="mt-1 text-sm text-medical-700">Development admin: username <strong>admin</strong>, password <strong>admin</strong>. Create staff from HR & Staff after signing in.</p>
-                        </div>
                     </div>
                 </div>
             );

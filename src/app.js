@@ -15,6 +15,14 @@
             };
 
             useEffect(() => {
+                const handleNavigation = (event) => {
+                    if (event.detail) setActiveModule(event.detail);
+                };
+                window.addEventListener('medicore:navigate', handleNavigation);
+                return () => window.removeEventListener('medicore:navigate', handleNavigation);
+            }, []);
+
+            useEffect(() => {
                 try {
                     const saved = localStorage.getItem('medicore_user');
                     if (saved) setIsAuthenticated(true);
@@ -95,9 +103,11 @@
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                         <Header 
                             notifications={notifications}
+                            onNavigate={setActiveModule}
                             onNotificationClick={(notif) => {
                                 setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
                             }}
+                            onMarkAllNotificationsRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
                             onLogout={handleLogout}
                         />
                         <main className="flex-1 overflow-y-auto">

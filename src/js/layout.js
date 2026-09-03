@@ -133,7 +133,7 @@
         // ==========================================
         // HEADER
         // ==========================================
-        const Header = ({ onSearch, notifications, onNotificationClick, onLogout }) => {
+        const Header = ({ onSearch, notifications, onNotificationClick, onMarkAllNotificationsRead, onNavigate, onLogout }) => {
             const { user } = useAuth();
             const [showNotifications, setShowNotifications] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -174,7 +174,7 @@
                                 <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-2 dropdown-menu z-50">
                                     <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
                                         <span className="font-semibold text-sm">Notifications</span>
-                                        <button className="text-xs text-medical-600 hover:underline">Mark all read</button>
+                                        <button onClick={onMarkAllNotificationsRead} className="text-xs text-medical-600 hover:underline">Mark all read</button>
                                     </div>
                                     <div className="max-h-80 overflow-y-auto">
                                         {notifications.slice(0, 8).map((n) => (
@@ -191,7 +191,7 @@
                                         ))}
                                     </div>
                                     <div className="px-4 py-2 border-t border-slate-100 text-center">
-                                        <button className="text-sm text-medical-600 hover:underline">View all notifications</button>
+                                        <button onClick={() => { onNavigate?.('audit'); setShowNotifications(false); }} className="text-sm text-medical-600 hover:underline">View audit log</button>
                                     </div>
                                 </div>
                             )}
@@ -215,10 +215,10 @@
                                         <p className="font-medium text-sm text-slate-900">{user?.name}</p>
                                         <p className="text-xs text-slate-500">{user?.email}</p>
                                     </div>
-                                    <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                    <button onClick={() => { onNavigate?.('patients'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                         <Icons.User size={16} /> Profile
                                     </button>
-                                    <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                    <button onClick={() => { onNavigate?.('settings'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                         <Icons.Settings size={16} /> Settings
                                     </button>
                                     <div className="border-t border-slate-100 mt-1 pt-1">
@@ -233,4 +233,3 @@
                 </header>
             );
         };
-

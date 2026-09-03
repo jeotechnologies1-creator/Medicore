@@ -146,10 +146,10 @@
                                 <DataTable
                                     columns={[
                                         { key: 'category', title: 'Category' },
-                                        { key: 'count', title: 'Items', render: () => Math.floor(Math.random() * 20 + 5) },
-                                        { key: 'value', title: 'Stock Value', render: () => formatCurrency(Math.random() * 5000 + 1000) }
+                                        { key: 'count', title: 'Items', render: (row) => seedData.pharmacyInventory.filter(item => item.category === row.category).length },
+                                        { key: 'value', title: 'Stock Value', render: (row) => formatCurrency(seedData.pharmacyInventory.filter(item => item.category === row.category).reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0)) }
                                     ]}
-                                    data={['Antibiotic', 'Analgesic', 'Antidiabetic', 'Antihypertensive', 'Statin', 'PPI'].map(c => ({ category: c }))}
+                                    data={Array.from(new Set(seedData.pharmacyInventory.map(item => item.category).filter(Boolean))).map(category => ({ category }))}
                                 />
                             </div>
                         )}
@@ -217,4 +217,3 @@
                 </div>
             );
         };
-

@@ -71,47 +71,15 @@
                     
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="General Settings">
-                            <div className="space-y-4">
-                                <Input label="Hospital Name" value="MediCore General Hospital" onChange={() => {}} />
-                                <Input label="Address" value="123 Healthcare Avenue, Medical City" onChange={() => {}} />
-                                <Input label="Phone" value="+1-555-MEDICORE" onChange={() => {}} />
-                                <Input label="Email" value="admin@medicore.com" type="email" onChange={() => {}} />
-                                <Input label="Website" value="www.medicore.com" onChange={() => {}} />
-                            </div>
+                            <p className="text-sm leading-6 text-slate-600">Hospital identity details are not stored by this application yet. Configure them through your approved administration workflow instead of relying on placeholder values.</p>
                         </Card>
 
                         <Card title="System Configuration">
-                            <div className="space-y-4">
-                                <Select label="Timezone" options={[{ value: 'UTC', label: 'UTC' }, { value: 'EST', label: 'Eastern Time' }, { value: 'PST', label: 'Pacific Time' }]} value="UTC" onChange={() => {}} />
-                                <Select label="Date Format" options={[{ value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' }, { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' }, { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' }]} value="MM/DD/YYYY" onChange={() => {}} />
-                                <Select label="Currency" options={[{ value: 'USD', label: 'USD ($)' }, { value: 'EUR', label: 'EUR (€)' }, { value: 'GBP', label: 'GBP (£)' }]} value="USD" onChange={() => {}} />
-                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="text-sm text-slate-700">Auto-logout</span>
-                                    <span className="text-sm font-medium text-slate-900">15 minutes</span>
-                                </div>
-                            </div>
+                            <p className="text-sm leading-6 text-slate-600">Locale, currency, and session controls are determined by your deployed Supabase and hosting configuration. No simulated preferences are shown here.</p>
                         </Card>
 
                         <Card title="Security Settings">
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="text-sm text-slate-700">Two-Factor Authentication</span>
-                                    <Badge variant="success">Enabled</Badge>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="text-sm text-slate-700">Password Expiry</span>
-                                    <span className="text-sm font-medium text-slate-900">90 days</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="text-sm text-slate-700">Session Timeout</span>
-                                    <span className="text-sm font-medium text-slate-900">30 minutes</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                    <span className="text-sm text-slate-700">Audit Logging</span>
-                                    <Badge variant="success">Active</Badge>
-                                </div>
-                                <Button variant="secondary" className="w-full" icon={Icons.Lock}>Change Password Policy</Button>
-                            </div>
+                            <p className="text-sm leading-6 text-slate-600">Authentication policy, multi-factor authentication, and session duration must be managed in Supabase Auth. This screen no longer makes unsupported security claims or exposes inactive controls.</p>
                         </Card>
                     </div>
 
@@ -124,9 +92,6 @@
                                 { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                             ]}
                             data={seedData.wards}
-                            actions={() => (
-                                <Button variant="ghost" size="sm" icon={Icons.Edit} />
-                            )}
                         />
                     </Card>
                 </div>

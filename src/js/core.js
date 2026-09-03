@@ -380,6 +380,10 @@
             return nextRows;
         };
 
+        const navigateTo = (module) => {
+            window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: module }));
+        };
+
         const loadSupabaseTables = async () => {
             const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function'
                 ? window.MedicoreSupabase.getClient()
@@ -508,4 +512,3 @@
             };
             return colors[status] || 'bg-slate-100 text-slate-600 border-slate-200';
         };
-

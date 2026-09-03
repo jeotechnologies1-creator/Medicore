@@ -3,40 +3,45 @@
         // ==========================================
         const DashboardModule = () => {
             const { user } = useAuth();
-            const [timeRange, setTimeRange] = useState('today');
             
-            const stats = useMemo(() => {
-                const today = new Date('2026-09-01');
-                return {
-                    totalPatients: seedData.patients.length,
-                    todayAppointments: seedData.appointments.filter(a => a.date === '2026-09-01').length,
-                    pendingLabs: seedData.labOrders.filter(l => l.status === 'pending').length,
-                    occupiedBeds: seedData.admissions.filter(a => a.status === 'active').length,
-                    totalRevenue: seedData.billing.reduce((sum, b) => sum + parseFloat(b.paid), 0).toFixed(2),
-                    criticalPatients: seedData.admissions.filter(a => a.acuity === 'critical').length,
-                    pendingBills: seedData.billing.filter(b => b.status === 'pending' || b.status === 'partial').length,
-                    staffOnline: seedData.users.filter(u => u.status === 'active').length
-                };
-            }, []);
+            const today = new Date().toISOString().slice(0, 10);
+            const stats = {
+                totalPatients: seedData.patients.length,
+                todayAppointments: seedData.appointments.filter(a => a.date === today).length,
+                pendingLabs: seedData.labOrders.filter(l => l.status === 'pending').length,
+                occupiedBeds: seedData.admissions.filter(a => a.status === 'active').length,
+                totalRevenue: seedData.billing.reduce((sum, b) => sum + Number(b.paid || 0), 0),
+                criticalPatients: seedData.admissions.filter(a => a.acuity === 'critical').length,
+                pendingBills: seedData.billing.filter(b => b.status === 'pending' || b.status === 'partial').length,
+                staffOnline: seedData.users.filter(u => u.status === 'active').length
+            };
 
             const recentActivity = seedData.auditLogs.slice(0, 10);
 
-            const appointmentData = [
-                { label: 'Mon', value: 12 },
-                { label: 'Tue', value: 19 },
-                { label: 'Wed', value: 15 },
-                { label: 'Thu', value: 22 },
-                { label: 'Fri', value: 18 },
-                { label: 'Sat', value: 8 },
-                { label: 'Sun', value: 5 },
-            ];
-
-            const revenueData = [
-                { label: 'W1', value: 45000 },
-                { label: 'W2', value: 52000 },
-                { label: 'W3', value: 48000 },
-                { label: 'W4', value: 61000 },
-            ];
+            const appointmentData = Array.from({ length: 7 }, (_, index) => {
+                const date = new Date();
+                date.setDate(date.getDate() - (6 - index));
+                const dateKey = date.toISOString().slice(0, 10);
+                return { label: date.toLocaleDateString(undefined, { weekday: 'short' }), value: seedData.appointments.filter(appointment => appointment.date === dateKey).length };
+            });
+            const revenueData = Array.from({ length: 4 }, (_, index) => {
+                const end = new Date();
+                end.setDate(end.getDate() - ((3 - index) * 7));
+                const start = new Date(end);
+                start.setDate(start.getDate() - 6);
+                const value = seedData.billing.filter(invoice => {
+                    const date = new Date(invoice.date);
+                    return !Number.isNaN(date.valueOf()) && date >= start && date <= end;
+                }).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
+                return { label: `W${index + 1}`, value };
+            });
+            const departmentCounts = seedData.appointments.reduce((counts, appointment) => {
+                const department = appointment.department || 'Unassigned';
+                counts[department] = (counts[department] || 0) + 1;
+                return counts;
+            }, {});
+            const departmentTotal = Math.max(1, seedData.appointments.length);
+            const departments = Object.entries(departmentCounts).slice(0, 4).map(([name, count], index) => ({ name, value: Math.round((count / departmentTotal) * 100), color: ['bg-medical-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][index] }));
 
             const getRoleDashboard = () => {
                 switch (user?.role) {
@@ -44,15 +49,15 @@
                         return (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <StatCard title="Today's Appointments" value={stats.todayAppointments} icon={Icons.Calendar} color="medical" trend="up" trendValue="+3 from yesterday" />
-                                    <StatCard title="Patients Waiting" value={8} icon={Icons.Users} color="amber" />
+                                    <StatCard title="Today's Appointments" value={stats.todayAppointments} icon={Icons.Calendar} color="medical" />
+                                    <StatCard title="Patients Waiting" value={seedData.appointments.filter(a => a.status === 'checked_in').length} icon={Icons.Users} color="amber" />
                                     <StatCard title="Pending Labs" value={stats.pendingLabs} icon={Icons.FlaskConical} color="violet" />
-                                    <StatCard title="Prescriptions" value={12} icon={Icons.Pill} color="emerald" />
+                                    <StatCard title="Prescriptions" value={seedData.prescriptions.filter(p => p.status === 'active').length} icon={Icons.Pill} color="emerald" />
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    <Card title="Today's Schedule" className="lg:col-span-2" action={<Button variant="ghost" size="sm" icon={Icons.Calendar}>View All</Button>}>
+                                    <Card title="Today's Schedule" className="lg:col-span-2" action={<Button variant="ghost" size="sm" icon={Icons.Calendar} onClick={() => navigateTo('appointments')}>View All</Button>}>
                                         <div className="space-y-3">
-                                            {seedData.appointments.filter(a => a.date === '2026-09-01').slice(0, 5).map((apt) => {
+                                            {seedData.appointments.filter(a => a.date === today).slice(0, 5).map((apt) => {
                                                 const patient = seedData.patients.find(p => p.id === apt.patientId);
                                                 return (
                                                     <div key={apt.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
@@ -73,11 +78,11 @@
                                     </Card>
                                     <Card title="Quick Actions">
                                         <div className="space-y-2">
-                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.UserPlus}>New Consultation</Button>
-                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.FlaskConical}>Order Lab Test</Button>
-                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.Image}>Order Imaging</Button>
-                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.Pill}>Write Prescription</Button>
-                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.MessageSquare}>Message Patient</Button>
+                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.UserPlus} onClick={() => navigateTo('consultations')}>New Consultation</Button>
+                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.FlaskConical} onClick={() => navigateTo('laboratory')}>Order Lab Test</Button>
+                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.Image} onClick={() => navigateTo('radiology')}>Order Imaging</Button>
+                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.Pill} onClick={() => navigateTo('pharmacy')}>Write Prescription</Button>
+                                            <Button variant="secondary" className="w-full justify-start" icon={Icons.MessageSquare} onClick={() => navigateTo('messages')}>Message Patient</Button>
                                         </div>
                                     </Card>
                                 </div>
@@ -87,9 +92,9 @@
                         return (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <StatCard title="Ward Occupancy" value={stats.occupiedBeds + '/132'} icon={Icons.Bed} color="medical" />
-                                    <StatCard title="Vitals Due" value={15} icon={Icons.Activity} color="amber" />
-                                    <StatCard title="Medications Due" value={23} icon={Icons.Syringe} color="emerald" />
+                                    <StatCard title="Ward Occupancy" value={stats.occupiedBeds + '/' + seedData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} icon={Icons.Bed} color="medical" />
+                                    <StatCard title="Vitals Recorded" value={seedData.vitals.filter(v => String(v.timestamp || '').slice(0, 10) === today).length} icon={Icons.Activity} color="amber" />
+                                    <StatCard title="Active Medication Orders" value={seedData.medicationOrders.filter(order => order.status === 'active').length} icon={Icons.Syringe} color="emerald" />
                                     <StatCard title="Critical Patients" value={stats.criticalPatients} icon={Icons.AlertCircle} color="red" />
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -108,16 +113,16 @@
                                     </Card>
                                     <Card title="Vital Signs Alerts">
                                         <div className="space-y-3">
-                                            {[1, 2, 3].map((i) => (
-                                                <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
+                                            {seedData.clinicalAlerts.filter(alert => alert.status === 'open' && alert.severity === 'critical').slice(0, 3).map((alert) => (
+                                                <div key={alert.id} className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
                                                     <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
                                                         <Icons.AlertCircle size={20} className="text-red-600" />
                                                     </div>
                                                     <div className="flex-1">
-                                                        <p className="text-sm font-medium text-slate-900">Room {100 + i} - Critical BP</p>
-                                                        <p className="text-xs text-slate-500">Patient: John Doe - BP: 180/110</p>
+                                                        <p className="text-sm font-medium text-slate-900">Critical clinical alert</p>
+                                                        <p className="text-xs text-slate-500">{alert.message}</p>
                                                     </div>
-                                                    <Button variant="danger" size="sm">Respond</Button>
+                                                    <Button variant="danger" size="sm" onClick={() => navigateTo('clinical_safety')}>Respond</Button>
                                                 </div>
                                             ))}
                                         </div>
@@ -128,26 +133,13 @@
                     default:
                         return (
                             <div className="space-y-6 animate-fade-in">
-                                <div className="flex items-center justify-between">
-                                    <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
-                                    <div className="flex gap-2">
-                                        {['today', 'week', 'month', 'year'].map((range) => (
-                                            <button
-                                                key={range}
-                                                onClick={() => setTimeRange(range)}
-                                                className={'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ' + (timeRange === range ? 'bg-medical-100 text-medical-700' : 'text-slate-600 hover:bg-slate-100')}
-                                            >
-                                                {range.charAt(0).toUpperCase() + range.slice(1)}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <StatCard title="Total Patients" value={stats.totalPatients} subtitle="Registered patients" icon={Icons.Users} color="medical" trend="up" trendValue="+12% this month" />
+                                    <StatCard title="Total Patients" value={stats.totalPatients} subtitle="Registered patients" icon={Icons.Users} color="medical" />
                                     <StatCard title="Today's Appointments" value={stats.todayAppointments} subtitle="Scheduled visits" icon={Icons.Calendar} color="emerald" />
-                                    <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/132'} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
-                                    <StatCard title="Revenue" value={formatCurrency(stats.totalRevenue)} subtitle="Total collected" icon={Icons.DollarSign} color="teal" trend="up" trendValue="+8.5% this month" />
+                                    <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/' + seedData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
+                                    <StatCard title="Revenue" value={formatCurrency(stats.totalRevenue)} subtitle="Total collected" icon={Icons.DollarSign} color="teal" />
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -156,12 +148,7 @@
                                     </Card>
                                     <Card title="Department Distribution">
                                         <div className="space-y-4">
-                                            {[
-                                                { name: 'Cardiology', value: 28, color: 'bg-medical-500' },
-                                                { name: 'Orthopedics', value: 22, color: 'bg-emerald-500' },
-                                                { name: 'General Medicine', value: 35, color: 'bg-violet-500' },
-                                                { name: 'Pediatrics', value: 15, color: 'bg-amber-500' },
-                                            ].map((dept) => (
+                                            {departments.map((dept) => (
                                                 <div key={dept.name}>
                                                     <div className="flex justify-between text-sm mb-1">
                                                         <span className="text-slate-700">{dept.name}</span>
@@ -180,7 +167,7 @@
                                     <Card title="Revenue Overview">
                                         <LineChart data={revenueData} width={600} height={200} color="#059669" />
                                     </Card>
-                                    <Card title="Recent Activity" action={<Button variant="ghost" size="sm">View All</Button>}>
+                                    <Card title="Recent Activity" action={<Button variant="ghost" size="sm" onClick={() => navigateTo('audit')}>View All</Button>}>
                                         <div className="space-y-3">
                                             {recentActivity.map((log) => (
                                                 <div key={log.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
@@ -250,4 +237,3 @@
                 </div>
             );
         };
-
