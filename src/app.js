@@ -1385,8 +1385,8 @@
         // ==========================================
         // SIDEBAR NAVIGATION
         // ==========================================
-        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle }) => {
-            const { user, logout } = useAuth();
+        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout }) => {
+            const { user } = useAuth();
             
             const getMenuItems = () => {
                 const common = [
@@ -1499,7 +1499,7 @@
                             {collapsed ? <Icons.PanelLeft size={18} /> : <><Icons.PanelLeft size={18} className="rotate-180" /> <span>Collapse</span></>}
                         </button>
                         <button
-                            onClick={logout}
+                            onClick={onLogout}
                             className={'w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all ' + (collapsed ? 'justify-center' : '')}
                         >
                             <Icons.LogOut size={18} />
@@ -1513,7 +1513,7 @@
         // ==========================================
         // HEADER
         // ==========================================
-        const Header = ({ onSearch, notifications, onNotificationClick }) => {
+        const Header = ({ onSearch, notifications, onNotificationClick, onLogout }) => {
             const { user } = useAuth();
             const [showNotifications, setShowNotifications] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -1602,7 +1602,7 @@
                                         <Icons.Settings size={16} /> Settings
                                     </button>
                                     <div className="border-t border-slate-100 mt-1 pt-1">
-                                        <button onClick={() => {}} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                        <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
                                             <Icons.LogOut size={16} /> Sign Out
                                         </button>
                                     </div>
@@ -3901,7 +3901,13 @@
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
 
-            const { user } = useAuth();
+            const { user, logout } = useAuth();
+
+            const handleLogout = () => {
+                logout();
+                setIsAuthenticated(false);
+                setActiveModule('dashboard');
+            };
 
             useEffect(() => {
                 try {
@@ -3968,6 +3974,7 @@
                         onModuleChange={setActiveModule}
                         collapsed={sidebarCollapsed}
                         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        onLogout={handleLogout}
                     />
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                         <Header 
@@ -3975,6 +3982,7 @@
                             onNotificationClick={(notif) => {
                                 setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
                             }}
+                            onLogout={handleLogout}
                         />
                         <main className="flex-1 overflow-y-auto">
                             {renderModule()}
