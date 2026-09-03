@@ -25,7 +25,7 @@
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <StatCard title="Total Staff" value={staff.length} icon={Icons.Users} color="medical" />
                         <StatCard title="Active Staff" value={activeStaff} icon={Icons.UserCheck} color="emerald" />
-                        <StatCard title="Attendance" value={`${attendanceRate}%`} icon={Icons.CalendarCheck2} color="amber" />
+                        <StatCard title="Attendance" value={`${attendanceRate}%`} icon={Icons.Calendar} color="amber" />
                         <StatCard title="Departments" value={departments.length} icon={Icons.Building2} color="violet" />
                     </div>
 
