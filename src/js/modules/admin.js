@@ -12,6 +12,58 @@
                 { id: 'admissions', label: 'Admissions Report', icon: Icons.Bed },
             ];
 
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const startOfWeek = new Date(now);
+            startOfWeek.setHours(0, 0, 0, 0);
+            startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
+            const toDate = (value) => value ? new Date(value) : null;
+            const isOnOrAfter = (value, threshold) => {
+                const date = toDate(value);
+                return date && !Number.isNaN(date.valueOf()) && date >= threshold;
+            };
+            const patientAges = seedData.patients.map(patient => calculateAge(patient.dateOfBirth)).filter(age => Number.isFinite(age) && age >= 0);
+            const patientAgeGroups = [
+                { label: '0-18', min: 0, max: 18 }, { label: '19-35', min: 19, max: 35 }, { label: '36-50', min: 36, max: 50 },
+                { label: '51-65', min: 51, max: 65 }, { label: '65+', min: 66, max: Infinity }
+            ].map(group => ({ ...group, value: patientAges.filter(age => age >= group.min && age <= group.max).length }));
+            const totalRevenue = seedData.billing.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
+            const outstandingRevenue = seedData.billing.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
+            const insuranceClaimTotal = seedData.insuranceClaims.reduce((sum, claim) => sum + Number(claim.amountApproved || claim.amountClaimed || 0), 0);
+            const revenueTrend = Array.from({ length: 6 }, (_, index) => {
+                const month = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+                return {
+                    label: month.toLocaleDateString(undefined, { month: 'short' }),
+                    value: seedData.billing.filter(invoice => {
+                        const date = toDate(invoice.date);
+                        return date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
+                    }).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0)
+                };
+            });
+            const expiringSoon = seedData.pharmacyInventory.filter(item => {
+                const expiry = toDate(item.expiryDate);
+                const limit = new Date(now);
+                limit.setDate(limit.getDate() + 90);
+                return expiry && expiry >= now && expiry <= limit;
+            }).length;
+            const monthlyLabOrders = seedData.labOrders.filter(order => isOnOrAfter(order.orderedDate, startOfMonth));
+            const labTurnaroundHours = seedData.labOrders.map(order => {
+                const ordered = toDate(order.orderedDate);
+                const completed = toDate(order.resultDate);
+                return ordered && completed && completed >= ordered ? (completed - ordered) / 3600000 : null;
+            }).filter(hours => hours !== null);
+            const labTypeData = Object.entries(seedData.labOrders.reduce((counts, order) => {
+                const type = order.testType || 'Unspecified';
+                counts[type] = (counts[type] || 0) + 1;
+                return counts;
+            }, {})).map(([label, value]) => ({ label, value })).slice(0, 6);
+            const dischargedThisWeek = seedData.admissions.filter(admission => admission.status === 'discharged' && isOnOrAfter(admission.dischargeDate, startOfWeek)).length;
+            const stayLengths = seedData.admissions.map(admission => {
+                const start = toDate(admission.admissionDate);
+                const end = toDate(admission.dischargeDate);
+                return start && end && end >= start ? (end - start) / 86400000 : null;
+            }).filter(days => days !== null);
+
             const handleExport = () => {
                 const typeData = {
                     patients: seedData.patients,
@@ -71,21 +123,15 @@
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">New This Month</p>
-                                        <p className="text-2xl font-bold text-slate-900">24</p>
+                                        <p className="text-2xl font-bold text-slate-900">{seedData.patients.filter(patient => isOnOrAfter(patient.registrationDate, startOfMonth)).length}</p>
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Average Age</p>
-                                        <p className="text-2xl font-bold text-slate-900">42 years</p>
+                                        <p className="text-2xl font-bold text-slate-900">{patientAges.length ? `${Math.round(patientAges.reduce((sum, age) => sum + age, 0) / patientAges.length)} years` : 'N/A'}</p>
                                     </div>
                                 </div>
                                 <BarChart 
-                                    data={[
-                                        { label: '0-18', value: 8 },
-                                        { label: '19-35', value: 15 },
-                                        { label: '36-50', value: 12 },
-                                        { label: '51-65', value: 10 },
-                                        { label: '65+', value: 5 }
-                                    ]} 
+                                    data={patientAgeGroups}
                                     width={600} 
                                     height={250} 
                                     color="#2563eb" 
@@ -98,28 +144,19 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-emerald-50 rounded-xl">
                                         <p className="text-xs text-emerald-600 uppercase">Total Revenue</p>
-                                        <p className="text-2xl font-bold text-emerald-900">{formatCurrency(125000)}</p>
+                                        <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalRevenue)}</p>
                                     </div>
                                     <div className="p-4 bg-amber-50 rounded-xl">
                                         <p className="text-xs text-amber-600 uppercase">Outstanding</p>
-                                        <p className="text-2xl font-bold text-amber-900">{formatCurrency(28000)}</p>
+                                        <p className="text-2xl font-bold text-amber-900">{formatCurrency(outstandingRevenue)}</p>
                                     </div>
                                     <div className="p-4 bg-medical-50 rounded-xl">
                                         <p className="text-xs text-medical-600 uppercase">Insurance Claims</p>
-                                        <p className="text-2xl font-bold text-medical-900">{formatCurrency(45000)}</p>
+                                        <p className="text-2xl font-bold text-medical-900">{formatCurrency(insuranceClaimTotal)}</p>
                                     </div>
                                 </div>
                                 <LineChart 
-                                    data={[
-                                        { value: 85000, label: 'Jan' },
-                                        { value: 92000, label: 'Feb' },
-                                        { value: 88000, label: 'Mar' },
-                                        { value: 95000, label: 'Apr' },
-                                        { value: 102000, label: 'May' },
-                                        { value: 98000, label: 'Jun' },
-                                        { value: 110000, label: 'Jul' },
-                                        { value: 125000, label: 'Aug' }
-                                    ]} 
+                                    data={revenueTrend}
                                     width={700} 
                                     height={250} 
                                     color="#059669" 
@@ -140,7 +177,7 @@
                                     </div>
                                     <div className="p-4 bg-amber-50 rounded-xl">
                                         <p className="text-xs text-amber-600 uppercase">Expiring Soon</p>
-                                        <p className="text-2xl font-bold text-amber-900">12</p>
+                                        <p className="text-2xl font-bold text-amber-900">{expiringSoon}</p>
                                     </div>
                                 </div>
                                 <DataTable
@@ -159,11 +196,11 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Tests This Month</p>
-                                        <p className="text-2xl font-bold text-slate-900">{seedData.labOrders.length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{monthlyLabOrders.length}</p>
                                     </div>
                                     <div className="p-4 bg-medical-50 rounded-xl">
                                         <p className="text-xs text-medical-600 uppercase">Turnaround Time</p>
-                                        <p className="text-2xl font-bold text-medical-900">3.2 hours</p>
+                                        <p className="text-2xl font-bold text-medical-900">{labTurnaroundHours.length ? `${(labTurnaroundHours.reduce((sum, hours) => sum + hours, 0) / labTurnaroundHours.length).toFixed(1)} hours` : 'N/A'}</p>
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Critical Results</p>
@@ -171,14 +208,7 @@
                                     </div>
                                 </div>
                                 <BarChart 
-                                    data={[
-                                        { label: 'CBC', value: 45 },
-                                        { label: 'Lipid', value: 32 },
-                                        { label: 'LFT', value: 28 },
-                                        { label: 'KFT', value: 24 },
-                                        { label: 'Glucose', value: 38 },
-                                        { label: 'Thyroid', value: 18 }
-                                    ]} 
+                                    data={labTypeData}
                                     width={600} 
                                     height={250} 
                                     color="#7c3aed" 
@@ -195,11 +225,11 @@
                                     </div>
                                     <div className="p-4 bg-emerald-50 rounded-xl">
                                         <p className="text-xs text-emerald-600 uppercase">Discharged This Week</p>
-                                        <p className="text-2xl font-bold text-emerald-900">18</p>
+                                        <p className="text-2xl font-bold text-emerald-900">{dischargedThisWeek}</p>
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Average LOS</p>
-                                        <p className="text-2xl font-bold text-red-900">4.2 days</p>
+                                        <p className="text-2xl font-bold text-red-900">{stayLengths.length ? `${(stayLengths.reduce((sum, days) => sum + days, 0) / stayLengths.length).toFixed(1)} days` : 'N/A'}</p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

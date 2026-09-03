@@ -42,7 +42,11 @@
                 };
 
                 syncLiveData();
-                return () => { cancelled = true; };
+                const refreshTimer = window.setInterval(syncLiveData, 30000);
+                return () => {
+                    cancelled = true;
+                    window.clearInterval(refreshTimer);
+                };
             }, [isAuthenticated]);
 
             const handleLogin = () => setIsAuthenticated(true);
