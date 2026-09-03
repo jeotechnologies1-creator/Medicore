@@ -2,6 +2,16 @@
 
 MediCore is a browser-based EMR/Hospital Management System backed by Supabase.
 
+## Front-end structure
+
+The app uses ordered browser scripts (no bundler is required). `src/app.js` is now the small application entry point; supporting code lives in `src/js/`:
+
+- `core.js` — data normalizers, loading, and common utilities
+- `icons.js`, `ui.js`, `auth.js`, `layout.js` — reusable UI, authentication, and navigation
+- `modules/` — feature screens grouped by domain: dashboard, patients, diagnostics, operations, administration, system, portal, people, and clinical care
+
+Keep the script order in `index.html`, because each file deliberately uses the shared browser scope from the files before it.
+
 ## Clinical safety upgrade
 
 Run the SQL files in this order in the Supabase SQL editor:
