@@ -1,4 +1,413 @@
         // ==========================================
+        // OPERATIONS COMMAND CENTRE
+        // ==========================================
+        const OperationsModule = () => {
+            const [activeTab, setActiveTab] = useState('flow');
+            const [selectedDept, setSelectedDept] = useState('all');
+
+            const managementDepartments = [
+                { name: 'Emergency', patients: 48, waitMinutes: 18, occupancy: 82, turnaround: 91 },
+                { name: 'Inpatient', patients: 112, waitMinutes: 12, occupancy: 76, turnaround: 87 },
+                { name: 'Outpatient', patients: 164, waitMinutes: 14, occupancy: 80, turnaround: 93 },
+                { name: 'Diagnostics', patients: 96, waitMinutes: 22, occupancy: 71, turnaround: 85 },
+                { name: 'Surgery', patients: 24, waitMinutes: 9, occupancy: 68, turnaround: 89 }
+            ];
+
+            const filteredDepartments = selectedDept === 'all'
+                ? managementDepartments
+                : managementDepartments.filter((department) => department.name.toLowerCase() === selectedDept.toLowerCase());
+
+            const avgWait = Math.round(filteredDepartments.reduce((sum, item) => sum + item.waitMinutes, 0) / Math.max(1, filteredDepartments.length));
+            const avgOccupancy = Math.round(filteredDepartments.reduce((sum, item) => sum + item.occupancy, 0) / Math.max(1, filteredDepartments.length));
+            const totalPatients = filteredDepartments.reduce((sum, item) => sum + item.patients, 0);
+
+            const tabs = [
+                { id: 'flow', label: 'Patient Flow' },
+                { id: 'capacity', label: 'Capacity' },
+                { id: 'logistics', label: 'Logistics' }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Operations Command Centre</h2>
+                            <p className="text-slate-500 mt-1">Hospital throughput, bed capacity, and service continuity</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Select
+                                value={selectedDept}
+                                onChange={(event) => setSelectedDept(event.target.value)}
+                                options={[
+                                    { value: 'all', label: 'All departments' },
+                                    ...managementDepartments.map((dept) => ({ value: dept.name, label: dept.name }))
+                                ]}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Active Patients" value={totalPatients} icon={Icons.Users} color="medical" />
+                        <StatCard title="Avg Wait" value={`${avgWait} min`} icon={Icons.Clock} color="amber" />
+                        <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
+                        <StatCard title="Throughput" value={`${Math.max(80, Math.min(99, avgOccupancy + 10))}%`} icon={Icons.Activity} color="violet" />
+                    </div>
+
+                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+                    {activeTab === 'flow' && (
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                            <Card title="Department Throughput" className="xl:col-span-2">
+                                <div className="space-y-5">
+                                    {filteredDepartments.map((department) => (
+                                        <div key={department.name} className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div>
+                                                    <p className="font-semibold text-slate-900">{department.name}</p>
+                                                    <p className="text-xs text-slate-500">{department.patients} active encounters</p>
+                                                </div>
+                                                <Badge variant={department.turnaround >= 90 ? 'success' : department.turnaround >= 85 ? 'warning' : 'default'}>{department.turnaround}% turnaround</Badge>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                                        <span>Wait time</span>
+                                                        <span>{department.waitMinutes} min</span>
+                                                    </div>
+                                                    <ProgressBar value={Math.min(100, department.waitMinutes * 3)} max={100} color="amber" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                                        <span>Occupancy</span>
+                                                        <span>{department.occupancy}%</span>
+                                                    </div>
+                                                    <ProgressBar value={department.occupancy} max={100} color={department.occupancy >= 85 ? 'red' : 'emerald'} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            <Card title="Live Operations Pulse">
+                                <div className="space-y-4">
+                                    {[
+                                        { label: 'Admissions today', value: '126', trend: '+8%' },
+                                        { label: 'Discharges today', value: '108', trend: '+5%' },
+                                        { label: 'Emergency arrivals', value: '34', trend: '+12%' },
+                                        { label: 'Cancelled appointments', value: '9', trend: '-3%' }
+                                    ].map((metric) => (
+                                        <div key={metric.label} className="rounded-xl border border-slate-200 p-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm text-slate-600">{metric.label}</span>
+                                                <span className="text-xs font-medium text-emerald-600">{metric.trend}</span>
+                                            </div>
+                                            <p className="text-2xl font-bold text-slate-900 mt-2">{metric.value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {activeTab === 'capacity' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Bed Utilization">
+                                <BarChart
+                                    data={[
+                                        { label: 'ER', value: 82 },
+                                        { label: 'Ward', value: 76 },
+                                        { label: 'ICU', value: 68 },
+                                        { label: 'Maternity', value: 58 },
+                                        { label: 'Pediatrics', value: 63 }
+                                    ]}
+                                    width={500}
+                                    height={260}
+                                    color="#2563eb"
+                                />
+                            </Card>
+
+                            <Card title="Clinical Resource Load">
+                                <div className="space-y-4">
+                                    {[
+                                        { name: 'Doctors on duty', value: 86 },
+                                        { name: 'Nurses assigned', value: 91 },
+                                        { name: 'Lab bench capacity', value: 74 },
+                                        { name: 'Imaging availability', value: 69 }
+                                    ].map((resource) => (
+                                        <div key={resource.name}>
+                                            <div className="flex items-center justify-between text-sm text-slate-600 mb-1">
+                                                <span>{resource.name}</span>
+                                                <span>{resource.value}%</span>
+                                            </div>
+                                            <ProgressBar value={resource.value} max={100} color={resource.value >= 85 ? 'emerald' : resource.value >= 70 ? 'amber' : 'medical'} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {activeTab === 'logistics' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {[
+                                { title: 'Pharmacy refill', status: 'On track', detail: '18 items due within 48h', tone: 'success' },
+                                { title: 'Medical supplies', status: 'Watchlist', detail: '4 SKUs below reorder threshold', tone: 'warning' },
+                                { title: 'Equipment uptime', status: 'Stable', detail: '97.4% availability across units', tone: 'info' }
+                            ].map((item) => (
+                                <Card key={item.title} title={item.title}>
+                                    <div className="space-y-3">
+                                        <Badge variant={item.tone === 'success' ? 'success' : item.tone === 'warning' ? 'warning' : 'info'}>{item.status}</Badge>
+                                        <p className="text-sm text-slate-600">{item.detail}</p>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ==========================================
+        // PROCUREMENT MODULE
+        // ==========================================
+        const ProcurementModule = () => {
+            const [activeTab, setActiveTab] = useState('orders');
+            const supplierPerformance = [
+                { name: 'MedSource Ltd', onTime: 97, spend: 182000, risk: 'Low' },
+                { name: 'CareLab Supply', onTime: 89, spend: 132000, risk: 'Medium' },
+                { name: 'Global ICU', onTime: 94, spend: 214000, risk: 'Low' },
+                { name: 'NorthStar Pharma', onTime: 76, spend: 98000, risk: 'High' }
+            ];
+
+            const tabs = [
+                { id: 'orders', label: 'Purchase Orders' },
+                { id: 'suppliers', label: 'Suppliers' },
+                { id: 'analytics', label: 'Spend' }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Procurement</h2>
+                            <p className="text-slate-500 mt-1">Supplier management, purchase orders, and cost control</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.Plus}>New Purchase</Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Open POs" value="32" icon={Icons.Packages} color="medical" />
+                        <StatCard title="Monthly Spend" value={formatCurrency(624000)} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Late Deliveries" value="6" icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Savings" value={formatCurrency(48000)} icon={Icons.CheckCircle} color="violet" />
+                    </div>
+
+                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+                    {activeTab === 'orders' && (
+                        <Card>
+                            <DataTable
+                                columns={[
+                                    { key: 'poNumber', title: 'PO #', className: 'font-mono text-xs' },
+                                    { key: 'vendor', title: 'Vendor' },
+                                    { key: 'category', title: 'Category' },
+                                    { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'pending' ? 'warning' : 'danger'}>{row.status}</Badge> },
+                                    { key: 'eta', title: 'ETA', render: (row) => formatDate(row.eta) }
+                                ]}
+                                data={[
+                                    { poNumber: 'PO-1042', vendor: 'MedSource Ltd', category: 'Medical Supplies', amount: 42000, status: 'approved', eta: '2026-09-06' },
+                                    { poNumber: 'PO-1047', vendor: 'Global ICU', category: 'Critical Care', amount: 68000, status: 'in_transit', eta: '2026-09-08' },
+                                    { poNumber: 'PO-1050', vendor: 'NorthStar Pharma', category: 'Pharmacy', amount: 24000, status: 'pending', eta: '2026-09-10' }
+                                ]}
+                            />
+                        </Card>
+                    )}
+
+                    {activeTab === 'suppliers' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {supplierPerformance.map((supplier) => (
+                                <Card key={supplier.name} title={supplier.name}>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-600">On-time delivery</span>
+                                            <span className="font-semibold text-slate-900">{supplier.onTime}%</span>
+                                        </div>
+                                        <ProgressBar value={supplier.onTime} max={100} color={supplier.risk === 'High' ? 'red' : supplier.risk === 'Medium' ? 'amber' : 'emerald'} />
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-600">Annual spend</span>
+                                            <span className="font-semibold text-slate-900">{formatCurrency(supplier.spend)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-600">Risk</span>
+                                            <Badge variant={supplier.risk === 'High' ? 'danger' : supplier.risk === 'Medium' ? 'warning' : 'success'}>{supplier.risk}</Badge>
+                                        </div>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    {activeTab === 'analytics' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Monthly Spend Trend">
+                                <BarChart
+                                    data={[
+                                        { label: 'Jan', value: 510000 },
+                                        { label: 'Feb', value: 548000 },
+                                        { label: 'Mar', value: 590000 },
+                                        { label: 'Apr', value: 620000 },
+                                        { label: 'May', value: 624000 }
+                                    ]}
+                                    width={500}
+                                    height={260}
+                                    color="#10b981"
+                                />
+                            </Card>
+                            <Card title="Category Spend">
+                                <div className="space-y-4">
+                                    {[
+                                        { label: 'Medical supplies', value: 210000 },
+                                        { label: 'Pharmacy', value: 174000 },
+                                        { label: 'Diagnostics', value: 146000 },
+                                        { label: 'Critical care', value: 94000 }
+                                    ].map((item) => (
+                                        <div key={item.label}>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="text-slate-600">{item.label}</span>
+                                                <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
+                                            </div>
+                                            <ProgressBar value={Math.min(100, (item.value / 210000) * 100)} max={100} color="emerald" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ==========================================
+        // CARE COORDINATION / REFERRALS MODULE
+        // ==========================================
+        const CareCoordinationModule = () => {
+            const [activeTab, setActiveTab] = useState('referrals');
+
+            const referralQueue = [
+                { id: 'REF-2101', patient: 'Miriam Abiola', specialty: 'Cardiology', status: 'Pending', due: 'Today', risk: 'High' },
+                { id: 'REF-2107', patient: 'Emmanuel Udo', specialty: 'Orthopedics', status: 'In progress', due: '2 days', risk: 'Moderate' },
+                { id: 'REF-2120', patient: 'Ifeoma Bello', specialty: 'Nephrology', status: 'Accepted', due: 'Tomorrow', risk: 'High' },
+                { id: 'REF-2134', patient: 'Tunde Okon', specialty: 'Neurology', status: 'Scheduled', due: '3 days', risk: 'Low' }
+            ];
+
+            const tabs = [
+                { id: 'referrals', label: 'Referrals' },
+                { id: 'followups', label: 'Follow-ups' },
+                { id: 'handoffs', label: 'Handoffs' }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Referrals & Care Coordination</h2>
+                            <p className="text-slate-500 mt-1">Track specialty referrals, continuity of care, and patient handoff readiness</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.UserPlus}>Create Referral</Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Open Referrals" value={referralQueue.length} icon={Icons.UserCheck} color="medical" />
+                        <StatCard title="High Risk" value={referralQueue.filter((item) => item.risk === 'High').length} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Accepted" value={referralQueue.filter((item) => item.status === 'Accepted').length} icon={Icons.CheckCircle} color="emerald" />
+                        <StatCard title="Follow-ups" value="19" icon={Icons.Calendar} color="violet" />
+                    </div>
+
+                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+                    {activeTab === 'referrals' && (
+                        <Card>
+                            <DataTable
+                                columns={[
+                                    { key: 'id', title: 'Referral ID', className: 'font-mono text-xs' },
+                                    { key: 'patient', title: 'Patient' },
+                                    { key: 'specialty', title: 'Specialty' },
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Accepted' ? 'success' : row.status === 'Pending' ? 'warning' : row.status === 'In progress' ? 'info' : 'default'}>{row.status}</Badge> },
+                                    { key: 'risk', title: 'Risk', render: (row) => <Badge variant={row.risk === 'High' ? 'danger' : row.risk === 'Moderate' ? 'warning' : 'success'}>{row.risk}</Badge> },
+                                    { key: 'due', title: 'Due' }
+                                ]}
+                                data={referralQueue}
+                                actions={(row) => (
+                                    <Button variant="primary" size="sm">Review</Button>
+                                )}
+                            />
+                        </Card>
+                    )}
+
+                    {activeTab === 'followups' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Follow-up Schedule">
+                                <div className="space-y-3">
+                                    {[
+                                        { title: 'Cardiac rehab review', due: 'Tomorrow', owner: 'Nurse case manager' },
+                                        { title: 'Post-op wound review', due: 'In 2 days', owner: 'Surgical clinic' },
+                                        { title: 'Medication reconciliation', due: 'This week', owner: 'Pharmacy' }
+                                    ].map((item) => (
+                                        <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium text-slate-800">{item.title}</span>
+                                                <Badge variant="info">{item.due}</Badge>
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-2">Owner: {item.owner}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            <Card title="Care Pathway Completion">
+                                <div className="space-y-4">
+                                    {[
+                                        { label: 'Discharge plan', value: 94 },
+                                        { label: 'Medication education', value: 89 },
+                                        { label: 'Primary care handoff', value: 92 },
+                                        { label: 'Community follow-up', value: 81 }
+                                    ].map((item) => (
+                                        <div key={item.label}>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="text-slate-600">{item.label}</span>
+                                                <span className="font-medium text-slate-900">{item.value}%</span>
+                                            </div>
+                                            <ProgressBar value={item.value} max={100} color="emerald" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {activeTab === 'handoffs' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {[
+                                { title: 'Primary Care', detail: 'Clinician summary shared and signed', tone: 'success' },
+                                { title: 'Specialty Team', detail: 'Pending imaging results upload', tone: 'warning' },
+                                { title: 'Community Service', detail: 'Home care checklist awaiting confirmation', tone: 'info' }
+                            ].map((item) => (
+                                <Card key={item.title} title={item.title}>
+                                    <div className="space-y-3">
+                                        <Badge variant={item.tone === 'success' ? 'success' : item.tone === 'warning' ? 'warning' : 'info'}>{item.tone === 'success' ? 'Complete' : item.tone === 'warning' ? 'Pending' : 'Queued'}</Badge>
+                                        <p className="text-sm text-slate-600">{item.detail}</p>
+                                    </div>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ==========================================
         // PHARMACY MODULE
         // ==========================================
         const PharmacyModule = () => {

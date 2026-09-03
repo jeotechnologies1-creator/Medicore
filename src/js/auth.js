@@ -5,7 +5,7 @@
 
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology',
-            'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
+            'operations', 'procurement', 'referrals', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
             'hr', 'offices', 'reports', 'audit', 'settings'
         ];
 
@@ -14,6 +14,9 @@
             doctors: ['doctor'],
             laboratory: ['labs', 'lab', 'lab_orders'],
             radiology: ['imaging'],
+            operations: ['ops', 'operations_center', 'command_center'],
+            procurement: ['supply_chain', 'procurement_and_supply'],
+            referrals: ['care_coordination', 'referral_management', 'care_pathways'],
             pharmacy: ['medications'],
             admissions: ['admission', 'ward'],
             surgeries: ['surgery'],
@@ -63,6 +66,9 @@
                     doctors: true,
                     laboratory: true,
                     radiology: true,
+                    operations: true,
+                    procurement: true,
+                    referrals: true,
                     pharmacy: true,
                     billing: true,
                     admissions: true,
@@ -85,6 +91,9 @@
                     doctors: true,
                     laboratory: true,
                     radiology: true,
+                    operations: true,
+                    procurement: false,
+                    referrals: true,
                     pharmacy: false,
                     billing: false,
                     admissions: false,
@@ -107,6 +116,9 @@
                     doctors: false,
                     laboratory: false,
                     radiology: false,
+                    operations: true,
+                    procurement: false,
+                    referrals: true,
                     pharmacy: false,
                     billing: false,
                     admissions: true,
@@ -129,6 +141,9 @@
                     doctors: false,
                     laboratory: false,
                     radiology: false,
+                    operations: false,
+                    procurement: true,
+                    referrals: false,
                     pharmacy: true,
                     billing: false,
                     admissions: false,
@@ -151,6 +166,9 @@
                     doctors: false,
                     laboratory: false,
                     radiology: false,
+                    operations: false,
+                    procurement: false,
+                    referrals: true,
                     pharmacy: false,
                     billing: true,
                     admissions: false,
@@ -230,7 +248,12 @@
                     const isLocalAdmin = normalizedEmail.toLowerCase() === 'admin' && normalizedPassword === 'admin';
 
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
-                        found = await window.MedicoreSupabase.loginProfile(email, password);
+                        try {
+                            found = await window.MedicoreSupabase.loginProfile(email, password);
+                        } catch (error) {
+                            console.warn('Supabase login fallback failed:', error);
+                            found = null;
+                        }
                     }
 
                     if (!found && isLocalAdmin) {

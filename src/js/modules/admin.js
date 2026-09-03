@@ -63,6 +63,25 @@
                 const end = toDate(admission.dischargeDate);
                 return start && end && end >= start ? (end - start) / 86400000 : null;
             }).filter(days => days !== null);
+            const patientFlow = Array.from({ length: 7 }, (_, index) => {
+                const date = new Date(now);
+                date.setDate(date.getDate() - (6 - index));
+                const label = date.toLocaleDateString(undefined, { weekday: 'short' });
+                const admissions = seedData.admissions.filter((entry) => entry.admissionDate === date.toISOString().slice(0, 10)).length;
+                const discharges = seedData.admissions.filter((entry) => entry.dischargeDate === date.toISOString().slice(0, 10)).length;
+                return { label, admissions, discharges };
+            });
+            const caseMix = Object.entries(seedData.patients.reduce((counts, patient) => {
+                const bucket = calculateAge(patient.dateOfBirth) >= 65 ? 'Older adults' : calculateAge(patient.dateOfBirth) >= 18 ? 'Adults' : 'Children';
+                counts[bucket] = (counts[bucket] || 0) + 1;
+                return counts;
+            }, {})).map(([label, value]) => ({ label, value }));
+            const facilityUtilization = (seedData.wards || []).map((ward) => ({
+                name: ward.name,
+                occupancy: Math.round((Number(ward.occupied || 0) / Math.max(1, Number(ward.capacity || 0))) * 100),
+                capacity: ward.capacity || 0,
+                occupied: ward.occupied || 0
+            }));
 
             const handleExport = () => {
                 const typeData = {
@@ -136,6 +155,45 @@
                                     height={250} 
                                     color="#2563eb" 
                                 />
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <Card title="Patient Flow & Throughput">
+                                        <BarChart 
+                                            data={patientFlow.map((entry) => ({ label: entry.label, value: entry.admissions + entry.discharges }))}
+                                            width={520}
+                                            height={220}
+                                            color="#0ea5e9"
+                                        />
+                                        <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                                            <div className="rounded-xl bg-emerald-50 p-3 text-center">
+                                                <p className="text-slate-500">Admissions</p>
+                                                <p className="text-xl font-bold text-emerald-900">{patientFlow.reduce((sum, entry) => sum + entry.admissions, 0)}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-red-50 p-3 text-center">
+                                                <p className="text-slate-500">Discharges</p>
+                                                <p className="text-xl font-bold text-red-900">{patientFlow.reduce((sum, entry) => sum + entry.discharges, 0)}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-medical-50 p-3 text-center">
+                                                <p className="text-slate-500">Avg LOS</p>
+                                                <p className="text-xl font-bold text-medical-900">{stayLengths.length ? `${(stayLengths.reduce((sum, days) => sum + days, 0) / stayLengths.length).toFixed(1)}d` : 'N/A'}</p>
+                                            </div>
+                                        </div>
+                                    </Card>
+
+                                    <Card title="Case Mix Distribution">
+                                        <div className="space-y-4">
+                                            {caseMix.map((group) => (
+                                                <div key={group.label}>
+                                                    <div className="flex items-center justify-between text-sm mb-2">
+                                                        <span className="text-slate-700">{group.label}</span>
+                                                        <span className="font-semibold text-slate-900">{group.value}</span>
+                                                    </div>
+                                                    <ProgressBar value={Math.min(100, Math.round((group.value / Math.max(1, seedData.patients.length)) * 100))} max={100} color={group.label === 'Older adults' ? 'amber' : group.label === 'Adults' ? 'medical' : 'emerald'} size="sm" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </Card>
+                                </div>
                             </div>
                         )}
 
@@ -233,11 +291,12 @@
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                                    {seedData.wards.map(ward => (
-                                        <div key={ward.id} className="p-4 rounded-xl bg-slate-50 text-center">
+                                    {facilityUtilization.map((ward) => (
+                                        <div key={ward.name} className="p-4 rounded-xl bg-slate-50 text-center">
                                             <p className="text-sm font-medium text-slate-700">{ward.name}</p>
                                             <p className="text-xl font-bold text-slate-900 mt-1">{ward.occupied}/{ward.capacity}</p>
-                                            <ProgressBar value={ward.occupied} max={ward.capacity} color="medical" size="sm" />
+                                            <ProgressBar value={ward.occupied} max={ward.capacity} color={ward.occupancy >= 85 ? 'red' : 'medical'} size="sm" />
+                                            <p className="mt-2 text-[10px] text-slate-500">{ward.occupancy}% utilization</p>
                                         </div>
                                     ))}
                                 </div>

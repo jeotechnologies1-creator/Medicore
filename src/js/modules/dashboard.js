@@ -42,6 +42,13 @@
             }, {});
             const departmentTotal = Math.max(1, seedData.appointments.length);
             const departments = Object.entries(departmentCounts).slice(0, 4).map(([name, count], index) => ({ name, value: Math.round((count / departmentTotal) * 100), color: ['bg-medical-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][index] }));
+            const qualityEntries = (seedData.auditLogs || []).filter((entry) => entry.riskScore || entry.readmissionRisk);
+            const careCoordinationSummary = {
+                highRiskCases: qualityEntries.filter((entry) => (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'high').length,
+                moderateRiskCases: qualityEntries.filter((entry) => (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'moderate').length,
+                dischargePlans: (seedData.auditLogs || []).filter((entry) => entry.dischargePlan || entry.handoffNote).length,
+                qualityReviews: (seedData.auditLogs || []).filter((entry) => entry.auditNote || entry.idCheck !== undefined).length
+            };
 
             const getRoleDashboard = () => {
                 switch (user?.role) {
@@ -167,6 +174,36 @@
                                     <Card title="Revenue Overview">
                                         <LineChart data={revenueData} width={600} height={200} color="#059669" />
                                     </Card>
+                                    <Card title="Care Coordination & Quality">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-xl bg-red-50 p-3">
+                                                <p className="text-xs uppercase tracking-wide text-red-600">High Risk</p>
+                                                <p className="mt-2 text-2xl font-bold text-red-900">{careCoordinationSummary.highRiskCases}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-amber-50 p-3">
+                                                <p className="text-xs uppercase tracking-wide text-amber-600">Moderate Risk</p>
+                                                <p className="mt-2 text-2xl font-bold text-amber-900">{careCoordinationSummary.moderateRiskCases}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-medical-50 p-3">
+                                                <p className="text-xs uppercase tracking-wide text-medical-600">Discharge Plans</p>
+                                                <p className="mt-2 text-2xl font-bold text-medical-900">{careCoordinationSummary.dischargePlans}</p>
+                                            </div>
+                                            <div className="rounded-xl bg-emerald-50 p-3">
+                                                <p className="text-xs uppercase tracking-wide text-emerald-600">Quality Reviews</p>
+                                                <p className="mt-2 text-2xl font-bold text-emerald-900">{careCoordinationSummary.qualityReviews}</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-600">Follow-up readiness</span>
+                                                <span className="font-medium text-slate-900">{Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / Math.max(1, careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases + 4)) * 100))}%</span>
+                                            </div>
+                                            <ProgressBar value={Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / Math.max(1, careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases + 4)) * 100))} max={100} color="emerald" size="sm" />
+                                        </div>
+                                    </Card>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <Card title="Recent Activity" action={<Button variant="ghost" size="sm" onClick={() => navigateTo('audit')}>View All</Button>}>
                                         <div className="space-y-3">
                                             {recentActivity.map((log) => (
@@ -181,6 +218,21 @@
                                                     </div>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </Card>
+                                    <Card title="Quality Snapshot">
+                                        <div className="space-y-4">
+                                            {qualityEntries.length ? qualityEntries.slice(0, 4).map((entry) => (
+                                                <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-sm font-medium text-slate-800">{entry.riskScore || entry.readmissionRisk || 'Quality review'}</span>
+                                                        <Badge variant={(entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'high' ? 'danger' : (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'moderate' ? 'warning' : 'success'}>{(entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'high' ? 'High' : (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'moderate' ? 'Moderate' : 'Low'}</Badge>
+                                                    </div>
+                                                    <p className="mt-2 text-xs text-slate-500">{entry.auditNote || entry.handoffNote || entry.dischargePlan || 'Quality event recorded'}</p>
+                                                </div>
+                                            )) : (
+                                                <p className="text-sm text-slate-500">No quality risk events recorded yet.</p>
+                                            )}
                                         </div>
                                     </Card>
                                 </div>

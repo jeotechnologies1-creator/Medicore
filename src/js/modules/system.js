@@ -8,6 +8,20 @@
                 filterSeverity === 'all' || log.severity === filterSeverity
             );
 
+            const governanceSummary = {
+                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length,
+                pendingReviews: Math.max(3, Math.round((seedData.auditLogs.length || 0) * 0.18)),
+                complianceRate: 96,
+                escalationQueue: 5
+            };
+
+            const incidentQueue = [
+                { id: 'INC-1042', patient: 'Jane Okafor', area: 'Medication Safety', issue: 'Allergy mismatch on discharge medication', status: 'Escalated', owner: 'Pharmacy Lead', due: '2h' },
+                { id: 'INC-1047', patient: 'Daniel Mensah', area: 'Clinical Documentation', issue: 'Discharge note missing signature', status: 'Pending review', owner: 'Ward Nurse', due: '4h' },
+                { id: 'INC-1051', patient: 'Grace Bassey', area: 'Lab Follow-up', issue: 'Critical lab result not acknowledged', status: 'Monitoring', owner: 'Lab Manager', due: '1h' },
+                { id: 'INC-1058', patient: 'Samuel Adebayo', area: 'Patient ID', issue: 'Verification not completed before procedure', status: 'Escalated', owner: 'Clinical Safety Officer', due: '90m' }
+            ];
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -20,6 +34,47 @@
                             <Button variant="secondary" icon={Icons.Download}>Export</Button>
                         </div>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                            <p className="text-xs uppercase tracking-wide text-red-600">Critical incidents</p>
+                            <p className="mt-2 text-3xl font-bold text-red-900">{governanceSummary.criticalIncidents}</p>
+                        </div>
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                            <p className="text-xs uppercase tracking-wide text-amber-600">Pending reviews</p>
+                            <p className="mt-2 text-3xl font-bold text-amber-900">{governanceSummary.pendingReviews}</p>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p className="text-xs uppercase tracking-wide text-emerald-600">Compliance rate</p>
+                            <p className="mt-2 text-3xl font-bold text-emerald-900">{governanceSummary.complianceRate}%</p>
+                        </div>
+                        <div className="rounded-2xl border border-medical-200 bg-medical-50 p-4">
+                            <p className="text-xs uppercase tracking-wide text-medical-600">Escalation queue</p>
+                            <p className="mt-2 text-3xl font-bold text-medical-900">{governanceSummary.escalationQueue}</p>
+                        </div>
+                    </div>
+
+                    <Card title="Clinical governance board">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {incidentQueue.map((incident) => (
+                                <div key={incident.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs uppercase tracking-wide text-slate-500">{incident.id}</p>
+                                            <p className="mt-1 font-semibold text-slate-900">{incident.patient}</p>
+                                        </div>
+                                        <Badge variant={incident.status === 'Escalated' ? 'danger' : incident.status === 'Pending review' ? 'warning' : 'info'}>{incident.status}</Badge>
+                                    </div>
+                                    <p className="mt-3 text-sm text-slate-600">{incident.area}</p>
+                                    <p className="mt-2 text-sm text-slate-700">{incident.issue}</p>
+                                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                                        <span>{incident.owner}</span>
+                                        <span>Due in {incident.due}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
 
                     <Card>
                         <div className="flex gap-4 mb-6">

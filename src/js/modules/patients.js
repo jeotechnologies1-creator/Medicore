@@ -173,6 +173,13 @@
                     riskScore: 'Low',
                     auditNote: ''
                 });
+                const [careCoordinationForm, setCareCoordinationForm] = useState({
+                    careCoordinator: 'Care Team',
+                    dischargePlan: '',
+                    plannedDischargeDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    readmissionRisk: 'Low',
+                    handoffNote: ''
+                });
                 const [problemForm, setProblemForm] = useState({
                     conditionName: '',
                     status: 'active',
@@ -481,6 +488,31 @@
                         dischargeEducation: true,
                         riskScore: 'Low',
                         auditNote: ''
+                    });
+                };
+
+                const handleSaveCareCoordination = () => {
+                    const coordinationEntry = {
+                        id: 'coord_' + Date.now(),
+                        patientId: patient.id,
+                        careCoordinator: careCoordinationForm.careCoordinator || 'Care Team',
+                        dischargePlan: careCoordinationForm.dischargePlan || 'Discharge planning initiated',
+                        plannedDischargeDate: careCoordinationForm.plannedDischargeDate || new Date().toISOString().split('T')[0],
+                        readmissionRisk: careCoordinationForm.readmissionRisk || 'Low',
+                        handoffNote: careCoordinationForm.handoffNote || 'No additional handoff notes',
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const nextAudit = [coordinationEntry, ...(seedData.auditLogs || [])];
+                    persistSeedTable('auditLogs', nextAudit);
+                    seedData.auditLogs = nextAudit;
+
+                    setCareCoordinationForm({
+                        careCoordinator: 'Care Team',
+                        dischargePlan: '',
+                        plannedDischargeDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        readmissionRisk: 'Low',
+                        handoffNote: ''
                     });
                 };
 
@@ -866,6 +898,17 @@
                                                 <Select label="Risk score" value={qualityForm.riskScore} onChange={(e) => setQualityForm(prev => ({ ...prev, riskScore: e.target.value }))} options={[{ value: 'Low', label: 'Low' }, { value: 'Moderate', label: 'Moderate' }, { value: 'High', label: 'High' }]} />
                                                 <TextArea label="Audit note" rows={3} value={qualityForm.auditNote} onChange={(e) => setQualityForm(prev => ({ ...prev, auditNote: e.target.value }))} />
                                                 <Button variant="secondary" className="w-full justify-center" icon={Icons.ShieldAlert} onClick={handleSaveQualityCheck}>Complete Quality Audit</Button>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Care coordination & readmission risk" subtitle="Discharge planning and handoff review">
+                                            <div className="space-y-4">
+                                                <Input label="Care coordinator" value={careCoordinationForm.careCoordinator} onChange={(e) => setCareCoordinationForm(prev => ({ ...prev, careCoordinator: e.target.value }))} />
+                                                <Input label="Planned discharge date" type="date" value={careCoordinationForm.plannedDischargeDate} onChange={(e) => setCareCoordinationForm(prev => ({ ...prev, plannedDischargeDate: e.target.value }))} />
+                                                <Select label="Readmission risk" value={careCoordinationForm.readmissionRisk} onChange={(e) => setCareCoordinationForm(prev => ({ ...prev, readmissionRisk: e.target.value }))} options={[{ value: 'Low', label: 'Low' }, { value: 'Moderate', label: 'Moderate' }, { value: 'High', label: 'High' }]} />
+                                                <TextArea label="Discharge plan" rows={3} value={careCoordinationForm.dischargePlan} onChange={(e) => setCareCoordinationForm(prev => ({ ...prev, dischargePlan: e.target.value }))} />
+                                                <TextArea label="Handoff note / community follow-up" rows={3} value={careCoordinationForm.handoffNote} onChange={(e) => setCareCoordinationForm(prev => ({ ...prev, handoffNote: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.CheckCircle} onClick={handleSaveCareCoordination}>Save Care Coordination</Button>
                                             </div>
                                         </Card>
                                     </div>

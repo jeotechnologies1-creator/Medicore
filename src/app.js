@@ -86,6 +86,9 @@
                     case 'laboratory': return <LaboratoryModule />;
                     case 'results': return <LaboratoryModule />;
                     case 'radiology': return <RadiologyModule />;
+                    case 'operations': return <OperationsModule />;
+                    case 'procurement': return <ProcurementModule />;
+                    case 'referrals': return <CareCoordinationModule />;
                     case 'upload': return <DocumentsModule />;
                     case 'pharmacy': return <PharmacyModule />;
                     case 'inventory': return <InventoryModule />;

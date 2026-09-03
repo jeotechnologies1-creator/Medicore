@@ -242,17 +242,22 @@
             };
         }
 
-        const client = getClient();
-        if (!client) {
+        try {
+            const client = getClient();
+            if (!client) {
+                return null;
+            }
+            const transformedEmail = normalizedEmail.toLowerCase() === 'admin' ? 'admin@medicore.local' : normalizedEmail;
+            const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: transformedEmail, password: normalizedPassword });
+            if (authError || !authData.user) return null;
+            const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
+            if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
+            await client.auth.signOut();
+            return null;
+        } catch (error) {
+            console.warn('Supabase profile login unavailable:', error);
             return null;
         }
-        const transformedEmail = normalizedEmail.toLowerCase() === 'admin' ? 'admin@medicore.local' : normalizedEmail;
-        const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: transformedEmail, password: normalizedPassword });
-        if (authError || !authData.user) return null;
-        const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
-        if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
-        await client.auth.signOut();
-        return null;
     };
 
     const logout = async () => {
