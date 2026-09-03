@@ -54,7 +54,9 @@
         notifications: [],
         auditLogs: [],
         vitals: [],
-        wards: []
+        wards: [],
+        offices: [],
+        officeStaff: []
     });
 
     const saveStore = (data) => {

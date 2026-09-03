@@ -171,6 +171,30 @@ create table if not exists public.audit_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.medical_offices (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  office_type text not null default 'Clinic',
+  specialty text not null,
+  location text,
+  phone text,
+  email text,
+  status text not null default 'active',
+  head_doctor_id uuid references public.profiles(id),
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.office_staff (
+  id uuid primary key default gen_random_uuid(),
+  office_id uuid not null references public.medical_offices(id) on delete cascade,
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'specialist',
+  is_lead boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (office_id, profile_id)
+);
+
 insert into public.profiles (email, password, role, full_name, department, status)
 values ('admin@medicore.local', 'admin123', 'super_admin', 'System Administrator', 'IT', 'active')
 on conflict (email) do nothing;
@@ -187,6 +211,8 @@ alter table public.admissions enable row level security;
 alter table public.surgeries enable row level security;
 alter table public.notifications enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.medical_offices enable row level security;
+alter table public.office_staff enable row level security;
 
 create policy "Allow all access for authenticated users" on public.profiles for all using (true) with check (true);
 create policy "Allow all access for authenticated users" on public.patients for all using (true) with check (true);
@@ -200,3 +226,5 @@ create policy "Allow all access for authenticated users" on public.admissions fo
 create policy "Allow all access for authenticated users" on public.surgeries for all using (true) with check (true);
 create policy "Allow all access for authenticated users" on public.notifications for all using (true) with check (true);
 create policy "Allow all access for authenticated users" on public.audit_logs for all using (true) with check (true);
+create policy "Allow all access for authenticated users" on public.medical_offices for all using (true) with check (true);
+create policy "Allow all access for authenticated users" on public.office_staff for all using (true) with check (true);

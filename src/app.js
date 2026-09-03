@@ -20,7 +20,9 @@
             vitals: [],
             wards: [],
             beds: [],
-            insuranceClaims: []
+            insuranceClaims: [],
+            offices: [],
+            officeStaff: []
         }, {
             get(target, prop) {
                 if (!(prop in target)) {
@@ -212,8 +214,33 @@
             severity: row.severity || 'info'
         }));
 
+        const normalizeOffices = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            name: row.name || row.office_name,
+            officeType: row.office_type || row.officeType || 'Clinic',
+            specialty: row.specialty || row.department || 'General Medicine',
+            location: row.location || row.address || '',
+            phone: row.phone || '',
+            email: row.email || '',
+            status: row.status || 'active',
+            headDoctorId: row.head_doctor_id || row.headDoctorId || null,
+            createdBy: row.created_by || row.createdBy || null,
+            createdAt: row.created_at || row.createdAt
+        }));
+
+        const normalizeOfficeStaff = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            officeId: row.office_id || row.officeId,
+            profileId: row.profile_id || row.profileId,
+            role: row.role || 'specialist',
+            isLead: Boolean(row.is_lead ?? row.isLead),
+            createdAt: row.created_at || row.createdAt
+        }));
+
         const hydrateSeedData = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'wards'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'wards', 'offices', 'officeStaff'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
@@ -250,8 +277,24 @@
                 { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs }
             ];
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], wards: [], beds: [], insuranceClaims: [] };
-            for (const entry of lookups) {
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
+            const officeLookups = [
+                { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
+                { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
+                { dbTable: 'appointments', appTable: 'appointments', mapper: normalizeAppointments },
+                { dbTable: 'lab_orders', appTable: 'labOrders', mapper: normalizeLabOrders },
+                { dbTable: 'radiology_orders', appTable: 'radiologyOrders', mapper: normalizeRadiologyOrders },
+                { dbTable: 'prescriptions', appTable: 'prescriptions', mapper: normalizePrescriptions },
+                { dbTable: 'pharmacy_inventory', appTable: 'pharmacyInventory', mapper: normalizeInventory },
+                { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
+                { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
+                { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
+                { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
+                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
+                { dbTable: 'medical_offices', appTable: 'offices', mapper: normalizeOffices },
+                { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff }
+            ];
+            for (const entry of officeLookups) {
                 const { data, error } = await client.from(entry.dbTable).select('*');
                 if (error) {
                     console.error(`Failed to load ${entry.dbTable}:`, error);
@@ -1405,6 +1448,7 @@
                         { id: 'surgeries', label: 'Surgeries', icon: Icons.Scissors },
                         { id: 'inventory', label: 'Inventory', icon: Icons.Package },
                         { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
+                        { id: 'offices', label: 'Medical Offices', icon: Icons.Building2 },
                         { id: 'reports', label: 'Reports', icon: Icons.BarChart3 },
                         { id: 'audit', label: 'Audit Logs', icon: Icons.Shield },
                         { id: 'settings', label: 'Settings', icon: Icons.Settings },
@@ -3082,7 +3126,7 @@
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Total Revenue" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.total), 0))} icon={Icons.DollarSign} color="emerald" />
                         <StatCard title="Outstanding" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.balance), 0))} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Paid Today" value={formatCurrency(3250.00)} icon={Icons.CheckCircle} color="medical" />
+                        <StatCard title="Collected" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.paid), 0))} icon={Icons.CheckCircle} color="medical" />
                         <StatCard title="Pending Claims" value={seedData.insuranceClaims.filter(c => c.status === 'pending').length} icon={Icons.Shield} color="violet" />
                     </div>
 
@@ -3107,7 +3151,6 @@
                                 actions={(row) => (
                                     <>
                                         <Button variant="primary" size="sm" onClick={() => setSelectedInvoice(row)}>View</Button>
-                                        {row.status !== 'paid' && <Button variant="success" size="sm" icon={Icons.DollarSign}>Pay</Button>}
                                     </>
                                 )}
                             />
@@ -3167,22 +3210,20 @@
                                     color="#2563eb" 
                                 />
                             </Card>
-                            <Card title="Payment Methods">
+                            <Card title="Payment Summary">
                                 <div className="space-y-4">
-                                    {[
-                                        { method: 'Cash', amount: 45000, percent: 35 },
-                                        { method: 'Card', amount: 38000, percent: 30 },
-                                        { method: 'Insurance', amount: 32000, percent: 25 },
-                                        { method: 'Bank Transfer', amount: 13000, percent: 10 },
-                                    ].map(p => (
-                                        <div key={p.method}>
-                                            <div className="flex justify-between text-sm mb-1">
-                                                <span className="text-slate-700">{p.method}</span>
-                                                <span className="font-medium text-slate-900">{formatCurrency(p.amount)} ({p.percent}%)</span>
-                                            </div>
-                                            <ProgressBar value={p.percent} max={100} color="emerald" size="sm" />
-                                        </div>
-                                    ))}
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-700">Invoices</span>
+                                        <span className="font-medium text-slate-900">{seedData.billing.length}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-700">Collected</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.paid), 0))}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-700">Outstanding</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.balance), 0))}</span>
+                                    </div>
                                 </div>
                             </Card>
                         </div>
@@ -3854,16 +3895,7 @@
                                         { key: 'total', title: 'Total', render: (row) => formatCurrency(row.total) },
                                         { key: 'balance', title: 'Balance', render: (row) => formatCurrency(row.balance) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : 'warning'}>{row.status}</Badge> },
-                                        { key: 'action', title: 'Action', render: (row) => row.status !== 'paid' ? <Button variant="primary" size="sm">Pay Now</Button> : <span className="text-emerald-600 text-sm">Paid</span> }
-                                    ]}
-                                    data={seedData.billing.filter(b => b.patientId === patient.id)}
-                                />
-                            </Card>
-                        )}
-
-                        {activeTab === 'messages' && (
-                            <Card title="Messages">
-                                <div className="space-y-4">
+                                        { key: 'action', title: 'Action', render: () => <span className="text-slate-500 text-sm">No online payment</span> }
                                     <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
                                         <Avatar name="Dr. Smith" size="sm" />
                                         <div className="flex-1">
@@ -3893,6 +3925,123 @@
         // ==========================================
         // MAIN APP LAYOUT
         // ==========================================
+        const HRStaffModule = () => {
+            const [officeForm, setOfficeForm] = useState({
+                name: '',
+                officeType: 'Clinic',
+                specialty: 'General Medicine',
+                location: '',
+                phone: '',
+                email: '',
+                headDoctorId: ''
+            });
+            const [saving, setSaving] = useState(false);
+            const [message, setMessage] = useState('');
+
+            const offices = seedData.offices || [];
+            const experts = (seedData.users || []).filter(user => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(user.role) || user.role.includes('doctor') || user.role.includes('nurse'));
+
+            const handleCreateOffice = async () => {
+                if (!officeForm.name || !officeForm.specialty) {
+                    setMessage('Office name and specialty are required.');
+                    return;
+                }
+
+                setSaving(true);
+                setMessage('');
+                try {
+                    const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function'
+                        ? window.MedicoreSupabase.getClient()
+                        : null;
+
+                    if (!client) {
+                        throw new Error('Supabase client is not available.');
+                    }
+
+                    const payload = {
+                        name: officeForm.name,
+                        office_type: officeForm.officeType,
+                        specialty: officeForm.specialty,
+                        location: officeForm.location,
+                        phone: officeForm.phone,
+                        email: officeForm.email,
+                        status: 'active',
+                        head_doctor_id: officeForm.headDoctorId || null,
+                        created_by: (seedData.users || [])[0]?.id || null
+                    };
+
+                    const { data, error } = await client.from('medical_offices').insert([payload]).select();
+                    if (error) throw error;
+
+                    const newOffice = normalizeOffices(data || [])[0];
+                    const nextOffices = [...offices, newOffice];
+                    seedData.offices = nextOffices;
+
+                    if (officeForm.headDoctorId) {
+                        await client.from('office_staff').insert([{
+                            office_id: newOffice.id,
+                            profile_id: officeForm.headDoctorId,
+                            role: 'Lead Physician',
+                            is_lead: true
+                        }]).select();
+                    }
+
+                    setOfficeForm({ name: '', officeType: 'Clinic', specialty: 'General Medicine', location: '', phone: '', email: '', headDoctorId: '' });
+                    setMessage('Medical office added successfully.');
+                } catch (error) {
+                    console.error(error);
+                    setMessage(error.message || 'Unable to create the office right now.');
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Medical Offices</h2>
+                            <p className="text-slate-500 mt-1">Create and manage clinical departments and specialized care hubs</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card title="Create Office">
+                            <div className="space-y-4">
+                                <Input label="Office Name" value={officeForm.name} onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })} />
+                                <Select label="Office Type" value={officeForm.officeType} onChange={(e) => setOfficeForm({ ...officeForm, officeType: e.target.value })} options={[{ value: 'Clinic', label: 'Clinic' }, { value: 'Department', label: 'Department' }, { value: 'Specialty Center', label: 'Specialty Center' }, { value: 'Emergency Unit', label: 'Emergency Unit' }]} />
+                                <Input label="Specialty" value={officeForm.specialty} onChange={(e) => setOfficeForm({ ...officeForm, specialty: e.target.value })} />
+                                <Input label="Location" value={officeForm.location} onChange={(e) => setOfficeForm({ ...officeForm, location: e.target.value })} />
+                                <Input label="Phone" value={officeForm.phone} onChange={(e) => setOfficeForm({ ...officeForm, phone: e.target.value })} />
+                                <Input label="Email" type="email" value={officeForm.email} onChange={(e) => setOfficeForm({ ...officeForm, email: e.target.value })} />
+                                <Select label="Head Doctor / Lead" value={officeForm.headDoctorId} onChange={(e) => setOfficeForm({ ...officeForm, headDoctorId: e.target.value })} options={[{ value: '', label: 'No lead assigned' }, ...experts.map((expert) => ({ value: expert.id, label: `${expert.name} (${expert.role})` }))]} />
+                                {message && <p className={'text-sm ' + (message.includes('successfully') ? 'text-emerald-600' : 'text-red-600')}>{message}</p>}
+                                <Button variant="primary" className="w-full justify-center" onClick={handleCreateOffice} disabled={saving} icon={saving ? Icons.RefreshCw : Icons.Plus}>
+                                    {saving ? 'Creating...' : 'Create Office'}
+                                </Button>
+                            </div>
+                        </Card>
+
+                        <div className="lg:col-span-2">
+                            <Card title="Existing Medical Offices">
+                                <DataTable
+                                    columns={[
+                                        { key: 'name', title: 'Office' },
+                                        { key: 'officeType', title: 'Type' },
+                                        { key: 'specialty', title: 'Specialty' },
+                                        { key: 'location', title: 'Location' },
+                                        { key: 'phone', title: 'Phone' },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
+                                    ]}
+                                    data={offices}
+                                />
+                            </Card>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
@@ -3955,6 +4104,8 @@
                     case 'reports': return <ReportsModule />;
                     case 'audit': return <AuditModule />;
                     case 'settings': return <SettingsModule />;
+                    case 'offices': return <HRStaffModule />;
+                    case 'hr': return <HRStaffModule />;
                     case 'portal': return <PatientPortalModule />;
                     case 'lab_results': return <PatientPortalModule />;
                     case 'prescriptions': return <PatientPortalModule />;
