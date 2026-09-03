@@ -150,6 +150,29 @@
                     reason: '',
                     instructions: ''
                 });
+                const [referralForm, setReferralForm] = useState({
+                    department: 'Cardiology',
+                    provider: 'Dr. T. Okafor',
+                    urgency: 'routine',
+                    transferDate: new Date().toISOString().split('T')[0],
+                    reason: '',
+                    notes: ''
+                });
+                const [outcomeForm, setOutcomeForm] = useState({
+                    status: 'recovered',
+                    summary: '',
+                    outcomeDate: new Date().toISOString().split('T')[0],
+                    dischargeInstructions: ''
+                });
+                const [qualityForm, setQualityForm] = useState({
+                    idCheck: true,
+                    allergyCheck: true,
+                    consent: true,
+                    medReconciliation: true,
+                    dischargeEducation: true,
+                    riskScore: 'Low',
+                    auditNote: ''
+                });
                 const [problemForm, setProblemForm] = useState({
                     conditionName: '',
                     status: 'active',
@@ -341,6 +364,123 @@
                         nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                         reason: '',
                         instructions: ''
+                    });
+                };
+
+                const handleSaveReferral = () => {
+                    if (!referralForm.reason.trim()) return;
+
+                    const referralDocument = {
+                        id: 'ref_' + Date.now(),
+                        patientId: patient.id,
+                        fileName: `Referral - ${referralForm.department}`,
+                        documentType: 'Referral Letter',
+                        fileUrl: '',
+                        uploadedBy: referralForm.provider,
+                        uploadedAt: new Date().toISOString(),
+                        size: '0.9 KB',
+                        department: referralForm.department,
+                        urgency: referralForm.urgency,
+                        reason: referralForm.reason,
+                        notes: referralForm.notes,
+                        transferDate: referralForm.transferDate
+                    };
+
+                    const nextDocuments = [referralDocument, ...(seedData.documents || [])];
+                    persistSeedTable('documents', nextDocuments);
+                    seedData.documents = nextDocuments;
+
+                    setReferralForm({
+                        department: 'Cardiology',
+                        provider: 'Dr. T. Okafor',
+                        urgency: 'routine',
+                        transferDate: new Date().toISOString().split('T')[0],
+                        reason: '',
+                        notes: ''
+                    });
+                };
+
+                const handleSaveOutcome = () => {
+                    if (!outcomeForm.summary.trim()) return;
+
+                    const outcomeEntry = {
+                        id: 'outcome_' + Date.now(),
+                        patientId: patient.id,
+                        status: outcomeForm.status,
+                        summary: outcomeForm.summary,
+                        outcomeDate: outcomeForm.outcomeDate,
+                        dischargeInstructions: outcomeForm.dischargeInstructions,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const nextDocuments = [
+                        {
+                            id: 'doc_outcome_' + Date.now(),
+                            patientId: patient.id,
+                            fileName: `Clinical Outcome - ${patient.patientNumber}`,
+                            documentType: 'Outcome Summary',
+                            fileUrl: '',
+                            uploadedBy: 'Clinical Team',
+                            uploadedAt: new Date().toISOString(),
+                            size: '1.0 KB',
+                            summary: outcomeForm.summary,
+                            status: outcomeForm.status
+                        },
+                        ...(seedData.documents || [])
+                    ];
+
+                    persistSeedTable('documents', nextDocuments);
+                    seedData.documents = nextDocuments;
+
+                    const nextAlerts = [
+                        {
+                            id: 'alert_' + Date.now(),
+                            patientId: patient.id,
+                            alertType: 'outcome',
+                            severity: outcomeForm.status === 'critical' ? 'high' : 'normal',
+                            message: `Outcome recorded: ${outcomeForm.status}`,
+                            status: 'closed',
+                            createdAt: new Date().toISOString()
+                        },
+                        ...(seedData.clinicalAlerts || [])
+                    ];
+                    persistSeedTable('clinicalAlerts', nextAlerts);
+                    seedData.clinicalAlerts = nextAlerts;
+
+                    setOutcomeForm({
+                        status: 'recovered',
+                        summary: '',
+                        outcomeDate: new Date().toISOString().split('T')[0],
+                        dischargeInstructions: ''
+                    });
+                };
+
+                const handleSaveQualityCheck = () => {
+                    const qualityNote = {
+                        id: 'quality_' + Date.now(),
+                        patientId: patient.id,
+                        idCheck: qualityForm.idCheck,
+                        allergyCheck: qualityForm.allergyCheck,
+                        consent: qualityForm.consent,
+                        medReconciliation: qualityForm.medReconciliation,
+                        dischargeEducation: qualityForm.dischargeEducation,
+                        riskScore: qualityForm.riskScore,
+                        auditNote: qualityForm.auditNote || 'Quality review completed',
+                        reviewedAt: new Date().toISOString()
+                    };
+
+                    const nextAudit = [qualityNote, ...(seedData.auditLogs || [])];
+                    persistSeedTable('auditLogs', nextAudit);
+                    seedData.auditLogs = nextAudit;
+
+                    setQualityForm({
+                        idCheck: true,
+                        allergyCheck: true,
+                        consent: true,
+                        medReconciliation: true,
+                        dischargeEducation: true,
+                        riskScore: 'Low',
+                        auditNote: ''
                     });
                 };
 
@@ -687,6 +827,45 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Referral & transfer workflow" subtitle="Specialist handoff and continuity">
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Input label="Department" value={referralForm.department} onChange={(e) => setReferralForm(prev => ({ ...prev, department: e.target.value }))} />
+                                                    <Input label="Receiving provider" value={referralForm.provider} onChange={(e) => setReferralForm(prev => ({ ...prev, provider: e.target.value }))} />
+                                                </div>
+                                                <Select label="Urgency" value={referralForm.urgency} onChange={(e) => setReferralForm(prev => ({ ...prev, urgency: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'STAT' }]} />
+                                                <Input label="Transfer date" type="date" value={referralForm.transferDate} onChange={(e) => setReferralForm(prev => ({ ...prev, transferDate: e.target.value }))} />
+                                                <TextArea label="Referral reason" rows={3} value={referralForm.reason} onChange={(e) => setReferralForm(prev => ({ ...prev, reason: e.target.value }))} />
+                                                <TextArea label="Clinical notes / handoff" rows={3} value={referralForm.notes} onChange={(e) => setReferralForm(prev => ({ ...prev, notes: e.target.value }))} />
+                                                <Button variant="secondary" className="w-full justify-center" icon={Icons.Send} onClick={handleSaveReferral}>Send Referral</Button>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Treatment outcome & case closure" subtitle="Final care summary and recovery tracking">
+                                            <div className="space-y-4">
+                                                <Select label="Outcome status" value={outcomeForm.status} onChange={(e) => setOutcomeForm(prev => ({ ...prev, status: e.target.value }))} options={[{ value: 'recovered', label: 'Recovered' }, { value: 'improving', label: 'Improving' }, { value: 'stable', label: 'Stable' }, { value: 'critical', label: 'Critical' }]} />
+                                                <Input label="Outcome date" type="date" value={outcomeForm.outcomeDate} onChange={(e) => setOutcomeForm(prev => ({ ...prev, outcomeDate: e.target.value }))} />
+                                                <TextArea label="Clinical outcome summary" rows={3} value={outcomeForm.summary} onChange={(e) => setOutcomeForm(prev => ({ ...prev, summary: e.target.value }))} />
+                                                <TextArea label="Discharge / follow-up instructions" rows={3} value={outcomeForm.dischargeInstructions} onChange={(e) => setOutcomeForm(prev => ({ ...prev, dischargeInstructions: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.CheckCircle} onClick={handleSaveOutcome}>Save Outcome</Button>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Quality & safety audit" subtitle="Clinical governance review checklist">
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><input type="checkbox" checked={qualityForm.idCheck} onChange={(e) => setQualityForm(prev => ({ ...prev, idCheck: e.target.checked }))} /> ID verified</label>
+                                                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><input type="checkbox" checked={qualityForm.allergyCheck} onChange={(e) => setQualityForm(prev => ({ ...prev, allergyCheck: e.target.checked }))} /> Allergy check</label>
+                                                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><input type="checkbox" checked={qualityForm.consent} onChange={(e) => setQualityForm(prev => ({ ...prev, consent: e.target.checked }))} /> Consent signed</label>
+                                                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><input type="checkbox" checked={qualityForm.medReconciliation} onChange={(e) => setQualityForm(prev => ({ ...prev, medReconciliation: e.target.checked }))} /> Med reconciliation</label>
+                                                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 col-span-2"><input type="checkbox" checked={qualityForm.dischargeEducation} onChange={(e) => setQualityForm(prev => ({ ...prev, dischargeEducation: e.target.checked }))} /> Discharge education provided</label>
+                                                </div>
+                                                <Select label="Risk score" value={qualityForm.riskScore} onChange={(e) => setQualityForm(prev => ({ ...prev, riskScore: e.target.value }))} options={[{ value: 'Low', label: 'Low' }, { value: 'Moderate', label: 'Moderate' }, { value: 'High', label: 'High' }]} />
+                                                <TextArea label="Audit note" rows={3} value={qualityForm.auditNote} onChange={(e) => setQualityForm(prev => ({ ...prev, auditNote: e.target.value }))} />
+                                                <Button variant="secondary" className="w-full justify-center" icon={Icons.ShieldAlert} onClick={handleSaveQualityCheck}>Complete Quality Audit</Button>
                                             </div>
                                         </Card>
                                     </div>
