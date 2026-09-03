@@ -34,23 +34,27 @@ alter table public.wards enable row level security;
 alter table public.beds enable row level security;
 alter table public.insurance_claims enable row level security;
 
+drop policy if exists "Allow all access for authenticated users" on public.wards;
+drop policy if exists "Allow all access for authenticated users" on public.beds;
+drop policy if exists "Allow all access for authenticated users" on public.insurance_claims;
+
 create policy "Allow all access for authenticated users"
 on public.wards
 for all
-using (true)
-with check (true);
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 create policy "Allow all access for authenticated users"
 on public.beds
 for all
-using (true)
-with check (true);
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 create policy "Allow all access for authenticated users"
 on public.insurance_claims
 for all
-using (true)
-with check (true);
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 create index if not exists idx_wards_status on public.wards(status);
 create index if not exists idx_beds_ward_id on public.beds(ward_id);

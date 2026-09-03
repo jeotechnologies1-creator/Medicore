@@ -33,9 +33,9 @@
         if (!url || !anonKey || !window.supabase) return null;
         return window.supabase.createClient(url, anonKey, {
             auth: {
-                persistSession: false,
-                autoRefreshToken: false,
-                detectSessionInUrl: false
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true
             }
         });
     };
@@ -105,14 +105,17 @@
         if (!client) {
             return null;
         }
-
-        const { data, error } = await client.from('profiles').select('*').eq('email', email).maybeSingle();
-        if (!error && data && data.password === password) {
-            const safe = { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
-            delete safe.password;
-            return safe;
-        }
+        const { data: authData, error: authError } = await client.auth.signInWithPassword({ email, password });
+        if (authError || !authData.user) return null;
+        const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
+        if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
+        await client.auth.signOut();
         return null;
+    };
+
+    const logout = async () => {
+        const client = getClient();
+        if (client) await client.auth.signOut();
     };
 
     window.MedicoreSupabase = {
@@ -123,6 +126,7 @@
         insertRow,
         updateRow,
         loginProfile,
+        logout,
         getStore,
         saveStore
     };

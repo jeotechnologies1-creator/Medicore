@@ -2,8 +2,8 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
+  auth_user_id uuid unique references auth.users(id) on delete cascade,
   email text not null unique,
-  password text not null,
   role text not null default 'super_admin',
   full_name text not null,
   department text,
@@ -195,10 +195,6 @@ create table if not exists public.office_staff (
   unique (office_id, profile_id)
 );
 
-insert into public.profiles (email, password, role, full_name, department, status)
-values ('admin@medicore.local', 'admin123', 'super_admin', 'System Administrator', 'IT', 'active')
-on conflict (email) do nothing;
-
 alter table public.profiles enable row level security;
 alter table public.patients enable row level security;
 alter table public.appointments enable row level security;
@@ -214,17 +210,34 @@ alter table public.audit_logs enable row level security;
 alter table public.medical_offices enable row level security;
 alter table public.office_staff enable row level security;
 
-create policy "Allow all access for authenticated users" on public.profiles for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.patients for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.appointments for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.lab_orders for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.radiology_orders for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.prescriptions for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.pharmacy_inventory for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.billing for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.admissions for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.surgeries for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.notifications for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.audit_logs for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.medical_offices for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.office_staff for all using (true) with check (true);
+-- Policies are named per table. Drop these legacy names first so this setup script
+-- remains safe to rerun after the modular SQL files have been applied.
+drop policy if exists "Allow all access for authenticated users" on public.profiles;
+drop policy if exists "Allow all access for authenticated users" on public.patients;
+drop policy if exists "Allow all access for authenticated users" on public.appointments;
+drop policy if exists "Allow all access for authenticated users" on public.lab_orders;
+drop policy if exists "Allow all access for authenticated users" on public.radiology_orders;
+drop policy if exists "Allow all access for authenticated users" on public.prescriptions;
+drop policy if exists "Allow all access for authenticated users" on public.pharmacy_inventory;
+drop policy if exists "Allow all access for authenticated users" on public.billing;
+drop policy if exists "Allow all access for authenticated users" on public.admissions;
+drop policy if exists "Allow all access for authenticated users" on public.surgeries;
+drop policy if exists "Allow all access for authenticated users" on public.notifications;
+drop policy if exists "Allow all access for authenticated users" on public.audit_logs;
+drop policy if exists "Allow all access for authenticated users" on public.medical_offices;
+drop policy if exists "Allow all access for authenticated users" on public.office_staff;
+
+create policy "Allow all access for authenticated users" on public.profiles for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.patients for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.appointments for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.lab_orders for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.radiology_orders for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.prescriptions for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.pharmacy_inventory for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.billing for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.admissions for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.surgeries for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.notifications for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.audit_logs for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.medical_offices for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.office_staff for all using (auth.uid() is not null) with check (auth.uid() is not null);

@@ -10,11 +10,12 @@ create table if not exists public.office_staff (
 
 alter table public.office_staff enable row level security;
 
+drop policy if exists "Allow all access for authenticated users" on public.office_staff;
 create policy "Allow all access for authenticated users"
 on public.office_staff
 for all
-using (true)
-with check (true);
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 create index if not exists idx_office_staff_office_id
 on public.office_staff(office_id);

@@ -21,6 +21,12 @@
             consultations: [],
             documents: [],
             immunizations: [],
+            allergies: [],
+            conditions: [],
+            medicationOrders: [],
+            carePlans: [],
+            clinicalTasks: [],
+            clinicalAlerts: [],
             wards: [],
             beds: [],
             insuranceClaims: [],
@@ -43,7 +49,6 @@
             ...row,
             id: row.id,
             email: row.email,
-            password: row.password,
             role: row.role || 'super_admin',
             name: row.full_name || row.name || row.email,
             fullName: row.full_name || row.name || row.email,
@@ -273,6 +278,39 @@
             notes: row.notes || ''
         }));
 
+        const normalizeAllergies = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, substance: row.substance,
+            category: row.category || 'medication', reaction: row.reaction || '', severity: row.severity || 'unknown',
+            criticality: row.criticality || 'low', clinicalStatus: row.clinical_status || row.clinicalStatus || 'active'
+        }));
+
+        const normalizeConditions = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, conditionName: row.condition_name || row.conditionName,
+            clinicalStatus: row.clinical_status || row.clinicalStatus || 'active', verificationStatus: row.verification_status || row.verificationStatus || 'provisional',
+            onsetDate: row.onset_date || row.onsetDate, notes: row.notes || ''
+        }));
+
+        const normalizeMedicationOrders = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, medicationName: row.medication_name || row.medicationName,
+            dose: row.dose, doseUnit: row.dose_unit || row.doseUnit, route: row.route, frequency: row.frequency,
+            status: row.status || 'active', indication: row.indication || ''
+        }));
+
+        const normalizeCarePlans = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, title: row.title, description: row.description || '',
+            status: row.status || 'active', targetDate: row.target_date || row.targetDate, reviewDate: row.review_date || row.reviewDate
+        }));
+
+        const normalizeClinicalTasks = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, title: row.title, taskType: row.task_type || row.taskType,
+            dueAt: row.due_at || row.dueAt, priority: row.priority || 'routine', status: row.status || 'open'
+        }));
+
+        const normalizeClinicalAlerts = (rows = []) => rows.map((row) => ({
+            ...row, id: row.id, patientId: row.patient_id || row.patientId, alertType: row.alert_type || row.alertType,
+            severity: row.severity || 'warning', message: row.message, status: row.status || 'open', createdAt: row.created_at || row.createdAt
+        }));
+
         const normalizeWards = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -328,7 +366,7 @@
         }));
 
         const hydrateSeedData = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'consultations', 'documents', 'immunizations', 'wards', 'offices', 'officeStaff'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'offices', 'officeStaff'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
@@ -369,7 +407,7 @@
                 { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations }
             ];
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], consultations: [], documents: [], immunizations: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -387,6 +425,12 @@
                 { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
                 { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
                 { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations },
+                { dbTable: 'patient_allergies', appTable: 'allergies', mapper: normalizeAllergies },
+                { dbTable: 'patient_conditions', appTable: 'conditions', mapper: normalizeConditions },
+                { dbTable: 'medication_orders', appTable: 'medicationOrders', mapper: normalizeMedicationOrders },
+                { dbTable: 'care_plans', appTable: 'carePlans', mapper: normalizeCarePlans },
+                { dbTable: 'clinical_tasks', appTable: 'clinicalTasks', mapper: normalizeClinicalTasks },
+                { dbTable: 'clinical_alerts', appTable: 'clinicalAlerts', mapper: normalizeClinicalAlerts },
                 { dbTable: 'wards', appTable: 'wards', mapper: normalizeWards },
                 { dbTable: 'beds', appTable: 'beds', mapper: normalizeBeds },
                 { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
@@ -1393,6 +1437,7 @@
 
             const logout = useCallback(() => {
                 setUser(null);
+                window.MedicoreSupabase?.logout?.();
                 try {
                     localStorage.removeItem('medicore_user');
                 } catch (e) {}
@@ -1445,7 +1490,7 @@
                     await login(email, password);
                     onLogin();
                 } catch (err) {
-                    setError('Invalid email or password. Try: admin@medicore.com / admin123');
+                    setError('Invalid email or password. Contact your administrator if you need an account.');
                 }
             };
 
@@ -1516,8 +1561,8 @@
                         </Card>
 
                         <div className="mt-6 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-center">
-                            <p className="text-xs font-medium uppercase tracking-wide text-medical-700">Live Supabase access</p>
-                            <p className="mt-1 text-sm text-medical-700">Use the project admin account: admin@medicore.local / admin123</p>
+                            <p className="text-xs font-medium uppercase tracking-wide text-medical-700">Secure sign-in</p>
+                            <p className="mt-1 text-sm text-medical-700">Use a staff account created in Supabase Auth. Demo passwords are not stored in MediCore.</p>
                         </div>
                     </div>
                 </div>
@@ -1545,6 +1590,7 @@
                         { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
                         { id: 'admissions', label: 'Admissions', icon: Icons.Bed },
                         { id: 'surgeries', label: 'Surgeries', icon: Icons.Scissors },
+                        { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
                         { id: 'inventory', label: 'Inventory', icon: Icons.Package },
                         { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
                         { id: 'offices', label: 'Medical Offices', icon: Icons.Building2 },
@@ -1559,12 +1605,14 @@
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },
                         { id: 'radiology', label: 'Radiology', icon: Icons.Image },
                         { id: 'prescriptions', label: 'Prescriptions', icon: Icons.Pill },
+                        { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
                     ],
                     nurse: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'ward', label: 'Ward Management', icon: Icons.Bed },
                         { id: 'vitals', label: 'Vital Signs', icon: Icons.Activity },
                         { id: 'medications', label: 'Medications', icon: Icons.Syringe },
+                        { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
                     ],
                     receptionist: [
                         { id: 'patients', label: 'Patient Registration', icon: Icons.UserPlus },
@@ -4729,6 +4777,120 @@
             );
         };
 
+        const ClinicalSafetyModule = () => {
+            const [allergies, setAllergies] = useState(hydrateSeedData().allergies || []);
+            const [conditions, setConditions] = useState(hydrateSeedData().conditions || []);
+            const [carePlans, setCarePlans] = useState(hydrateSeedData().carePlans || []);
+            const [alerts, setAlerts] = useState(hydrateSeedData().clinicalAlerts || []);
+            const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
+            const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', onsetDate: '' });
+            const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
+            const patients = hydrateSeedData().patients || [];
+
+            const save = async (table, payload, setter, appTable, mapper) => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                let record = mapper([{ ...payload, id: `local-${Date.now()}` }])[0];
+                if (client) {
+                    const { data, error } = await client.from(table).insert([payload]).select();
+                    if (!error && data?.[0]) record = mapper([data[0]])[0];
+                    if (error) console.error(`Unable to save ${table}`, error);
+                }
+                const next = [record, ...(appTable === 'allergies' ? allergies : appTable === 'conditions' ? conditions : carePlans)];
+                persistSeedTable(appTable, next);
+                setter(next);
+            };
+
+            const latestVitals = (seedData.vitals || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
+            const activeAlerts = [...alerts, ...latestVitals.map(v => ({ id: `vital-${v.id}`, patientId: v.patientId, severity: 'critical', alertType: 'vital', message: `Abnormal vital signs recorded ${formatDateTime(v.timestamp)}`, status: 'open' }))]
+                .filter(alert => alert.status === 'open');
+            const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))];
+            const patientName = (id) => {
+                const patient = patients.find(p => p.id === id);
+                return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
+            };
+
+            const addAllergy = async () => {
+                if (!allergyForm.patientId || !allergyForm.substance) return;
+                await save('patient_allergies', {
+                    patient_id: allergyForm.patientId, substance: allergyForm.substance, reaction: allergyForm.reaction,
+                    severity: allergyForm.severity, criticality: allergyForm.criticality, category: 'medication', clinical_status: 'active'
+                }, setAllergies, 'allergies', normalizeAllergies);
+                setAllergyForm({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
+            };
+            const addCondition = async () => {
+                if (!conditionForm.patientId || !conditionForm.conditionName) return;
+                await save('patient_conditions', {
+                    patient_id: conditionForm.patientId, condition_name: conditionForm.conditionName,
+                    onset_date: conditionForm.onsetDate || null, clinical_status: 'active', verification_status: 'provisional'
+                }, setConditions, 'conditions', normalizeConditions);
+                setConditionForm({ patientId: '', conditionName: '', onsetDate: '' });
+            };
+            const addCarePlan = async () => {
+                if (!carePlanForm.patientId || !carePlanForm.title) return;
+                await save('care_plans', {
+                    patient_id: carePlanForm.patientId, title: carePlanForm.title, description: carePlanForm.description,
+                    target_date: carePlanForm.targetDate || null, status: 'active'
+                }, setCarePlans, 'carePlans', normalizeCarePlans);
+                setCarePlanForm({ patientId: '', title: '', description: '', targetDate: '' });
+            };
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div>
+                        <h2 className="text-2xl font-bold text-slate-900">Clinical Safety</h2>
+                        <p className="text-slate-500 mt-1">Maintain the allergy and problem lists, care plans, and actionable safety alerts.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <StatCard title="Open alerts" value={activeAlerts.length} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Active allergies" value={allergies.filter(a => a.clinicalStatus === 'active').length} icon={Icons.Shield} color="amber" />
+                        <StatCard title="Active problems" value={conditions.filter(c => c.clinicalStatus === 'active').length} icon={Icons.ClipboardList} color="medical" />
+                        <StatCard title="Active care plans" value={carePlans.filter(c => c.status === 'active').length} icon={Icons.CheckCircle} color="emerald" />
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                        <Card title="Record allergy / intolerance">
+                            <div className="space-y-3">
+                                <Select label="Patient" value={allergyForm.patientId} onChange={(e) => setAllergyForm({ ...allergyForm, patientId: e.target.value })} options={patientOptions} />
+                                <Input label="Allergen or substance" value={allergyForm.substance} onChange={(e) => setAllergyForm({ ...allergyForm, substance: e.target.value })} />
+                                <Input label="Reaction" value={allergyForm.reaction} onChange={(e) => setAllergyForm({ ...allergyForm, reaction: e.target.value })} />
+                                <Select label="Severity" value={allergyForm.severity} onChange={(e) => setAllergyForm({ ...allergyForm, severity: e.target.value })} options={['mild','moderate','severe'].map(value => ({ value, label: value }))} />
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={addAllergy}>Save Allergy</Button>
+                            </div>
+                        </Card>
+                        <Card title="Add problem to list">
+                            <div className="space-y-3">
+                                <Select label="Patient" value={conditionForm.patientId} onChange={(e) => setConditionForm({ ...conditionForm, patientId: e.target.value })} options={patientOptions} />
+                                <Input label="Condition" value={conditionForm.conditionName} onChange={(e) => setConditionForm({ ...conditionForm, conditionName: e.target.value })} />
+                                <Input label="Onset date" type="date" value={conditionForm.onsetDate} onChange={(e) => setConditionForm({ ...conditionForm, onsetDate: e.target.value })} />
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={addCondition}>Add Problem</Button>
+                            </div>
+                        </Card>
+                        <Card title="Start care plan">
+                            <div className="space-y-3">
+                                <Select label="Patient" value={carePlanForm.patientId} onChange={(e) => setCarePlanForm({ ...carePlanForm, patientId: e.target.value })} options={patientOptions} />
+                                <Input label="Plan title" value={carePlanForm.title} onChange={(e) => setCarePlanForm({ ...carePlanForm, title: e.target.value })} />
+                                <TextArea label="Plan details" rows={2} value={carePlanForm.description} onChange={(e) => setCarePlanForm({ ...carePlanForm, description: e.target.value })} />
+                                <Input label="Target date" type="date" value={carePlanForm.targetDate} onChange={(e) => setCarePlanForm({ ...carePlanForm, targetDate: e.target.value })} />
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={addCarePlan}>Save Care Plan</Button>
+                            </div>
+                        </Card>
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <Card title="Safety alerts requiring review"><DataTable columns={[
+                            { key: 'severity', title: 'Severity', render: row => <Badge variant={row.severity === 'critical' ? 'danger' : 'warning'}>{row.severity}</Badge> },
+                            { key: 'patient', title: 'Patient', render: row => patientName(row.patientId) },
+                            { key: 'message', title: 'Alert' }
+                        ]} data={activeAlerts.slice(0, 10)} /></Card>
+                        <Card title="Current allergy & problem list"><DataTable columns={[
+                            { key: 'patient', title: 'Patient', render: row => patientName(row.patientId) },
+                            { key: 'item', title: 'Item', render: row => row.substance || row.conditionName },
+                            { key: 'details', title: 'Details', render: row => row.reaction || row.verificationStatus || 'Active' },
+                            { key: 'severity', title: 'Safety level', render: row => <Badge variant={row.severity === 'severe' ? 'danger' : 'warning'}>{row.severity || row.clinicalStatus}</Badge> }
+                        ]} data={[...allergies, ...conditions].slice(0, 10)} /></Card>
+                    </div>
+                </div>
+            );
+        };
+
         const InventoryModule = () => {
             const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
             const [search, setSearch] = useState('');
@@ -4897,6 +5059,7 @@
                     case 'admissions': return <AdmissionsModule />;
                     case 'ward': return <AdmissionsModule />;
                     case 'vitals': return <VitalsModule />;
+                    case 'clinical_safety': return <ClinicalSafetyModule />;
                     case 'surgeries': return <SurgeriesModule />;
                     case 'reports': return <ReportsModule />;
                     case 'audit': return <AuditModule />;
@@ -4959,4 +5122,3 @@
                 </AuthProvider>
             );
         }
-    

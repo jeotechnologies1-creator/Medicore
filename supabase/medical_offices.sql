@@ -16,11 +16,12 @@ create table if not exists public.medical_offices (
 
 alter table public.medical_offices enable row level security;
 
+drop policy if exists "Allow all access for authenticated users" on public.medical_offices;
 create policy "Allow all access for authenticated users"
 on public.medical_offices
 for all
-using (true)
-with check (true);
+using (auth.uid() is not null)
+with check (auth.uid() is not null);
 
 create index if not exists idx_medical_offices_status
 on public.medical_offices(status);

@@ -70,11 +70,17 @@ alter table public.patient_documents enable row level security;
 alter table public.immunizations enable row level security;
 alter table public.medication_administrations enable row level security;
 
-create policy "Allow all access for authenticated users" on public.vital_signs for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.consultations for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.patient_documents for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.immunizations for all using (true) with check (true);
-create policy "Allow all access for authenticated users" on public.medication_administrations for all using (true) with check (true);
+drop policy if exists "Allow all access for authenticated users" on public.vital_signs;
+drop policy if exists "Allow all access for authenticated users" on public.consultations;
+drop policy if exists "Allow all access for authenticated users" on public.patient_documents;
+drop policy if exists "Allow all access for authenticated users" on public.immunizations;
+drop policy if exists "Allow all access for authenticated users" on public.medication_administrations;
+
+create policy "Allow all access for authenticated users" on public.vital_signs for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.consultations for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.patient_documents for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.immunizations for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.medication_administrations for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 create index if not exists idx_vital_signs_patient_id on public.vital_signs(patient_id);
 create index if not exists idx_consultations_patient_id on public.consultations(patient_id);

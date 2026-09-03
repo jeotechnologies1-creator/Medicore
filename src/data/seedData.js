@@ -2,16 +2,16 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 
 window.MediCoreSeedData = {
             users: [
-                { id: 'u1', email: 'admin@medicore.com', password: 'admin123', role: 'super_admin', name: 'System Administrator', department: 'IT', status: 'active', lastLogin: '2026-09-01 06:30', avatar: null },
-                { id: 'u2', email: 'dr.smith@medicore.com', password: 'doctor123', role: 'doctor', name: 'Dr. Sarah Smith', department: 'Cardiology', status: 'active', lastLogin: '2026-09-01 07:00', avatar: null, specialization: 'Cardiology', license: 'MD-4521' },
-                { id: 'u3', email: 'dr.jones@medicore.com', password: 'doctor123', role: 'doctor', name: 'Dr. Michael Jones', department: 'Orthopedics', status: 'active', lastLogin: '2026-08-31 18:00', avatar: null, specialization: 'Orthopedic Surgery', license: 'MD-7823' },
-                { id: 'u4', email: 'nurse.wilson@medicore.com', password: 'nurse123', role: 'nurse', name: 'Nurse Emily Wilson', department: 'General Ward', status: 'active', lastLogin: '2026-09-01 06:45', avatar: null, ward: 'Ward A' },
-                { id: 'u5', email: 'lab.tech@medicore.com', password: 'lab123', role: 'laboratory_scientist', name: 'James Chen', department: 'Laboratory', status: 'active', lastLogin: '2026-09-01 05:00', avatar: null },
-                { id: 'u6', email: 'pharmacy@medicore.com', password: 'pharma123', role: 'pharmacist', name: 'Maria Garcia', department: 'Pharmacy', status: 'active', lastLogin: '2026-09-01 06:00', avatar: null },
-                { id: 'u7', email: 'reception@medicore.com', password: 'recept123', role: 'receptionist', name: 'David Park', department: 'Reception', status: 'active', lastLogin: '2026-09-01 07:10', avatar: null },
-                { id: 'u8', email: 'radiology@medicore.com', password: 'radio123', role: 'radiographer', name: 'Dr. Lisa Wang', department: 'Radiology', status: 'active', lastLogin: '2026-08-31 20:00', avatar: null },
-                { id: 'u9', email: 'billing@medicore.com', password: 'bill123', role: 'accountant', name: 'Robert Taylor', department: 'Billing', status: 'active', lastLogin: '2026-09-01 06:00', avatar: null },
-                { id: 'u10', email: 'patient@demo.com', password: 'patient123', role: 'patient', name: 'John Doe', status: 'active', lastLogin: '2026-08-30 10:00', avatar: null, patientId: 'P-2026-0001' },
+                { id: 'u1', email: 'admin@medicore.com', role: 'super_admin', name: 'System Administrator', department: 'IT', status: 'active', lastLogin: '2026-09-01 06:30', avatar: null },
+                { id: 'u2', email: 'dr.smith@medicore.com', role: 'doctor', name: 'Dr. Sarah Smith', department: 'Cardiology', status: 'active', lastLogin: '2026-09-01 07:00', avatar: null, specialization: 'Cardiology', license: 'MD-4521' },
+                { id: 'u3', email: 'dr.jones@medicore.com', role: 'doctor', name: 'Dr. Michael Jones', department: 'Orthopedics', status: 'active', lastLogin: '2026-08-31 18:00', avatar: null, specialization: 'Orthopedic Surgery', license: 'MD-7823' },
+                { id: 'u4', email: 'nurse.wilson@medicore.com', role: 'nurse', name: 'Nurse Emily Wilson', department: 'General Ward', status: 'active', lastLogin: '2026-09-01 06:45', avatar: null, ward: 'Ward A' },
+                { id: 'u5', email: 'lab.tech@medicore.com', role: 'laboratory_scientist', name: 'James Chen', department: 'Laboratory', status: 'active', lastLogin: '2026-09-01 05:00', avatar: null },
+                { id: 'u6', email: 'pharmacy@medicore.com', role: 'pharmacist', name: 'Maria Garcia', department: 'Pharmacy', status: 'active', lastLogin: '2026-09-01 06:00', avatar: null },
+                { id: 'u7', email: 'reception@medicore.com', role: 'receptionist', name: 'David Park', department: 'Reception', status: 'active', lastLogin: '2026-09-01 07:10', avatar: null },
+                { id: 'u8', email: 'radiology@medicore.com', role: 'radiographer', name: 'Dr. Lisa Wang', department: 'Radiology', status: 'active', lastLogin: '2026-08-31 20:00', avatar: null },
+                { id: 'u9', email: 'billing@medicore.com', role: 'accountant', name: 'Robert Taylor', department: 'Billing', status: 'active', lastLogin: '2026-09-01 06:00', avatar: null },
+                { id: 'u10', email: 'patient@demo.com', role: 'patient', name: 'John Doe', status: 'active', lastLogin: '2026-08-30 10:00', avatar: null, patientId: 'P-2026-0001' },
             ],
             patients: Array.from({ length: 50 }, (_, i) => ({
                 id: 'p' + (i + 1),
