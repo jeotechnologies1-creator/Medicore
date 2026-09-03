@@ -36,6 +36,7 @@
             });
 
             const { user, logout, hasModuleAccess } = useAuth();
+            const supabaseStatus = window.MedicoreSupabase?.getStatus?.() || { configured: false, mode: 'local' };
 
             useEffect(() => {
                 try {
@@ -144,6 +145,13 @@
             if (!isAuthenticated) {
                 return (
                     <div className={`theme-shell theme-${theme}`}>
+                        {!supabaseStatus.configured && (
+                            <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3">
+                                <div className="max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 shadow-sm">
+                                    Local mode is active: Supabase is not configured yet, so the app is running from browser storage with the default admin login.
+                                </div>
+                            </div>
+                        )}
                         <LoginPage onLogin={handleLogin} />
                     </div>
                 );
@@ -151,6 +159,13 @@
 
             return (
                 <div className={`theme-shell theme-${theme}`}>
+                    {!supabaseStatus.configured && (
+                        <div className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3">
+                            <div className="max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 shadow-sm">
+                                Local mode is active: Supabase is not configured yet, so the app is running from browser storage with secure local fallback data.
+                            </div>
+                        </div>
+                    )}
                     <div className="app-shell flex h-screen">
                         <Sidebar 
                             activeModule={activeModule} 

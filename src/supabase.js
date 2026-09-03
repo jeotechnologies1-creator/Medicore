@@ -32,6 +32,16 @@
         return normalized;
     };
 
+    const isConfigured = () => {
+        const { url, anonKey } = getConfig();
+        return Boolean(url && anonKey && window.supabase);
+    };
+
+    const getStatus = () => ({
+        configured: isConfigured(),
+        mode: isConfigured() ? 'supabase' : 'local'
+    });
+
     const getClient = () => {
         const { url, anonKey } = getConfig();
         if (!url || !anonKey || !window.supabase) return null;
@@ -272,6 +282,8 @@
     window.MedicoreSupabase = {
         getConfig,
         setConfig,
+        isConfigured,
+        getStatus,
         getClient,
         readRows,
         insertRow,
