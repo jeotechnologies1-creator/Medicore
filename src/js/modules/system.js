@@ -200,7 +200,12 @@
                         if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
                             const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
                             if (remoteSettings && Object.keys(remoteSettings).length) {
-                                setSettings(prev => ({ ...prev, ...remoteSettings }));
+                                const { roleMatrix: remoteRoleMatrix, ...remoteOnlySettings } = remoteSettings;
+                                setSettings(prev => ({ ...prev, ...remoteOnlySettings }));
+                                if (Array.isArray(remoteRoleMatrix) && remoteRoleMatrix.length) {
+                                    setRoleMatrix(remoteRoleMatrix);
+                                    localStorage.setItem('medicore_role_matrix', JSON.stringify(remoteRoleMatrix));
+                                }
                             }
                         }
                         if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadDepartments === 'function') {
@@ -228,14 +233,15 @@
             const saveSettings = async () => {
                 try {
                     localStorage.setItem('medicore_settings', JSON.stringify(settings));
+                    localStorage.setItem('medicore_role_matrix', JSON.stringify(roleMatrix));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings);
+                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, roleMatrix);
                         if (error) {
                             setSaveMessage('Settings saved locally; Supabase sync failed.');
                             return;
                         }
                     }
-                    setSaveMessage('Settings saved successfully.');
+                    setSaveMessage('Settings and role matrix saved successfully.');
                 } catch (e) {
                     setSaveMessage('Unable to save settings in this browser session.');
                 }
@@ -247,8 +253,9 @@
                 setDepartments(initialDepartments);
                 try {
                     localStorage.setItem('medicore_settings', JSON.stringify(defaultSettings));
+                    localStorage.setItem('medicore_role_matrix', JSON.stringify(initialRoleMatrix));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings);
+                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings, initialRoleMatrix);
                     }
                     setSaveMessage('Default EMR settings restored.');
                 } catch (e) {
@@ -257,17 +264,21 @@
             };
 
             const togglePermission = (roleName, permissionKey) => {
-                setRoleMatrix(prev => prev.map(role =>
-                    role.role === roleName
-                        ? {
-                            ...role,
-                            permissions: {
-                                ...role.permissions,
-                                [permissionKey]: !role.permissions[permissionKey]
+                setRoleMatrix(prev => {
+                    const next = prev.map(role =>
+                        role.role === roleName
+                            ? {
+                                ...role,
+                                permissions: {
+                                    ...role.permissions,
+                                    [permissionKey]: !role.permissions[permissionKey]
+                                }
                             }
-                        }
-                        : role
-                ));
+                            : role
+                    );
+                    localStorage.setItem('medicore_role_matrix', JSON.stringify(next));
+                    return next;
+                });
             };
 
             const addDepartment = async () => {

@@ -3,6 +3,119 @@
         // ==========================================
         const AuthContext = React.createContext(null);
 
+        const defaultRoleMatrix = [
+            {
+                role: 'Super Admin',
+                permissions: {
+                    dashboard: true,
+                    patients: true,
+                    appointments: true,
+                    doctors: true,
+                    laboratory: true,
+                    radiology: true,
+                    pharmacy: true,
+                    billing: true,
+                    admissions: true,
+                    surgeries: true,
+                    clinical_safety: true,
+                    inventory: true,
+                    hr: true,
+                    offices: true,
+                    reports: true,
+                    audit: true,
+                    settings: true
+                }
+            },
+            {
+                role: 'Doctor',
+                permissions: {
+                    dashboard: true,
+                    patients: true,
+                    appointments: true,
+                    doctors: false,
+                    laboratory: true,
+                    radiology: true,
+                    pharmacy: false,
+                    billing: false,
+                    admissions: false,
+                    surgeries: false,
+                    clinical_safety: true,
+                    inventory: false,
+                    hr: false,
+                    offices: false,
+                    reports: false,
+                    audit: false,
+                    settings: false
+                }
+            },
+            {
+                role: 'Nurse',
+                permissions: {
+                    dashboard: true,
+                    patients: true,
+                    appointments: false,
+                    doctors: false,
+                    laboratory: false,
+                    radiology: false,
+                    pharmacy: false,
+                    billing: false,
+                    admissions: true,
+                    surgeries: false,
+                    clinical_safety: true,
+                    inventory: false,
+                    hr: false,
+                    offices: false,
+                    reports: false,
+                    audit: false,
+                    settings: false
+                }
+            },
+            {
+                role: 'Pharmacist',
+                permissions: {
+                    dashboard: true,
+                    patients: false,
+                    appointments: false,
+                    doctors: false,
+                    laboratory: false,
+                    radiology: false,
+                    pharmacy: true,
+                    billing: false,
+                    admissions: false,
+                    surgeries: false,
+                    clinical_safety: false,
+                    inventory: true,
+                    hr: false,
+                    offices: false,
+                    reports: false,
+                    audit: false,
+                    settings: false
+                }
+            },
+            {
+                role: 'Receptionist',
+                permissions: {
+                    dashboard: true,
+                    patients: true,
+                    appointments: true,
+                    doctors: false,
+                    laboratory: false,
+                    radiology: false,
+                    pharmacy: false,
+                    billing: true,
+                    admissions: false,
+                    surgeries: false,
+                    clinical_safety: false,
+                    inventory: false,
+                    hr: false,
+                    offices: false,
+                    reports: false,
+                    audit: false,
+                    settings: false
+                }
+            }
+        ];
+
         const AuthProvider = ({ children }) => {
             const [user, setUser] = useState(() => {
                 try {
@@ -12,7 +125,48 @@
                     return null;
                 }
             });
+            const [roleMatrix, setRoleMatrix] = useState(() => {
+                try {
+                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                    return Array.isArray(saved) ? saved : defaultRoleMatrix;
+                } catch (e) {
+                    return defaultRoleMatrix;
+                }
+            });
             const [loading, setLoading] = useState(false);
+
+            useEffect(() => {
+                const hydrateRoleMatrix = async () => {
+                    try {
+                        const savedLocal = (() => {
+                            try {
+                                const parsed = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                                return Array.isArray(parsed) ? parsed : [];
+                            } catch (e) {
+                                return [];
+                            }
+                        })();
+
+                        if (savedLocal.length) {
+                            setRoleMatrix(savedLocal);
+                            return;
+                        }
+
+                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
+                            const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
+                            const remoteMatrix = Array.isArray(remoteSettings.roleMatrix) ? remoteSettings.roleMatrix : [];
+                            if (remoteMatrix.length) {
+                                setRoleMatrix(remoteMatrix);
+                                localStorage.setItem('medicore_role_matrix', JSON.stringify(remoteMatrix));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Role matrix hydration unavailable:', e);
+                    }
+                };
+
+                hydrateRoleMatrix();
+            }, []);
 
             const login = useCallback(async (email, password) => {
                 setLoading(true);
@@ -50,6 +204,29 @@
                 } catch (e) {}
             }, []);
 
+            const normalizeRoleKey = (role) => {
+                return String(role || 'patient').trim().toLowerCase().replace(/\s+/g, '_');
+            };
+
+            const getStoredRoleMatrix = () => {
+                try {
+                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                    return Array.isArray(saved) && saved.length ? saved : roleMatrix;
+                } catch (e) {
+                    return roleMatrix;
+                }
+            };
+
+            const getRolePermissions = useCallback((role) => {
+                const normalizedRole = normalizeRoleKey(role);
+                const matrix = getStoredRoleMatrix();
+                const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
+                if (match) {
+                    return match.permissions || {};
+                }
+                return {};
+            }, [user, roleMatrix]);
+
             const hasPermission = useCallback((permission) => {
                 if (!user) return false;
                 const rolePermissions = {
@@ -63,12 +240,216 @@
                     accountant: ['view_billing', 'process_payment', 'view_reports'],
                     patient: ['view_own_records', 'book_appointment', 'view_bills', 'message_doctor']
                 };
-                const permissions = rolePermissions[user.role] || [];
+                const permissions = rolePermissions[normalizeRoleKey(user.role)] || [];
                 return permissions.includes('*') || permissions.includes(permission);
             }, [user]);
 
+            const hasModuleAccess = useCallback((moduleId) => {
+                if (!user) return false;
+                const normalizedRole = normalizeRoleKey(user.role);
+                const matrix = getStoredRoleMatrix();
+                const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
+                if (match && match.permissions) {
+                    return Boolean(match.permissions[moduleId]);
+                }
+
+                const fallback = {
+                    super_admin: ['dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
+                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'prescriptions', 'clinical_safety'],
+                    nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_safety'],
+                    receptionist: ['dashboard', 'patients', 'appointments', 'billing'],
+                    pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
+                    laboratory_scientist: ['dashboard', 'laboratory', 'results'],
+                    radiographer: ['dashboard', 'radiology', 'upload'],
+                    accountant: ['dashboard', 'billing', 'reports'],
+                    patient: ['dashboard', 'portal', 'appointments', 'lab_results', 'prescriptions', 'billing', 'messages']
+                };
+                return (fallback[normalizedRole] || []).includes(moduleId);
+            }, [user, roleMatrix]);
+
             return (
-                <AuthContext.Provider value={{ user, login, logout, loading, hasPermission }}>
+                <AuthContext.Provider value={{ user, login, logout, loading, hasPermission, hasModuleAccess, getRolePermissions }}>
+                    {children}
+                </AuthContext.Provider>
+            );
+        };
+
+        const useAuth = () => {
+            const context = React.useContext(AuthContext);
+            if (!context) throw new Error('useAuth must be used within AuthProvider');
+            return context;
+        };
+
+        // ==========================================
+        // LOGIN PAGE
+        // ==========================================
+        const LoginPage = ({ onLogin }) => {
+                {
+                    role: 'Super Admin',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        appointments: true,
+                        doctors: true,
+                        laboratory: true,
+                        radiology: true,
+                        pharmacy: true,
+                        billing: true,
+                        admissions: true,
+                        surgeries: true,
+                        clinical_safety: true,
+                        inventory: true,
+                        hr: true,
+                        offices: true,
+                        reports: true,
+                        audit: true,
+                        settings: true
+                    }
+                },
+                {
+                    role: 'Doctor',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        appointments: true,
+                        doctors: false,
+                        laboratory: true,
+                        radiology: true,
+                        pharmacy: false,
+                        billing: false,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: true,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Nurse',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        appointments: false,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
+                        pharmacy: false,
+                        billing: false,
+                        admissions: true,
+                        surgeries: false,
+                        clinical_safety: true,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Pharmacist',
+                    permissions: {
+                        dashboard: true,
+                        patients: false,
+                        appointments: false,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
+                        pharmacy: true,
+                        billing: false,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: false,
+                        inventory: true,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Receptionist',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        appointments: true,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
+                        pharmacy: false,
+                        billing: true,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: false,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
+                        settings: false
+                    }
+                }
+            ];
+
+            const getRolePermissions = useCallback((role) => {
+                const normalizedRole = normalizeRoleKey(role);
+                const savedMatrix = getStoredRoleMatrix();
+                const matrix = (savedMatrix && savedMatrix.length ? savedMatrix : defaultRoleMatrix);
+                const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
+                if (match) {
+                    return match.permissions || {};
+                }
+                return {};
+            }, [user]);
+
+            const hasPermission = useCallback((permission) => {
+                if (!user) return false;
+                const rolePermissions = {
+                    super_admin: ['*'],
+                    doctor: ['view_patient', 'edit_patient', 'prescribe', 'order_lab', 'order_radiology', 'view_lab', 'view_radiology', 'view_appointments', 'edit_consultation'],
+                    nurse: ['view_patient', 'edit_vitals', 'administer_medication', 'view_ward', 'edit_nursing_notes'],
+                    receptionist: ['register_patient', 'view_patient', 'schedule_appointment', 'view_billing'],
+                    pharmacist: ['view_prescription', 'dispense', 'manage_inventory'],
+                    laboratory_scientist: ['process_lab', 'enter_results', 'view_lab_orders'],
+                    radiographer: ['process_imaging', 'upload_images', 'enter_report'],
+                    accountant: ['view_billing', 'process_payment', 'view_reports'],
+                    patient: ['view_own_records', 'book_appointment', 'view_bills', 'message_doctor']
+                };
+                const permissions = rolePermissions[normalizeRoleKey(user.role)] || [];
+                return permissions.includes('*') || permissions.includes(permission);
+            }, [user]);
+
+            const hasModuleAccess = useCallback((moduleId) => {
+                if (!user) return false;
+                const normalizedRole = normalizeRoleKey(user.role);
+                const savedMatrix = getStoredRoleMatrix();
+                const matrix = (savedMatrix && savedMatrix.length ? savedMatrix : defaultRoleMatrix);
+                const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
+                if (match && match.permissions) {
+                    return Boolean(match.permissions[moduleId]);
+                }
+
+                const fallback = {
+                    super_admin: ['dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
+                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'prescriptions', 'clinical_safety'],
+                    nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_safety'],
+                    receptionist: ['dashboard', 'patients', 'appointments', 'billing'],
+                    pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
+                    laboratory_scientist: ['dashboard', 'laboratory', 'results'],
+                    radiographer: ['dashboard', 'radiology', 'upload'],
+                    accountant: ['dashboard', 'billing', 'reports'],
+                    patient: ['dashboard', 'portal', 'appointments', 'lab_results', 'prescriptions', 'billing', 'messages']
+                };
+                return (fallback[normalizedRole] || []).includes(moduleId);
+            }, [user]);
+
+            return (
+                <AuthContext.Provider value={{ user, login, logout, loading, hasPermission, hasModuleAccess, getRolePermissions }}>
                     {children}
                 </AuthContext.Provider>
             );

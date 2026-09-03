@@ -111,15 +111,22 @@
         return { data: data || [], error };
     };
 
-    const saveSystemSettings = async (settings) => {
+    const saveSystemSettings = async (settings, roleMatrix = []) => {
         const client = getClient();
         if (!client) {
             return { data: null, error: new Error('Supabase client is not configured.') };
         }
 
+        const normalizedSettings = { ...(settings || {}) };
+        if (Array.isArray(roleMatrix) && roleMatrix.length) {
+            normalizedSettings.roleMatrix = roleMatrix;
+        } else if (Array.isArray(normalizedSettings.roleMatrix)) {
+            normalizedSettings.roleMatrix = normalizedSettings.roleMatrix;
+        }
+
         const payload = {
             setting_key: 'hospital_core_settings',
-            setting_value: settings || {},
+            setting_value: normalizedSettings,
             updated_at: new Date().toISOString()
         };
 
@@ -138,7 +145,8 @@
             return {};
         }
 
-        return data.setting_value || {};
+        const value = data.setting_value || {};
+        return (value && typeof value === 'object') ? value : {};
     };
 
     const saveDepartments = async (departments) => {

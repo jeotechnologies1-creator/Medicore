@@ -6,7 +6,7 @@
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
 
-            const { user, logout } = useAuth();
+            const { user, logout, hasModuleAccess } = useAuth();
 
             const handleLogout = () => {
                 logout();
@@ -58,11 +58,7 @@
             };
 
             const renderModule = () => {
-                const protectedModules = ['settings', 'audit', 'offices', 'hr', 'reports', 'inventory', 'billing', 'surgeries', 'admissions'];
-                const currentRole = user?.role || 'patient';
-                const hasAccess = currentRole === 'super_admin' || !protectedModules.includes(activeModule);
-
-                if (!hasAccess) {
+                if (user && !hasModuleAccess(activeModule)) {
                     return <DashboardModule />;
                 }
 
