@@ -1,5 +1,10 @@
 (function () {
     const STORAGE_KEY = 'medicore_supabase_config';
+    const appShell = window.__MEDICORE_APP__ || (window.__MEDICORE_APP__ = {});
+    const singletonState = appShell.supabase || (appShell.supabase = {
+        client: null,
+        configKey: null
+    });
 
     const getConfig = () => {
         const override = window.__MEDICORE_SUPABASE__ || {};
@@ -25,19 +30,28 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         } catch (e) {}
         window.__MEDICORE_SUPABASE__ = normalized;
+        singletonState.client = null;
+        singletonState.configKey = null;
         return normalized;
     };
 
     const getClient = () => {
         const { url, anonKey } = getConfig();
         if (!url || !anonKey || !window.supabase) return null;
-        return window.supabase.createClient(url, anonKey, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
+
+        const configKey = `${url}|${anonKey}`;
+        if (!singletonState.client || singletonState.configKey !== configKey) {
+            singletonState.client = window.supabase.createClient(url, anonKey, {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true
+                }
+            });
+            singletonState.configKey = configKey;
+        }
+
+        return singletonState.client;
     };
 
     const getStore = () => ({

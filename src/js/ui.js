@@ -6,12 +6,12 @@
             // buttons from appearing actionable in the clinical application.
             if (type === 'button' && typeof onClick !== 'function') return null;
             const variants = {
-                primary: 'bg-medical-600 text-white hover:bg-medical-700 border-transparent shadow-sm hover:shadow-md',
-                secondary: 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm',
-                danger: 'bg-red-600 text-white hover:bg-red-700 border-transparent shadow-sm',
-                success: 'bg-emerald-600 text-white hover:bg-emerald-700 border-transparent shadow-sm',
-                ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 border-transparent',
-                outline: 'bg-transparent border-slate-300 text-slate-700 hover:bg-slate-50'
+                primary: 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white hover:from-sky-400 hover:to-cyan-400 border-transparent shadow-lg shadow-sky-900/20',
+                secondary: 'bg-slate-900/80 text-slate-100 border-slate-700 hover:bg-slate-800 shadow-sm',
+                danger: 'bg-red-600 text-white hover:bg-red-500 border-transparent shadow-lg shadow-red-900/20',
+                success: 'bg-emerald-600 text-white hover:bg-emerald-500 border-transparent shadow-lg shadow-emerald-900/20',
+                ghost: 'bg-transparent text-slate-200 hover:bg-slate-800 border-transparent',
+                outline: 'bg-transparent border-slate-600 text-slate-200 hover:bg-slate-800/80'
             };
             const sizes = {
                 sm: 'px-3 py-1.5 text-xs',
@@ -23,7 +23,7 @@
                     type={type}
                     onClick={onClick}
                     disabled={disabled}
-                    className={'inline-flex items-center gap-2 rounded-lg border font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ' + variants[variant] + ' ' + sizes[size] + ' ' + className}
+                    className={'inline-flex items-center gap-2 rounded-xl border font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ' + variants[variant] + ' ' + sizes[size] + ' ' + className}
                 >
                     {Icon && <Icon size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16} />}
                     {children}
@@ -48,12 +48,12 @@
         };
 
         const Card = ({ children, className = '', title, subtitle, action, noPadding = false }) => (
-            <div className={'bg-white rounded-xl border border-slate-200 shadow-sm hover-lift ' + className}>
+            <div className={'relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/80 shadow-[0_18px_40px_rgba(2,6,23,0.25)] hover-lift ' + className}>
                 {(title || subtitle || action) && (
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center justify-between border-b border-slate-700/70 bg-gradient-to-r from-slate-800/90 via-slate-900/90 to-slate-800/90 px-6 py-4">
                         <div>
-                            {title && <h3 className="text-lg font-semibold text-slate-900">{title}</h3>}
-                            {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+                            {title && <h3 className="text-lg font-semibold text-slate-100">{title}</h3>}
+                            {subtitle && <p className="text-sm text-slate-400 mt-0.5">{subtitle}</p>}
                         </div>
                         {action && <div>{action}</div>}
                     </div>
@@ -281,10 +281,10 @@
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all text-sm"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-700 bg-slate-950/60 text-slate-100 placeholder-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-sm shadow-inner"
                 />
                 {value && (
-                    <button onClick={() => onChange({ target: { value: '' } })} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <button onClick={() => onChange({ target: { value: '' } })} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
                         <Icons.X size={16} />
                     </button>
                 )}
@@ -317,18 +317,29 @@
         // ==========================================
         const LineChart = ({ data, width = 400, height = 200, color = '#2563eb' }) => {
             if (!data || data.length === 0) return null;
+
+            const safeValues = data
+                .map(d => Number(d && d.value))
+                .filter(value => Number.isFinite(value));
+
+            if (safeValues.length === 0) return null;
+
             const padding = 20;
             const chartWidth = width - padding * 2;
             const chartHeight = height - padding * 2;
-            const maxValue = Math.max(...data.map(d => d.value));
-            const minValue = Math.min(...data.map(d => d.value));
+            const maxValue = Math.max(...safeValues);
+            const minValue = Math.min(...safeValues);
             const range = maxValue - minValue || 1;
-            
+
             const points = data.map((d, i) => {
-                const x = padding + (i / (data.length - 1)) * chartWidth;
-                const y = padding + chartHeight - ((d.value - minValue) / range) * chartHeight;
+                const rawValue = Number(d && d.value);
+                if (!Number.isFinite(rawValue)) return null;
+                const x = padding + (i / Math.max(data.length - 1, 1)) * chartWidth;
+                const y = padding + chartHeight - ((rawValue - minValue) / range) * chartHeight;
                 return x + ',' + y;
-            }).join(' ');
+            }).filter(Boolean).join(' ');
+
+            if (!points) return null;
 
             const areaPoints = padding + ',' + height + ' ' + points + ' ' + (width - padding) + ',' + height;
 
@@ -343,8 +354,10 @@
                     <polygon points={areaPoints} fill="url(#areaGradient)" />
                     <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="vitals-graph" />
                     {data.map((d, i) => {
-                        const x = padding + (i / (data.length - 1)) * chartWidth;
-                        const y = padding + chartHeight - ((d.value - minValue) / range) * chartHeight;
+                        const rawValue = Number(d && d.value);
+                        if (!Number.isFinite(rawValue)) return null;
+                        const x = padding + (i / Math.max(data.length - 1, 1)) * chartWidth;
+                        const y = padding + chartHeight - ((rawValue - minValue) / range) * chartHeight;
                         return <circle key={i} cx={x} cy={y} r="4" fill="white" stroke={color} strokeWidth="2" />;
                     })}
                 </svg>
@@ -353,14 +366,25 @@
 
         const BarChart = ({ data, width = 400, height = 200, color = '#2563eb' }) => {
             if (!data || data.length === 0) return null;
+
+            const safeValues = data
+                .map(d => Number(d && d.value))
+                .filter(value => Number.isFinite(value));
+
+            if (safeValues.length === 0) return null;
+
             const padding = 30;
-            const barWidth = (width - padding * 2) / data.length - 8;
-            const maxValue = Math.max(...data.map(d => d.value));
-            
+            const maxValue = Math.max(...safeValues);
+            if (maxValue <= 0) return null;
+
+            const barWidth = Math.max((width - padding * 2) / Math.max(data.length, 1) - 8, 6);
+
             return (
                 <svg width={width} height={height} className="overflow-visible">
                     {data.map((d, i) => {
-                        const barHeight = (d.value / maxValue) * (height - padding * 2);
+                        const numericValue = Number(d && d.value);
+                        if (!Number.isFinite(numericValue)) return null;
+                        const barHeight = Math.max((numericValue / maxValue) * (height - padding * 2), 0);
                         const x = padding + i * (barWidth + 8) + 4;
                         const y = height - padding - barHeight;
                         return (
