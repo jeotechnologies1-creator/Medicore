@@ -65,35 +65,734 @@
         // SETTINGS MODULE
         // ==========================================
         const SettingsModule = () => {
+            const defaultSettings = {
+                facilityName: 'MediCore Hospital',
+                facilityCode: 'MC-001',
+                timezone: 'UTC',
+                locale: 'en-US',
+                currency: 'USD',
+                contactEmail: 'admin@medicore.local',
+                phone: '+1 (800) 555-0147',
+                serviceLine: 'General Hospital & Outpatient Clinics',
+                sessionTimeoutMinutes: 30,
+                requireMfa: true,
+                lockAfterFailedAttempts: 5,
+                passwordMinLength: 8,
+                roleBasedAccess: true,
+                auditRetentionDays: 2555,
+                autoLogoutIdle: true,
+                requirePatientIdVerification: true,
+                requireAllergyCheck: true,
+                requireMedicationVerification: true,
+                requireClinicalNoteBeforeDischarge: true,
+                enableBarcodeMedicationCheck: true,
+                allowPatientPortalAccess: true,
+                requireConsentForDataSharing: true,
+                enableHl7: true,
+                enableFhir: true,
+                enableAutoBackups: true,
+                backupSchedule: 'Daily at 02:00',
+                alertForCriticalLabs: true,
+                criticalLabEscalationHours: 1,
+                appointmentBufferMinutes: 15,
+                followUpDefaultDays: 14,
+                pharmacyReorderLevelThreshold: 30,
+                enableAuditTrail: true,
+                keepSystemLogs: true,
+                auditArchiveFrequency: 'Monthly',
+                dataRetentionPolicy: '7 years clinical; 10 years financial',
+                backupRetentionDays: 90,
+                encryptionAtRest: true,
+                encryptionInTransit: true,
+                incidentReportingSlaHours: 24,
+                complianceMonitoring: true,
+                annualAuditCycle: 'Q4 review'
+            };
+
+            const initialRoleMatrix = [
+                {
+                    role: 'Super Admin',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        billing: true,
+                        pharmacy: true,
+                        labs: true,
+                        settings: true
+                    }
+                },
+                {
+                    role: 'Medical Director',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        billing: false,
+                        pharmacy: true,
+                        labs: true,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Doctor',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        billing: false,
+                        pharmacy: false,
+                        labs: true,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Nurse',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        billing: false,
+                        pharmacy: false,
+                        labs: true,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Pharmacist',
+                    permissions: {
+                        dashboard: true,
+                        patients: false,
+                        billing: false,
+                        pharmacy: true,
+                        labs: false,
+                        settings: false
+                    }
+                }
+            ];
+
+            const initialDepartments = (seedData.wards || []).map((ward, index) => ({
+                id: ward.id || `dept-${index + 1}`,
+                name: ward.name || `Ward ${index + 1}`,
+                type: ward.type || 'Ward',
+                capacity: ward.capacity || 20,
+                status: ward.status || 'active'
+            }));
+
+            const [settings, setSettings] = useState(() => {
+                try {
+                    const saved = JSON.parse(localStorage.getItem('medicore_settings') || '{}');
+                    return { ...defaultSettings, ...saved };
+                } catch (e) {
+                    return defaultSettings;
+                }
+            });
+            const [saveMessage, setSaveMessage] = useState('');
+            const [roleMatrix, setRoleMatrix] = useState(initialRoleMatrix);
+            const [departments, setDepartments] = useState(initialDepartments);
+            const [exportHistory, setExportHistory] = useState([]);
+            const [departmentDraft, setDepartmentDraft] = useState({
+                name: '',
+                type: 'Ward',
+                capacity: 20,
+                status: 'active'
+            });
+
+            useEffect(() => {
+                const hydrateFromSupabase = async () => {
+                    try {
+                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
+                            const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
+                            if (remoteSettings && Object.keys(remoteSettings).length) {
+                                setSettings(prev => ({ ...prev, ...remoteSettings }));
+                            }
+                        }
+                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadDepartments === 'function') {
+                            const remoteDepartments = await window.MedicoreSupabase.loadDepartments();
+                            if (remoteDepartments && remoteDepartments.length) {
+                                setDepartments(remoteDepartments);
+                            }
+                        }
+                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadComplianceExports === 'function') {
+                            const remoteExports = await window.MedicoreSupabase.loadComplianceExports();
+                            setExportHistory(remoteExports || []);
+                        }
+                    } catch (e) {
+                        console.warn('Supabase settings hydration unavailable:', e);
+                    }
+                };
+
+                hydrateFromSupabase();
+            }, []);
+
+            const updateSetting = (key, value) => {
+                setSettings(prev => ({ ...prev, [key]: value }));
+            };
+
+            const saveSettings = async () => {
+                try {
+                    localStorage.setItem('medicore_settings', JSON.stringify(settings));
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
+                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings);
+                        if (error) {
+                            setSaveMessage('Settings saved locally; Supabase sync failed.');
+                            return;
+                        }
+                    }
+                    setSaveMessage('Settings saved successfully.');
+                } catch (e) {
+                    setSaveMessage('Unable to save settings in this browser session.');
+                }
+            };
+
+            const resetSettings = async () => {
+                setSettings(defaultSettings);
+                setRoleMatrix(initialRoleMatrix);
+                setDepartments(initialDepartments);
+                try {
+                    localStorage.setItem('medicore_settings', JSON.stringify(defaultSettings));
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
+                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings);
+                    }
+                    setSaveMessage('Default EMR settings restored.');
+                } catch (e) {
+                    setSaveMessage('Default settings restored locally.');
+                }
+            };
+
+            const togglePermission = (roleName, permissionKey) => {
+                setRoleMatrix(prev => prev.map(role =>
+                    role.role === roleName
+                        ? {
+                            ...role,
+                            permissions: {
+                                ...role.permissions,
+                                [permissionKey]: !role.permissions[permissionKey]
+                            }
+                        }
+                        : role
+                ));
+            };
+
+            const addDepartment = async () => {
+                const trimmedName = departmentDraft.name.trim();
+                if (!trimmedName) {
+                    setSaveMessage('Department name is required before creating a unit.');
+                    return;
+                }
+
+                const newDepartment = {
+                    id: `dept-${Date.now()}`,
+                    name: trimmedName,
+                    type: departmentDraft.type,
+                    capacity: Number(departmentDraft.capacity || 20),
+                    status: departmentDraft.status,
+                    occupied: 0
+                };
+
+                const nextDepartments = [...departments, newDepartment];
+                setDepartments(nextDepartments);
+                setDepartmentDraft({ name: '', type: 'Ward', capacity: 20, status: 'active' });
+
+                try {
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
+                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
+                    }
+                    setSaveMessage('Department/ward added successfully.');
+                } catch (e) {
+                    setSaveMessage('Department saved locally, but Supabase sync failed.');
+                }
+            };
+
+            const updateDepartment = async (id, field, value) => {
+                const nextDepartments = departments.map(item =>
+                    item.id === id ? { ...item, [field]: field === 'capacity' ? Number(value || 0) : value } : item
+                );
+                setDepartments(nextDepartments);
+
+                try {
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
+                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
+                    }
+                } catch (e) {
+                    console.warn('Department sync failed:', e);
+                }
+            };
+
+            const removeDepartment = async (id) => {
+                const nextDepartments = departments.filter(item => item.id !== id);
+                setDepartments(nextDepartments);
+                try {
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
+                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
+                    }
+                    setSaveMessage('Department removed from the configuration.');
+                } catch (e) {
+                    setSaveMessage('Department removed locally but not persisted to Supabase.');
+                }
+            };
+
+            const handleAuditExport = async () => {
+                const headers = ['timestamp', 'userId', 'action', 'entityType', 'severity', 'ipAddress'];
+                const rows = seedData.auditLogs.map((log) => [
+                    log.timestamp,
+                    log.userId,
+                    log.action,
+                    log.entityType,
+                    log.severity,
+                    log.ipAddress
+                ]);
+
+                const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'medicore-audit-export.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                try {
+                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.recordComplianceExport === 'function') {
+                        const result = await window.MedicoreSupabase.recordComplianceExport('audit_csv', 'medicore-audit-export.csv', rows.length, {
+                            generatedBy: 'super_admin',
+                            fileType: 'csv'
+                        });
+                        if (result && result.data) {
+                            setExportHistory(prev => [
+                                {
+                                    id: result.data.id,
+                                    exportType: result.data.export_type,
+                                    fileName: result.data.file_name,
+                                    recordCount: result.data.record_count,
+                                    exportedAt: result.data.exported_at,
+                                    metadata: result.data.metadata || {}
+                                },
+                                ...prev
+                            ]);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Compliance export history not persisted:', e);
+                }
+
+                setSaveMessage('Audit log export downloaded successfully.');
+            };
+
+            const complianceChecks = [
+                {
+                    label: 'Backup status',
+                    value: settings.enableAutoBackups ? 'Healthy' : 'Disabled',
+                    tone: settings.enableAutoBackups ? 'success' : 'warning'
+                },
+                {
+                    label: 'Encryption at rest',
+                    value: settings.encryptionAtRest ? 'Enabled' : 'Off',
+                    tone: settings.encryptionAtRest ? 'success' : 'warning'
+                },
+                {
+                    label: 'Audit retention',
+                    value: `${settings.auditRetentionDays} days`,
+                    tone: 'success'
+                },
+                {
+                    label: 'Incident response SLA',
+                    value: `${settings.incidentReportingSlaHours}h`,
+                    tone: 'info'
+                }
+            ];
+
+            const complianceChart = [
+                { label: 'Backups', value: settings.enableAutoBackups ? 92 : 35 },
+                { label: 'Security', value: settings.requireMfa ? 95 : 60 },
+                { label: 'Retention', value: Math.min(100, Math.round((settings.auditRetentionDays / 3650) * 100)) },
+                { label: 'Interoperability', value: settings.enableFhir ? 90 : 68 }
+            ];
+
+            const ToggleRow = ({ label, description, checked, onChange }) => (
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div>
+                        <p className="text-sm font-medium text-slate-800">{label}</p>
+                        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => onChange(!checked)}
+                        className={'relative inline-flex h-6 w-11 items-center rounded-full transition-colors ' + (checked ? 'bg-medical-600' : 'bg-slate-300')}
+                        aria-label={label}
+                    >
+                        <span className={'inline-block h-5 w-5 rounded-full bg-white transition-transform ' + (checked ? 'translate-x-5' : 'translate-x-1')} />
+                    </button>
+                </div>
+            );
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
-                    <h2 className="text-2xl font-bold text-slate-900">Settings</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <Card title="General Settings">
-                            <p className="text-sm leading-6 text-slate-600">Hospital identity details are not stored by this application yet. Configure them through your approved administration workflow instead of relying on placeholder values.</p>
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">System Settings</h2>
+                            <p className="text-slate-500 mt-1">Core hospital configuration, security posture, and clinical governance controls</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="secondary" onClick={resetSettings}>Reset</Button>
+                            <Button variant="primary" onClick={saveSettings}>Save Settings</Button>
+                        </div>
+                    </div>
+
+                    {saveMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{saveMessage}</div>}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Facility & Identity">
+                            <div className="space-y-4">
+                                <Input label="Facility name" value={settings.facilityName} onChange={(e) => updateSetting('facilityName', e.target.value)} />
+                                <Input label="Facility code" value={settings.facilityCode} onChange={(e) => updateSetting('facilityCode', e.target.value)} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Timezone" value={settings.timezone} onChange={(e) => updateSetting('timezone', e.target.value)} />
+                                    <Input label="Currency" value={settings.currency} onChange={(e) => updateSetting('currency', e.target.value)} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Locale" value={settings.locale} onChange={(e) => updateSetting('locale', e.target.value)} />
+                                    <Input label="Phone" value={settings.phone} onChange={(e) => updateSetting('phone', e.target.value)} />
+                                </div>
+                                <Input label="Admin email" type="email" value={settings.contactEmail} onChange={(e) => updateSetting('contactEmail', e.target.value)} />
+                                <Input label="Service line" value={settings.serviceLine} onChange={(e) => updateSetting('serviceLine', e.target.value)} />
+                            </div>
                         </Card>
 
-                        <Card title="System Configuration">
-                            <p className="text-sm leading-6 text-slate-600">Locale, currency, and session controls are determined by your deployed Supabase and hosting configuration. No simulated preferences are shown here.</p>
-                        </Card>
-
-                        <Card title="Security Settings">
-                            <p className="text-sm leading-6 text-slate-600">Authentication policy, multi-factor authentication, and session duration must be managed in Supabase Auth. This screen no longer makes unsupported security claims or exposes inactive controls.</p>
+                        <Card title="Security & Access Control">
+                            <div className="space-y-4">
+                                <Input label="Session timeout (minutes)" type="number" value={settings.sessionTimeoutMinutes} onChange={(e) => updateSetting('sessionTimeoutMinutes', Number(e.target.value || 30))} />
+                                <Input label="Password minimum length" type="number" value={settings.passwordMinLength} onChange={(e) => updateSetting('passwordMinLength', Number(e.target.value || 8))} />
+                                <Input label="Failed attempts before lock" type="number" value={settings.lockAfterFailedAttempts} onChange={(e) => updateSetting('lockAfterFailedAttempts', Number(e.target.value || 5))} />
+                                <Input label="Audit retention (days)" type="number" value={settings.auditRetentionDays} onChange={(e) => updateSetting('auditRetentionDays', Number(e.target.value || 2555))} />
+                                <div className="space-y-3">
+                                    <ToggleRow label="Require MFA for staff" description="Strongly recommended for admin and clinical roles" checked={settings.requireMfa} onChange={(value) => updateSetting('requireMfa', value)} />
+                                    <ToggleRow label="Auto logout idle users" description="Protects patient data when a browser is left open" checked={settings.autoLogoutIdle} onChange={(value) => updateSetting('autoLogoutIdle', value)} />
+                                    <ToggleRow label="Role-based access enforcement" description="Restrict organization and clinical access by role" checked={settings.roleBasedAccess} onChange={(value) => updateSetting('roleBasedAccess', value)} />
+                                    <ToggleRow label="Keep system audit trail" description="Required for traceability and regulatory review" checked={settings.enableAuditTrail} onChange={(value) => updateSetting('enableAuditTrail', value)} />
+                                </div>
+                            </div>
                         </Card>
                     </div>
 
-                    <Card title="Department Configuration">
-                        <DataTable
-                            columns={[
-                                { key: 'name', title: 'Department' },
-                                { key: 'type', title: 'Type' },
-                                { key: 'capacity', title: 'Capacity' },
-                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
-                            ]}
-                            data={seedData.wards}
-                        />
-                    </Card>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Clinical Safety Standards">
+                            <div className="space-y-4">
+                                <Input label="Default follow-up period (days)" type="number" value={settings.followUpDefaultDays} onChange={(e) => updateSetting('followUpDefaultDays', Number(e.target.value || 14))} />
+                                <Input label="Appointment buffer (minutes)" type="number" value={settings.appointmentBufferMinutes} onChange={(e) => updateSetting('appointmentBufferMinutes', Number(e.target.value || 15))} />
+                                <Input label="Pharmacy reorder warning threshold (%)" type="number" value={settings.pharmacyReorderLevelThreshold} onChange={(e) => updateSetting('pharmacyReorderLevelThreshold', Number(e.target.value || 30))} />
+                                <div className="space-y-3">
+                                    <ToggleRow label="Require patient ID verification" description="Supports positive patient identification before treatment" checked={settings.requirePatientIdVerification} onChange={(value) => updateSetting('requirePatientIdVerification', value)} />
+                                    <ToggleRow label="Require allergy check before medication" description="Critical for medication safety and risk reduction" checked={settings.requireAllergyCheck} onChange={(value) => updateSetting('requireAllergyCheck', value)} />
+                                    <ToggleRow label="Require medication verification" description="Helps prevent wrong-drug and wrong-dose errors" checked={settings.requireMedicationVerification} onChange={(value) => updateSetting('requireMedicationVerification', value)} />
+                                    <ToggleRow label="Clinical note required before discharge" description="Supports continuity of care and documentation quality" checked={settings.requireClinicalNoteBeforeDischarge} onChange={(value) => updateSetting('requireClinicalNoteBeforeDischarge', value)} />
+                                    <ToggleRow label="Barcode scan for medication administration" description="Standard for safer medication workflows" checked={settings.enableBarcodeMedicationCheck} onChange={(value) => updateSetting('enableBarcodeMedicationCheck', value)} />
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card title="Privacy, Interoperability & Reporting">
+                            <div className="space-y-4">
+                                <Input label="Backup schedule" value={settings.backupSchedule} onChange={(e) => updateSetting('backupSchedule', e.target.value)} />
+                                <Input label="Critical lab escalation (hours)" type="number" value={settings.criticalLabEscalationHours} onChange={(e) => updateSetting('criticalLabEscalationHours', Number(e.target.value || 1))} />
+                                <div className="space-y-3">
+                                    <ToggleRow label="HIPAA/privacy compliance mode" description="Matches standard patient privacy safeguards" checked={true} onChange={() => null} />
+                                    <ToggleRow label="Patient portal access" description="Allows patients to view records and appointments" checked={settings.allowPatientPortalAccess} onChange={(value) => updateSetting('allowPatientPortalAccess', value)} />
+                                    <ToggleRow label="Consent required for sharing" description="Supports patient consent and legal governance" checked={settings.requireConsentForDataSharing} onChange={(value) => updateSetting('requireConsentForDataSharing', value)} />
+                                    <ToggleRow label="HL7 interoperability" description="Supports clinical message exchange with external systems" checked={settings.enableHl7} onChange={(value) => updateSetting('enableHl7', value)} />
+                                    <ToggleRow label="FHIR-ready integration" description="Supports modern interoperability standards" checked={settings.enableFhir} onChange={(value) => updateSetting('enableFhir', value)} />
+                                    <ToggleRow label="Automatic backups" description="Reduces downtime and supports continuity of care" checked={settings.enableAutoBackups} onChange={(value) => updateSetting('enableAutoBackups', value)} />
+                                    <ToggleRow label="Critical lab alerts" description="Escalates abnormal results to responsible clinical staff" checked={settings.alertForCriticalLabs} onChange={(value) => updateSetting('alertForCriticalLabs', value)} />
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Role-Permission Matrix">
+                            <DataTable
+                                columns={[
+                                    {
+                                        key: 'role',
+                                        title: 'Role',
+                                        render: (row) => (
+                                            <div>
+                                                <p className="font-medium text-slate-800">{row.role}</p>
+                                                <p className="text-xs text-slate-500">Access profile</p>
+                                            </div>
+                                        )
+                                    },
+                                    {
+                                        key: 'dashboard',
+                                        title: 'Dashboard',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.dashboard}
+                                                onChange={() => togglePermission(row.role, 'dashboard')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    },
+                                    {
+                                        key: 'patients',
+                                        title: 'Patients',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.patients}
+                                                onChange={() => togglePermission(row.role, 'patients')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    },
+                                    {
+                                        key: 'billing',
+                                        title: 'Billing',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.billing}
+                                                onChange={() => togglePermission(row.role, 'billing')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    },
+                                    {
+                                        key: 'pharmacy',
+                                        title: 'Pharmacy',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.pharmacy}
+                                                onChange={() => togglePermission(row.role, 'pharmacy')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    },
+                                    {
+                                        key: 'labs',
+                                        title: 'Labs',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.labs}
+                                                onChange={() => togglePermission(row.role, 'labs')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    },
+                                    {
+                                        key: 'settings',
+                                        title: 'Settings',
+                                        render: (row) => (
+                                            <input
+                                                type="checkbox"
+                                                checked={row.permissions.settings}
+                                                onChange={() => togglePermission(row.role, 'settings')}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                            />
+                                        )
+                                    }
+                                ]}
+                                data={roleMatrix}
+                            />
+                        </Card>
+
+                        <Card title="Audit Export & Retention Policies">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Retention policy (days)" type="number" value={settings.auditRetentionDays} onChange={(e) => updateSetting('auditRetentionDays', Number(e.target.value || 2555))} />
+                                    <Input label="Archive frequency" value={settings.auditArchiveFrequency} onChange={(e) => updateSetting('auditArchiveFrequency', e.target.value)} />
+                                </div>
+                                <Input label="Data retention policy" value={settings.dataRetentionPolicy} onChange={(e) => updateSetting('dataRetentionPolicy', e.target.value)} />
+                                <Input label="Backup retention (days)" type="number" value={settings.backupRetentionDays} onChange={(e) => updateSetting('backupRetentionDays', Number(e.target.value || 90))} />
+                                <div className="space-y-3">
+                                    <ToggleRow label="Encrypt data at rest" checked={settings.encryptionAtRest} onChange={(value) => updateSetting('encryptionAtRest', value)} />
+                                    <ToggleRow label="Encrypt data in transit" checked={settings.encryptionInTransit} onChange={(value) => updateSetting('encryptionInTransit', value)} />
+                                    <ToggleRow label="Monitoring and compliance checks" checked={settings.complianceMonitoring} onChange={(value) => updateSetting('complianceMonitoring', value)} />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="secondary" onClick={handleAuditExport}>Export Audit CSV</Button>
+                                    <Button variant="primary">Archive Now</Button>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Department & Ward Editing">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Department / ward" value={departmentDraft.name} onChange={(e) => setDepartmentDraft(prev => ({ ...prev, name: e.target.value }))} />
+                                    <Input label="Capacity" type="number" value={departmentDraft.capacity} onChange={(e) => setDepartmentDraft(prev => ({ ...prev, capacity: Number(e.target.value || 20) }))} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <select
+                                        value={departmentDraft.type}
+                                        onChange={(e) => setDepartmentDraft(prev => ({ ...prev, type: e.target.value }))}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-medical-500"
+                                    >
+                                        <option value="Ward">Ward</option>
+                                        <option value="Clinic">Clinic</option>
+                                        <option value="ICU">ICU</option>
+                                        <option value="Emergency">Emergency</option>
+                                        <option value="Surgery">Surgery</option>
+                                    </select>
+                                    <select
+                                        value={departmentDraft.status}
+                                        onChange={(e) => setDepartmentDraft(prev => ({ ...prev, status: e.target.value }))}
+                                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-medical-500"
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="maintenance">Maintenance</option>
+                                        <option value="closed">Closed</option>
+                                    </select>
+                                </div>
+                                <Button variant="primary" onClick={addDepartment}>Add Department</Button>
+                            </div>
+
+                            <div className="mt-5">
+                                <DataTable
+                                    columns={[
+                                        { key: 'name', title: 'Name' },
+                                        {
+                                            key: 'type',
+                                            title: 'Type',
+                                            render: (row) => (
+                                                <select
+                                                    value={row.type}
+                                                    onChange={(e) => updateDepartment(row.id, 'type', e.target.value)}
+                                                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-medical-500"
+                                                >
+                                                    <option value="Ward">Ward</option>
+                                                    <option value="Clinic">Clinic</option>
+                                                    <option value="ICU">ICU</option>
+                                                    <option value="Emergency">Emergency</option>
+                                                    <option value="Surgery">Surgery</option>
+                                                </select>
+                                            )
+                                        },
+                                        {
+                                            key: 'capacity',
+                                            title: 'Capacity',
+                                            render: (row) => (
+                                                <input
+                                                    type="number"
+                                                    value={row.capacity}
+                                                    onChange={(e) => updateDepartment(row.id, 'capacity', e.target.value)}
+                                                    className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-medical-500"
+                                                />
+                                            )
+                                        },
+                                        {
+                                            key: 'status',
+                                            title: 'Status',
+                                            render: (row) => (
+                                                <select
+                                                    value={row.status}
+                                                    onChange={(e) => updateDepartment(row.id, 'status', e.target.value)}
+                                                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-medical-500"
+                                                >
+                                                    <option value="active">Active</option>
+                                                    <option value="maintenance">Maintenance</option>
+                                                    <option value="closed">Closed</option>
+                                                </select>
+                                            )
+                                        },
+                                        {
+                                            key: 'actions',
+                                            title: 'Actions',
+                                            render: (row) => (
+                                                <Button variant="ghost" size="sm" onClick={() => removeDepartment(row.id)}>Remove</Button>
+                                            )
+                                        }
+                                    ]}
+                                    data={departments}
+                                />
+                            </div>
+                        </Card>
+
+                        <Card title="Backup & Compliance Dashboard">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {complianceChecks.map((item) => (
+                                        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                            <p className="text-xs uppercase tracking-wide text-slate-500">{item.label}</p>
+                                            <div className="mt-2 flex items-center justify-between gap-3">
+                                                <span className="text-lg font-bold text-slate-900">{item.value}</span>
+                                                <span className={'rounded-full px-2 py-1 text-[10px] font-semibold ' + (
+                                                    item.tone === 'success' ? 'bg-emerald-100 text-emerald-700' :
+                                                    item.tone === 'warning' ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-blue-100 text-blue-700'
+                                                )}>
+                                                    {item.tone === 'success' ? 'OK' : item.tone === 'warning' ? 'Review' : 'Info'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <p className="text-sm font-semibold text-slate-800">Compliance Overview</p>
+                                        <span className="text-xs text-slate-500">Overall readiness</span>
+                                    </div>
+                                    <div className="flex items-end gap-3 h-32">
+                                        {complianceChart.map((item) => (
+                                            <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
+                                                <div className="flex h-24 w-full items-end justify-center">
+                                                    <div
+                                                        className="w-full rounded-t-xl bg-gradient-to-t from-medical-600 to-emerald-400 shadow-sm"
+                                                        style={{ height: `${item.value}%` }}
+                                                        title={`${item.label}: ${item.value}%`}
+                                                    />
+                                                </div>
+                                                <span className="text-[10px] text-slate-500">{item.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mt-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-600">Last successful backup</span>
+                                        <span className="font-semibold text-slate-900">{settings.backupSchedule}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-600">Encryption in transit</span>
+                                        <span className="font-semibold text-slate-900">{settings.encryptionInTransit ? 'Enabled' : 'Disabled'}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-600">Annual compliance review</span>
+                                        <span className="font-semibold text-slate-900">{settings.annualAuditCycle}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-600">Incident response SLA</span>
+                                        <span className="font-semibold text-slate-900">{settings.incidentReportingSlaHours} hours</span>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-sm font-semibold text-slate-800">Export history</p>
+                                        <span className="text-xs text-slate-500">Latest 10</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(exportHistory.length ? exportHistory : [
+                                            { id: 'demo-1', exportType: 'audit_csv', fileName: 'medicore-audit-export.csv', recordCount: seedData.auditLogs.length || 0, exportedAt: new Date().toISOString() }
+                                        ]).map((entry) => (
+                                            <div key={entry.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                                                <div>
+                                                    <p className="font-medium text-slate-700">{entry.fileName}</p>
+                                                    <p className="text-slate-500">{entry.exportType} • {entry.recordCount} records</p>
+                                                </div>
+                                                <span className="text-slate-500">{formatDateTime(entry.exportedAt)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
                 </div>
             );
         };

@@ -100,6 +100,127 @@
         return { data: data || [], error };
     };
 
+    const upsertRows = async (table, rows, onConflict = 'id') => {
+        const client = getClient();
+        if (!client) {
+            return { data: [], error: new Error('Supabase client is not configured.') };
+        }
+
+        const payload = Array.isArray(rows) ? rows : [rows];
+        const { data, error } = await client.from(table).upsert(payload, { onConflict }).select();
+        return { data: data || [], error };
+    };
+
+    const saveSystemSettings = async (settings) => {
+        const client = getClient();
+        if (!client) {
+            return { data: null, error: new Error('Supabase client is not configured.') };
+        }
+
+        const payload = {
+            setting_key: 'hospital_core_settings',
+            setting_value: settings || {},
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await client.from('system_settings').upsert(payload, { onConflict: 'setting_key' }).select();
+        return { data: data?.[0] || null, error };
+    };
+
+    const loadSystemSettings = async () => {
+        const client = getClient();
+        if (!client) {
+            return {};
+        }
+
+        const { data, error } = await client.from('system_settings').select('*').eq('setting_key', 'hospital_core_settings').maybeSingle();
+        if (error || !data) {
+            return {};
+        }
+
+        return data.setting_value || {};
+    };
+
+    const saveDepartments = async (departments) => {
+        const client = getClient();
+        if (!client) {
+            return { data: [], error: new Error('Supabase client is not configured.') };
+        }
+
+        const rows = (departments || []).map((dept) => ({
+            id: dept.id,
+            name: dept.name,
+            specialty: dept.type || dept.specialty || 'Ward',
+            capacity: Number(dept.capacity || 0),
+            occupied: Number(dept.occupied || 0),
+            status: dept.status || 'active'
+        }));
+
+        const { data, error } = await client.from('wards').upsert(rows, { onConflict: 'id' }).select();
+        return { data: data || [], error };
+    };
+
+    const loadDepartments = async () => {
+        const client = getClient();
+        if (!client) {
+            return [];
+        }
+
+        const { data, error } = await client.from('wards').select('*').order('name');
+        if (error || !data) {
+            return [];
+        }
+
+        return data.map((row) => ({
+            id: row.id,
+            name: row.name,
+            type: row.specialty || 'Ward',
+            specialty: row.specialty || 'Ward',
+            capacity: Number(row.capacity || 0),
+            occupied: Number(row.occupied || 0),
+            status: row.status || 'active'
+        }));
+    };
+
+    const recordComplianceExport = async (exportType, fileName, rowCount, metadata = {}) => {
+        const client = getClient();
+        if (!client) {
+            return { data: null, error: new Error('Supabase client is not configured.') };
+        }
+
+        const payload = {
+            export_type: exportType,
+            file_name: fileName,
+            record_count: Number(rowCount || 0),
+            metadata: metadata,
+            exported_at: new Date().toISOString()
+        };
+
+        const { data, error } = await client.from('compliance_exports').insert(payload).select();
+        return { data: data?.[0] || null, error };
+    };
+
+    const loadComplianceExports = async () => {
+        const client = getClient();
+        if (!client) {
+            return [];
+        }
+
+        const { data, error } = await client.from('compliance_exports').select('*').order('exported_at', { ascending: false }).limit(10);
+        if (error || !data) {
+            return [];
+        }
+
+        return data.map((row) => ({
+            id: row.id,
+            exportType: row.export_type,
+            fileName: row.file_name,
+            recordCount: row.record_count,
+            exportedAt: row.exported_at,
+            metadata: row.metadata || {}
+        }));
+    };
+
     const loginProfile = async (email, password) => {
         const client = getClient();
         if (!client) {
@@ -126,6 +247,13 @@
         readRows,
         insertRow,
         updateRow,
+        upsertRows,
+        saveSystemSettings,
+        loadSystemSettings,
+        saveDepartments,
+        loadDepartments,
+        recordComplianceExport,
+        loadComplianceExports,
         loginProfile,
         logout,
         getStore,

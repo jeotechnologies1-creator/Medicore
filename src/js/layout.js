@@ -76,7 +76,10 @@
                         { id: 'messages', label: 'Messages', icon: Icons.MessageSquare },
                     ]
                 };
-                return [...common, ...(roleMenus[user?.role] || [])];
+
+                const role = user?.role || 'patient';
+                const allowed = new Set((roleMenus[role] || []).map((item) => item.id));
+                return [...common, ...(roleMenus[role] || [])].filter((item) => role === 'super_admin' || allowed.has(item.id));
             };
 
             const menuItems = getMenuItems();

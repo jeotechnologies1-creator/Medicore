@@ -195,6 +195,21 @@ create table if not exists public.office_staff (
   unique (office_id, profile_id)
 );
 
+create table if not exists public.system_settings (
+  setting_key text primary key,
+  setting_value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.compliance_exports (
+  id uuid primary key default gen_random_uuid(),
+  export_type text not null,
+  file_name text not null,
+  record_count integer not null default 0,
+  metadata jsonb not null default '{}'::jsonb,
+  exported_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.patients enable row level security;
 alter table public.appointments enable row level security;
@@ -209,6 +224,8 @@ alter table public.notifications enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.medical_offices enable row level security;
 alter table public.office_staff enable row level security;
+alter table public.system_settings enable row level security;
+alter table public.compliance_exports enable row level security;
 
 -- Policies are named per table. Drop these legacy names first so this setup script
 -- remains safe to rerun after the modular SQL files have been applied.
@@ -226,6 +243,8 @@ drop policy if exists "Allow all access for authenticated users" on public.notif
 drop policy if exists "Allow all access for authenticated users" on public.audit_logs;
 drop policy if exists "Allow all access for authenticated users" on public.medical_offices;
 drop policy if exists "Allow all access for authenticated users" on public.office_staff;
+drop policy if exists "Allow all access for authenticated users" on public.system_settings;
+drop policy if exists "Allow all access for authenticated users" on public.compliance_exports;
 
 create policy "Allow all access for authenticated users" on public.profiles for all using (auth.uid() is not null) with check (auth.uid() is not null);
 create policy "Allow all access for authenticated users" on public.patients for all using (auth.uid() is not null) with check (auth.uid() is not null);
@@ -241,3 +260,5 @@ create policy "Allow all access for authenticated users" on public.notifications
 create policy "Allow all access for authenticated users" on public.audit_logs for all using (auth.uid() is not null) with check (auth.uid() is not null);
 create policy "Allow all access for authenticated users" on public.medical_offices for all using (auth.uid() is not null) with check (auth.uid() is not null);
 create policy "Allow all access for authenticated users" on public.office_staff for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.system_settings for all using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "Allow all access for authenticated users" on public.compliance_exports for all using (auth.uid() is not null) with check (auth.uid() is not null);

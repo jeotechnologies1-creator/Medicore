@@ -58,6 +58,14 @@
             };
 
             const renderModule = () => {
+                const protectedModules = ['settings', 'audit', 'offices', 'hr', 'reports', 'inventory', 'billing', 'surgeries', 'admissions'];
+                const currentRole = user?.role || 'patient';
+                const hasAccess = currentRole === 'super_admin' || !protectedModules.includes(activeModule);
+
+                if (!hasAccess) {
+                    return <DashboardModule />;
+                }
+
                 switch (activeModule) {
                     case 'dashboard': return <DashboardModule />;
                     case 'patients': return <PatientsModule />;
