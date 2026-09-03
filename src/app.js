@@ -18,6 +18,9 @@
             notifications: [],
             auditLogs: [],
             vitals: [],
+            consultations: [],
+            documents: [],
+            immunizations: [],
             wards: [],
             beds: [],
             insuranceClaims: [],
@@ -214,6 +217,62 @@
             severity: row.severity || 'info'
         }));
 
+        const normalizeVitals = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            recordedBy: row.recorded_by || row.recordedBy,
+            timestamp: row.recorded_at || row.timestamp,
+            temperature: row.temperature,
+            heartRate: row.heart_rate ?? row.heartRate,
+            bloodPressureSystolic: row.blood_pressure_systolic ?? row.bloodPressureSystolic,
+            bloodPressureDiastolic: row.blood_pressure_diastolic ?? row.bloodPressureDiastolic,
+            respiratoryRate: row.respiratory_rate ?? row.respiratoryRate,
+            oxygenSaturation: row.oxygen_saturation ?? row.oxygenSaturation,
+            painScore: row.pain_score ?? row.painScore ?? 0,
+            weight: row.weight,
+            height: row.height,
+            bmi: row.bmi,
+            consciousness: row.consciousness || 'Alert'
+        }));
+
+        const normalizeConsultations = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            doctorId: row.doctor_id || row.doctorId,
+            chiefComplaint: row.chief_complaint || row.chiefComplaint || '',
+            diagnosis: row.diagnosis || '',
+            assessment: row.assessment || '',
+            plan: row.plan || '',
+            followUpDate: row.follow_up_date || row.followUpDate || null,
+            status: row.status || 'completed',
+            createdAt: row.created_at || row.createdAt || new Date().toISOString()
+        }));
+
+        const normalizeDocuments = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            fileName: row.file_name || row.fileName || 'Document',
+            documentType: row.document_type || row.documentType || 'Clinical Note',
+            fileUrl: row.file_url || row.fileUrl || '',
+            uploadedBy: row.uploaded_by || row.uploadedBy || '',
+            uploadedAt: row.uploaded_at || row.uploadedAt || new Date().toISOString(),
+            size: row.size || '0 KB'
+        }));
+
+        const normalizeImmunizations = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            vaccine: row.vaccine || '',
+            status: row.status || 'scheduled',
+            administeredDate: row.administered_date || row.administeredDate || null,
+            nextDueDate: row.next_due_date || row.nextDueDate || null,
+            notes: row.notes || ''
+        }));
+
         const normalizeWards = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -269,7 +328,7 @@
         }));
 
         const hydrateSeedData = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'wards', 'offices', 'officeStaff'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'consultations', 'documents', 'immunizations', 'wards', 'offices', 'officeStaff'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
@@ -303,10 +362,14 @@
                 { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
                 { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
                 { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
-                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs }
+                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
+                { dbTable: 'vital_signs', appTable: 'vitals', mapper: normalizeVitals },
+                { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
+                { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
+                { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations }
             ];
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], consultations: [], documents: [], immunizations: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -320,6 +383,10 @@
                 { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
                 { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
                 { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
+                { dbTable: 'vital_signs', appTable: 'vitals', mapper: normalizeVitals },
+                { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
+                { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
+                { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations },
                 { dbTable: 'wards', appTable: 'wards', mapper: normalizeWards },
                 { dbTable: 'beds', appTable: 'beds', mapper: normalizeBeds },
                 { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
@@ -4463,6 +4530,309 @@
             );
         };
 
+        const DoctorsModule = () => {
+            const doctors = (seedData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Doctors & Clinical Staff</h2>
+                            <p className="text-slate-500 mt-1">Manage physician rosters, specialties, and availability</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.Plus}>Add Clinician</Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <StatCard title="Active Doctors" value={doctors.length} icon={Icons.Stethoscope} color="medical" />
+                        <StatCard title="Specialties" value={new Set(doctors.map(doc => doc.department || 'General')).size} icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="On Call" value={Math.max(2, Math.ceil(doctors.length * 0.35))} icon={Icons.Activity} color="amber" />
+                        <StatCard title="Avg. Patients" value={18} icon={Icons.Users} color="violet" />
+                    </div>
+
+                    <Card>
+                        <DataTable
+                            columns={[
+                                { key: 'name', title: 'Clinician', render: (row) => (
+                                    <div className="flex items-center gap-2">
+                                        <Avatar name={row.name} size="sm" />
+                                        <span>{row.name}</span>
+                                    </div>
+                                )},
+                                { key: 'department', title: 'Department' },
+                                { key: 'role', title: 'Role' },
+                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'warning'}>{row.status}</Badge> },
+                                { key: 'lastLogin', title: 'Last Login' }
+                            ]}
+                            data={doctors}
+                            actions={() => (
+                                <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                            )}
+                        />
+                    </Card>
+                </div>
+            );
+        };
+
+        const ConsultationsModule = () => {
+            const [consultations, setConsultations] = useState(hydrateSeedData().consultations || []);
+            const [form, setForm] = useState({ patientId: '', doctorId: 'u2', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '2026-09-10' });
+
+            const handleSaveConsultation = () => {
+                if (!form.patientId || !form.chiefComplaint) return;
+                const payload = {
+                    id: 'cons_' + Date.now(),
+                    patientId: form.patientId,
+                    doctorId: form.doctorId,
+                    chiefComplaint: form.chiefComplaint,
+                    diagnosis: form.diagnosis,
+                    assessment: form.assessment,
+                    plan: form.plan,
+                    followUpDate: form.followUpDate,
+                    status: 'completed',
+                    createdAt: new Date().toISOString()
+                };
+
+                const next = [payload, ...consultations];
+                persistSeedTable('consultations', next);
+                setConsultations(next);
+                setForm({ patientId: '', doctorId: 'u2', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '2026-09-10' });
+            };
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Consultation Notes</h2>
+                            <p className="text-slate-500 mt-1">Record patient assessments, diagnosis, and follow-up care plans</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.Plus}>New Encounter</Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card title="New Consultation" className="lg:col-span-2">
+                            <div className="space-y-4">
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                                <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
+                                <Input label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
+                                <TextArea label="Plan / Treatment" value={form.plan} onChange={(e) => setForm(prev => ({ ...prev, plan: e.target.value }))} rows={3} />
+                                <Input label="Follow-up Date" type="date" value={form.followUpDate} onChange={(e) => setForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveConsultation}>Save Consultation</Button>
+                            </div>
+                        </Card>
+
+                        <Card title="Clinical Summary">
+                            <div className="space-y-3 text-sm text-slate-600">
+                                <div className="flex justify-between"><span>Today</span><span className="font-medium text-slate-900">{consultations.length}</span></div>
+                                <div className="flex justify-between"><span>Follow-ups</span><span className="font-medium text-slate-900">{consultations.filter(c => c.followUpDate).length}</span></div>
+                                <div className="flex justify-between"><span>In review</span><span className="font-medium text-slate-900">{Math.max(1, Math.ceil(consultations.length * 0.25))}</span></div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <Card title="Recent Encounters">
+                        <DataTable
+                            columns={[
+                                { key: 'createdAt', title: 'Date', render: (row) => formatDateTime(row.createdAt) },
+                                { key: 'patient', title: 'Patient', render: (row) => {
+                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
+                                }},
+                                { key: 'chiefComplaint', title: 'Complaint' },
+                                { key: 'diagnosis', title: 'Diagnosis' },
+                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : 'default'}>{row.status}</Badge> }
+                            ]}
+                            data={consultations.slice(0, 10)}
+                        />
+                    </Card>
+                </div>
+            );
+        };
+
+        const VitalsModule = () => {
+            const [vitals, setVitals] = useState(hydrateSeedData().vitals || []);
+            const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
+
+            const handleSaveVitals = () => {
+                if (!form.patientId) return;
+                const next = [{
+                    id: 'vit_' + Date.now(),
+                    patientId: form.patientId,
+                    recordedBy: 'u4',
+                    timestamp: new Date().toISOString(),
+                    temperature: form.temperature || '36.8',
+                    heartRate: Number(form.heartRate || 72),
+                    bloodPressureSystolic: Number(form.bloodPressureSystolic || 120),
+                    bloodPressureDiastolic: Number(form.bloodPressureDiastolic || 80),
+                    oxygenSaturation: Number(form.oxygenSaturation || 98),
+                    respiratoryRate: Number(form.respiratoryRate || 18),
+                    painScore: Number(form.painScore || 0),
+                    consciousness: 'Alert'
+                }, ...vitals];
+                persistSeedTable('vitals', next);
+                setVitals(next);
+                setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
+            };
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Vital Signs</h2>
+                            <p className="text-slate-500 mt-1">Track patient condition trends and clinical alerts</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card title="Record Vitals" className="lg:col-span-2">
+                            <div className="space-y-4">
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Temperature (°C)" value={form.temperature} onChange={(e) => setForm(prev => ({ ...prev, temperature: e.target.value }))} />
+                                    <Input label="Heart Rate" value={form.heartRate} onChange={(e) => setForm(prev => ({ ...prev, heartRate: e.target.value }))} />
+                                    <Input label="BP Systolic" value={form.bloodPressureSystolic} onChange={(e) => setForm(prev => ({ ...prev, bloodPressureSystolic: e.target.value }))} />
+                                    <Input label="BP Diastolic" value={form.bloodPressureDiastolic} onChange={(e) => setForm(prev => ({ ...prev, bloodPressureDiastolic: e.target.value }))} />
+                                    <Input label="SpO2 (%)" value={form.oxygenSaturation} onChange={(e) => setForm(prev => ({ ...prev, oxygenSaturation: e.target.value }))} />
+                                    <Input label="Resp Rate" value={form.respiratoryRate} onChange={(e) => setForm(prev => ({ ...prev, respiratoryRate: e.target.value }))} />
+                                </div>
+                                <Input label="Pain Score (0-10)" value={form.painScore} onChange={(e) => setForm(prev => ({ ...prev, painScore: e.target.value }))} />
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveVitals}>Save Vital Signs</Button>
+                            </div>
+                        </Card>
+
+                        <Card title="Clinical Alerts">
+                            <div className="space-y-3 text-sm">
+                                <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-700">Hypotension risk: 2 patients</div>
+                                <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 text-amber-700">Oxygen saturation review: 3 patients</div>
+                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">Stable trend: 14 patients</div>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <Card title="Recent Vitals">
+                        <DataTable
+                            columns={[
+                                { key: 'timestamp', title: 'Recorded', render: (row) => formatDateTime(row.timestamp) },
+                                { key: 'patient', title: 'Patient', render: (row) => {
+                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
+                                }},
+                                { key: 'heartRate', title: 'HR' },
+                                { key: 'bloodPressure', title: 'BP', render: (row) => `${row.bloodPressureSystolic}/${row.bloodPressureDiastolic}` },
+                                { key: 'oxygenSaturation', title: 'SpO2' }
+                            ]}
+                            data={vitals.slice(0, 12)}
+                        />
+                    </Card>
+                </div>
+            );
+        };
+
+        const InventoryModule = () => {
+            const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
+            const [search, setSearch] = useState('');
+
+            const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Inventory & Stock Control</h2>
+                            <p className="text-slate-500 mt-1">Monitor stock levels, expiry dates, and reorder alerts</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.Plus}>Add Item</Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Total SKUs" value={inventory.length} icon={Icons.Package} color="medical" />
+                        <StatCard title="Low Stock" value={inventory.filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Expiring" value={inventory.filter(item => {
+                            const expiry = new Date(item.expiryDate || '2027-01-01');
+                            const now = new Date('2026-09-01');
+                            return expiry > now && (expiry - now) / (1000 * 60 * 60 * 24) <= 90;
+                        }).length} icon={Icons.Clock} color="red" />
+                        <StatCard title="Value" value={formatCurrency(inventory.reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0))} icon={Icons.DollarSign} color="emerald" />
+                    </div>
+
+                    <Card>
+                        <div className="mb-4">
+                            <SearchBar value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search inventory..." />
+                        </div>
+                        <DataTable
+                            columns={[
+                                { key: 'name', title: 'Medication', render: (row) => <span className="font-medium">{row.name}</span> },
+                                { key: 'genericName', title: 'Generic' },
+                                { key: 'category', title: 'Category' },
+                                { key: 'stockQuantity', title: 'Stock' },
+                                { key: 'reorderLevel', title: 'Reorder' },
+                                { key: 'expiryDate', title: 'Expiry', render: (row) => formatDate(row.expiryDate) },
+                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'low_stock' ? 'warning' : 'success'}>{row.status}</Badge> }
+                            ]}
+                            data={filtered}
+                        />
+                    </Card>
+                </div>
+            );
+        };
+
+        const DocumentsModule = () => {
+            const [documents, setDocuments] = useState([
+                { id: 'doc_1', patientId: 'p1', fileName: 'Admission Summary.pdf', documentType: 'Clinical Note', uploadedBy: 'Dr. Sarah Smith', uploadedAt: '2026-09-01T09:00:00.000Z', size: '1.2 MB' },
+                { id: 'doc_2', patientId: 'p2', fileName: 'Imaging Report.pdf', documentType: 'Radiology', uploadedBy: 'Dr. Lisa Wang', uploadedAt: '2026-09-01T08:30:00.000Z', size: '890 KB' }
+            ]);
+
+            const handleUpload = (event) => {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+                const next = {
+                    id: 'doc_' + Date.now(),
+                    patientId: 'p1',
+                    fileName: file.name,
+                    documentType: 'Uploaded File',
+                    uploadedBy: 'System',
+                    uploadedAt: new Date().toISOString(),
+                    size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                };
+                setDocuments(prev => [next, ...prev]);
+                event.target.value = '';
+            };
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Clinical Documents</h2>
+                            <p className="text-slate-500 mt-1">Upload scans, consent forms, reports, and patient records</p>
+                        </div>
+                        <label className="cursor-pointer">
+                            <input type="file" className="hidden" onChange={handleUpload} />
+                            <span className="inline-flex items-center gap-2 rounded-lg bg-medical-600 px-4 py-2 text-sm font-medium text-white">
+                                <Icons.Upload size={16} /> Upload Document
+                            </span>
+                        </label>
+                    </div>
+
+                    <Card>
+                        <DataTable
+                            columns={[
+                                { key: 'fileName', title: 'File Name' },
+                                { key: 'documentType', title: 'Type' },
+                                { key: 'uploadedBy', title: 'Uploaded By' },
+                                { key: 'size', title: 'Size' },
+                                { key: 'uploadedAt', title: 'Uploaded', render: (row) => formatDateTime(row.uploadedAt) }
+                            ]}
+                            data={documents}
+                            actions={() => (
+                                <Button variant="ghost" size="sm" icon={Icons.Eye}>Open</Button>
+                            )}
+                        />
+                    </Card>
+                </div>
+            );
+        };
+
         const App = () => {
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
@@ -4515,12 +4885,18 @@
                     case 'dashboard': return <DashboardModule />;
                     case 'patients': return <PatientsModule />;
                     case 'appointments': return <AppointmentsModule />;
+                    case 'doctors': return <DoctorsModule />;
+                    case 'consultations': return <ConsultationsModule />;
                     case 'laboratory': return <LaboratoryModule />;
+                    case 'results': return <LaboratoryModule />;
                     case 'radiology': return <RadiologyModule />;
+                    case 'upload': return <DocumentsModule />;
                     case 'pharmacy': return <PharmacyModule />;
+                    case 'inventory': return <InventoryModule />;
                     case 'billing': return <BillingModule />;
                     case 'admissions': return <AdmissionsModule />;
                     case 'ward': return <AdmissionsModule />;
+                    case 'vitals': return <VitalsModule />;
                     case 'surgeries': return <SurgeriesModule />;
                     case 'reports': return <ReportsModule />;
                     case 'audit': return <AuditModule />;
@@ -4531,6 +4907,8 @@
                     case 'lab_results': return <PatientPortalModule />;
                     case 'prescriptions': return <PatientPortalModule />;
                     case 'messages': return <PatientPortalModule />;
+                    case 'medications': return <PharmacyModule />;
+                    case 'documents': return <DocumentsModule />;
                     default: return <DashboardModule />;
                 }
             };
