@@ -432,6 +432,73 @@
         };
 
         // ==========================================
+        // CLINICAL DECISION SUPPORT MODULE
+        // ==========================================
+        const ClinicalDecisionSupportModule = () => {
+            const alerts = [
+                { patient: 'Tina Okafor', condition: 'Severe allergy', detail: 'Penicillin allergy documented. Cefazolin contraindicated.', risk: 'High' },
+                { patient: 'Musa Ibrahim', condition: 'Drug interaction check', detail: 'Warfarin + trimethoprim-sulfamethoxazole requires dose review.', risk: 'High' },
+                { patient: 'Ifeoma Bello', condition: 'Duplicate therapy', detail: 'Two overlapping antihypertensives currently active; review indication.', risk: 'Moderate' }
+            ];
+
+            const guidance = [
+                { title: 'Medication safety', message: 'Check renal function before adjusting aminoglycoside dosing.', value: '92%' },
+                { title: 'Clinical protocols', message: 'Sepsis protocol reminders triggered for high-risk fever patient.', value: '88%' },
+                { title: 'Preventive care', message: 'Cancer screening due in next 30 days for eligible patient cohort.', value: '81%' }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Clinical Decision Support</h2>
+                            <p className="text-slate-500 mt-1">Evidence-based alerts, drug checks, and protocol guidance</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.ShieldCheck}>Run Safety Check</Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="High-risk alerts" value="7" icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Medication checks" value="128" icon={Icons.Pill} color="medical" />
+                        <StatCard title="Protocols active" value="19" icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="Escalation queue" value="3" icon={Icons.Bell} color="amber" />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <Card title="Safety alerts">
+                            <div className="space-y-4">
+                                {alerts.map((alert) => (
+                                    <div key={alert.patient} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium text-slate-800">{alert.patient}</span>
+                                            <Badge variant={alert.risk === 'High' ? 'danger' : 'warning'}>{alert.risk}</Badge>
+                                        </div>
+                                        <p className="mt-2 text-sm text-slate-600">{alert.condition}</p>
+                                        <p className="mt-1 text-xs text-slate-500">{alert.detail}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        <Card title="Guidance summary">
+                            <div className="space-y-4">
+                                {guidance.map((item) => (
+                                    <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium text-slate-800">{item.title}</span>
+                                            <span className="text-sm font-semibold text-slate-900">{item.value}</span>
+                                        </div>
+                                        <p className="mt-2 text-sm text-slate-600">{item.message}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
         // RADIOLOGY MODULE
         // ==========================================
         const RadiologyModule = () => {

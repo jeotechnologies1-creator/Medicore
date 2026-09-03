@@ -408,6 +408,114 @@
         };
 
         // ==========================================
+        // WORKFORCE ANALYTICS MODULE
+        // ==========================================
+        const WorkforceModule = () => {
+            const staffingCoverage = [
+                { unit: 'Emergency', scheduled: 24, actual: 18, occupancy: 88 },
+                { unit: 'Ward', scheduled: 42, actual: 39, occupancy: 76 },
+                { unit: 'ICU', scheduled: 18, actual: 16, occupancy: 69 },
+                { unit: 'Diagnostics', scheduled: 19, actual: 17, occupancy: 73 }
+            ];
+
+            const productivity = [
+                { label: 'Doctors', value: 92 },
+                { label: 'Nurses', value: 89 },
+                { label: 'Lab', value: 84 },
+                { label: 'Pharmacy', value: 81 }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Workforce Analytics</h2>
+                            <p className="text-slate-500 mt-1">Staffing coverage, productivity, and leave-risk monitoring</p>
+                        </div>
+                        <Button variant="primary" icon={Icons.UserPlus}>Manage Roster</Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Coverage" value="91%" icon={Icons.Users} color="medical" />
+                        <StatCard title="Productivity" value="87%" icon={Icons.Activity} color="emerald" />
+                        <StatCard title="Leave Risk" value="12" icon={Icons.Calendar} color="amber" />
+                        <StatCard title="Vacancies" value="7" icon={Icons.AlertCircle} color="red" />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                        <Card title="Unit Coverage" className="xl:col-span-2">
+                            <div className="space-y-5">
+                                {staffingCoverage.map((unit) => (
+                                    <div key={unit.unit} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="font-semibold text-slate-900">{unit.unit}</span>
+                                            <span className="text-sm text-slate-500">{unit.actual}/{unit.scheduled}</span>
+                                        </div>
+                                        <ProgressBar value={Math.round((unit.actual / unit.scheduled) * 100)} max={100} color={unit.occupancy >= 80 ? 'amber' : 'emerald'} />
+                                        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                                            <span>Unit load {unit.occupancy}%</span>
+                                            <Badge variant={unit.actual / unit.scheduled >= 0.9 ? 'success' : 'warning'}>{unit.actual / unit.scheduled >= 0.9 ? 'Stable' : 'Watch'}</Badge>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        <Card title="Productivity by Team">
+                            <div className="space-y-4">
+                                {productivity.map((team) => (
+                                    <div key={team.label}>
+                                        <div className="flex items-center justify-between text-sm mb-1">
+                                            <span className="text-slate-600">{team.label}</span>
+                                            <span className="font-medium text-slate-900">{team.value}%</span>
+                                        </div>
+                                        <ProgressBar value={team.value} max={100} color={team.value >= 85 ? 'emerald' : 'amber'} />
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title="Staffing Risks">
+                            <div className="space-y-3">
+                                {[
+                                    { name: 'Nurse shortage', detail: '3 night shifts uncovered this week', tone: 'warning' },
+                                    { name: 'Provider coverage', detail: 'One consultant on leave next 3 days', tone: 'info' },
+                                    { name: 'Lab bench strain', detail: 'Peak demand likely over 48h', tone: 'amber' }
+                                ].map((risk) => (
+                                    <div key={risk.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium text-slate-800">{risk.name}</span>
+                                            <Badge variant={risk.tone === 'warning' ? 'warning' : 'info'}>{risk.tone === 'warning' ? 'Watch' : 'Note'}</Badge>
+                                        </div>
+                                        <p className="mt-2 text-sm text-slate-600">{risk.detail}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        <Card title="Roster Status">
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Certified staff on shift', value: '96%' },
+                                    { label: 'Training compliance', value: '88%' },
+                                    { label: 'Overtime requested', value: '13 staff' },
+                                    { label: 'Next review date', value: '2026-09-07' }
+                                ].map((item) => (
+                                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                        <span className="text-sm text-slate-600">{item.label}</span>
+                                        <span className="text-sm font-semibold text-slate-900">{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
         // PHARMACY MODULE
         // ==========================================
         const PharmacyModule = () => {

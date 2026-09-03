@@ -133,6 +133,12 @@
             </svg>
         );
 
+        const IconEdit = ({ size = 20, className = '' }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/>
+            </svg>
+        );
+
         const IconFileText = ({ size = 20, className = '' }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
@@ -241,6 +247,12 @@
             </svg>
         );
 
+        const IconPackages = ({ size = 20, className = '' }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M3 7.5 12 3l9 4.5-9 4.5L3 7.5Z"/><path d="M3 12.5 12 17l9-4.5"/><path d="M3 17.5 12 22l9-4.5"/>
+            </svg>
+        );
+
         const IconPanelLeft = ({ size = 20, className = '' }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>
@@ -322,6 +334,13 @@
         const IconShieldAlert = ({ size = 20, className = '' }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        );
+
+        const IconShieldCheck = ({ size = 20, className = '' }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="m9 12 2 2 4-4"/>
             </svg>
         );
 
@@ -438,6 +457,7 @@
             CreditCard: IconCreditCard,
             DollarSign: IconDollarSign,
             Download: IconDownload,
+            Edit: IconEdit,
             Eye: IconEye,
             FileText: IconFileText,
             Filter: IconFilter,
@@ -457,6 +477,7 @@
             Microscope: IconMicroscope,
             MoreHorizontal: IconMoreHorizontal,
             Package: IconPackage,
+            Packages: IconPackages,
             PanelLeft: IconPanelLeft,
             Pill: IconPill,
             Plus: IconPlus,
@@ -471,6 +492,7 @@
             Settings: IconSettings,
             Shield: IconShield,
             ShieldAlert: IconShieldAlert,
+            ShieldCheck: IconShieldCheck,
             ShoppingCart: IconShoppingCart,
             Stethoscope: IconStethoscope,
             Syringe: IconSyringe,

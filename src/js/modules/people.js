@@ -1,6 +1,7 @@
         // MAIN APP LAYOUT
         // ==========================================
         const HRStaffModule = () => {
+            const [activeTab, setActiveTab] = useState('overview');
             const staff = (seedData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'super_admin'].includes(person.role));
             const activeStaff = staff.filter((person) => person.status === 'active').length;
             const attendanceRate = staff.length ? Math.round((activeStaff / staff.length) * 100) : 0;
@@ -11,13 +12,35 @@
                 { label: 'Clinics', value: staff.filter((person) => person.department === 'Clinic').length },
                 { label: 'Support', value: staff.filter((person) => ['receptionist', 'accountant', 'pharmacist'].includes(person.role)).length }
             ];
+            const attendanceSummary = [
+                { department: 'Emergency', rate: 94, staff: 19 },
+                { department: 'Ward', rate: 91, staff: 32 },
+                { department: 'Diagnostics', rate: 89, staff: 15 },
+                { department: 'Admin', rate: 97, staff: 12 }
+            ];
+            const payrollSummary = [
+                { employee: 'Dr. Sarah Smith', department: 'Medicine', gross: 128000, net: 111000, status: 'Approved' },
+                { employee: 'Grace Okafor', department: 'Nursing', gross: 68000, net: 59600, status: 'Pending' },
+                { employee: 'Daniel Mensah', department: 'Accounts', gross: 74000, net: 64880, status: 'Approved' }
+            ];
+            const recruitmentPipeline = [
+                { role: 'ICU Nurse', candidates: 12, stage: 'Interview', priority: 'High' },
+                { role: 'Radiographer', candidates: 5, stage: 'Offer', priority: 'Medium' },
+                { role: 'Medical Records Officer', candidates: 8, stage: 'Screening', priority: 'High' }
+            ];
+            const tabs = [
+                { id: 'overview', label: 'Overview' },
+                { id: 'attendance', label: 'Attendance' },
+                { id: 'payroll', label: 'Payroll' },
+                { id: 'recruitment', label: 'Recruitment' }
+            ];
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">HR & Staff</h2>
-                            <p className="text-slate-500 mt-1">Workforce planning, staffing coverage, and operational readiness</p>
+                            <p className="text-slate-500 mt-1">Workforce planning, attendance, payroll, and hiring operations</p>
                         </div>
                         <Button variant="primary" icon={Icons.UserPlus}>Add Staff</Button>
                     </div>
@@ -29,65 +52,155 @@
                         <StatCard title="Departments" value={departments.length} icon={Icons.Building2} color="violet" />
                     </div>
 
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                        <Card title="Staffing KPIs" className="xl:col-span-2">
-                            <div className="space-y-5">
-                                {roleBreakdown.map((item) => (
-                                    <div key={item.label}>
-                                        <div className="flex items-center justify-between text-sm mb-2">
-                                            <span className="text-slate-600">{item.label}</span>
-                                            <span className="font-semibold text-slate-900">{item.value}</span>
-                                        </div>
-                                        <ProgressBar value={Math.min(100, item.value * 12)} max={100} color={item.label.includes('Doctors') ? 'medical' : item.label.includes('Nurses') ? 'emerald' : item.label.includes('Clinics') ? 'amber' : 'violet'} />
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
+                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-                        <Card title="Shift Coverage">
-                            <div className="space-y-4">
-                                {['Emergency', 'Inpatient', 'Outpatient', 'Diagnostics'].map((area, index) => (
-                                    <div key={area} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-medium text-slate-700">{area}</span>
-                                            <Badge variant={index < 2 ? 'success' : 'warning'}>{index < 2 ? 'Covered' : 'Watch'}</Badge>
-                                        </div>
-                                        <ProgressBar value={68 + index * 10} max={100} color={index < 2 ? 'emerald' : 'amber'} />
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <Card title="Add Staff Member">
-                            <div className="space-y-4">
-                                <Input label="Full name" />
-                                <Input label="Email" type="email" />
-                                <Select label="Role" options={[{ value: 'doctor', label: 'Doctor' }, { value: 'nurse', label: 'Nurse' }, { value: 'pharmacist', label: 'Pharmacist' }, { value: 'receptionist', label: 'Receptionist' }]} />
-                                <Input label="Department" />
-                                <Select label="Shift Pattern" options={[{ value: 'morning', label: 'Morning' }, { value: 'afternoon', label: 'Afternoon' }, { value: 'night', label: 'Night' }]} />
-                                <Button variant="primary" className="w-full justify-center" icon={Icons.UserPlus}>Create Staff Profile</Button>
-                            </div>
-                        </Card>
-
-                        <Card title="Department Performance">
-                            <div className="space-y-4">
-                                {departments.length ? departments.map((department) => {
-                                    const departmentStaff = staff.filter((person) => (person.department || 'General') === department).length;
-                                    return (
-                                        <div key={department} className="rounded-xl border border-slate-200 p-3">
-                                            <div className="flex justify-between text-sm mb-2">
-                                                <span className="font-medium text-slate-700">{department}</span>
-                                                <span className="text-slate-500">{departmentStaff} staff</span>
+                    {activeTab === 'overview' && (
+                        <>
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                                <Card title="Staffing KPIs" className="xl:col-span-2">
+                                    <div className="space-y-5">
+                                        {roleBreakdown.map((item) => (
+                                            <div key={item.label}>
+                                                <div className="flex items-center justify-between text-sm mb-2">
+                                                    <span className="text-slate-600">{item.label}</span>
+                                                    <span className="font-semibold text-slate-900">{item.value}</span>
+                                                </div>
+                                                <ProgressBar value={Math.min(100, item.value * 12)} max={100} color={item.label.includes('Doctors') ? 'medical' : item.label.includes('Nurses') ? 'emerald' : item.label.includes('Clinics') ? 'amber' : 'violet'} />
                                             </div>
-                                            <ProgressBar value={Math.min(100, departmentStaff * 18)} max={100} color="medical" />
-                                        </div>
-                                    );
-                                }) : <p className="text-sm text-slate-500">No departments configured yet.</p>}
+                                        ))}
+                                    </div>
+                                </Card>
+
+                                <Card title="Shift Coverage">
+                                    <div className="space-y-4">
+                                        {['Emergency', 'Inpatient', 'Outpatient', 'Diagnostics'].map((area, index) => (
+                                            <div key={area} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-medium text-slate-700">{area}</span>
+                                                    <Badge variant={index < 2 ? 'success' : 'warning'}>{index < 2 ? 'Covered' : 'Watch'}</Badge>
+                                                </div>
+                                                <ProgressBar value={68 + index * 10} max={100} color={index < 2 ? 'emerald' : 'amber'} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
                             </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <Card title="Add Staff Member">
+                                    <div className="space-y-4">
+                                        <Input label="Full name" />
+                                        <Input label="Email" type="email" />
+                                        <Select label="Role" options={[{ value: 'doctor', label: 'Doctor' }, { value: 'nurse', label: 'Nurse' }, { value: 'pharmacist', label: 'Pharmacist' }, { value: 'receptionist', label: 'Receptionist' }]} />
+                                        <Input label="Department" />
+                                        <Select label="Shift Pattern" options={[{ value: 'morning', label: 'Morning' }, { value: 'afternoon', label: 'Afternoon' }, { value: 'night', label: 'Night' }]} />
+                                        <Button variant="primary" className="w-full justify-center" icon={Icons.UserPlus}>Create Staff Profile</Button>
+                                    </div>
+                                </Card>
+
+                                <Card title="Department Performance">
+                                    <div className="space-y-4">
+                                        {departments.length ? departments.map((department) => {
+                                            const departmentStaff = staff.filter((person) => (person.department || 'General') === department).length;
+                                            return (
+                                                <div key={department} className="rounded-xl border border-slate-200 p-3">
+                                                    <div className="flex justify-between text-sm mb-2">
+                                                        <span className="font-medium text-slate-700">{department}</span>
+                                                        <span className="text-slate-500">{departmentStaff} staff</span>
+                                                    </div>
+                                                    <ProgressBar value={Math.min(100, departmentStaff * 18)} max={100} color="medical" />
+                                                </div>
+                                            );
+                                        }) : <p className="text-sm text-slate-500">No departments configured yet.</p>}
+                                    </div>
+                                </Card>
+                            </div>
+                        </>
+                    )}
+
+                    {activeTab === 'attendance' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Department attendance">
+                                <div className="space-y-4">
+                                    {attendanceSummary.map((dept) => (
+                                        <div key={dept.department}>
+                                            <div className="flex items-center justify-between text-sm mb-1">
+                                                <span className="text-slate-600">{dept.department}</span>
+                                                <span className="font-medium text-slate-900">{dept.rate}%</span>
+                                            </div>
+                                            <ProgressBar value={dept.rate} max={100} color={dept.rate >= 90 ? 'emerald' : 'amber'} />
+                                            <p className="mt-2 text-xs text-slate-500">{dept.staff} staff on roster</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            <Card title="Late arrivals / absenteeism">
+                                <div className="space-y-3">
+                                    {[
+                                        { name: 'Nursing', count: 7, trend: '+2 from last week' },
+                                        { name: 'Emergency', count: 5, trend: '+1 from last week' },
+                                        { name: 'Support', count: 3, trend: '-1 from last week' }
+                                    ].map((item) => (
+                                        <div key={item.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium text-slate-800">{item.name}</span>
+                                                <Badge variant={item.count > 5 ? 'warning' : 'success'}>{item.count} cases</Badge>
+                                            </div>
+                                            <p className="mt-2 text-xs text-slate-500">{item.trend}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
+
+                    {activeTab === 'payroll' && (
+                        <Card title="Payroll overview">
+                            <DataTable
+                                columns={[
+                                    { key: 'employee', title: 'Employee' },
+                                    { key: 'department', title: 'Department' },
+                                    { key: 'gross', title: 'Gross', render: (row) => formatCurrency(row.gross) },
+                                    { key: 'net', title: 'Net', render: (row) => formatCurrency(row.net) },
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Approved' ? 'success' : 'warning'}>{row.status}</Badge> }
+                                ]}
+                                data={payrollSummary}
+                            />
                         </Card>
-                    </div>
+                    )}
+
+                    {activeTab === 'recruitment' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card title="Hiring pipeline">
+                                <div className="space-y-4">
+                                    {recruitmentPipeline.map((item) => (
+                                        <div key={item.role} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium text-slate-800">{item.role}</span>
+                                                <Badge variant={item.priority === 'High' ? 'warning' : 'info'}>{item.priority}</Badge>
+                                            </div>
+                                            <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+                                                <span>{item.stage}</span>
+                                                <span>{item.candidates} applicants</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+
+                            <Card title="Onboarding checklist">
+                                <div className="space-y-3">
+                                    {['Offer letter issued', 'Credential verification', 'Background check', 'Mandatory training', 'System access approval'].map((step, index) => (
+                                        <div key={step} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                            <div className={'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ' + (index < 3 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600')}>{index < 3 ? '✓' : index + 1}</div>
+                                            <span className="text-sm text-slate-700">{step}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </Card>
+                        </div>
+                    )}
 
                     <Card title="Staff Directory">
                         <DataTable

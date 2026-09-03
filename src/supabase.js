@@ -10,9 +10,13 @@
                 return {};
             }
         })();
+
+        const url = String(override.url || saved.url || '').trim();
+        const anonKey = String(override.anonKey || saved.anonKey || '').trim();
+
         return {
-            url: override.url || saved.url || '',
-            anonKey: override.anonKey || saved.anonKey || ''
+            url,
+            anonKey
         };
     };
 

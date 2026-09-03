@@ -117,6 +117,84 @@
         };
 
         // ==========================================
+        // COMPLIANCE VAULT MODULE
+        // ==========================================
+        const ComplianceVaultModule = () => {
+            const compliancePolicies = [
+                { title: 'Clinical documentation retention', owner: 'Medical Records', status: 'Active', updated: '2026-08-28', version: 'v3.4' },
+                { title: 'Medication safety policy', owner: 'Pharmacy QA', status: 'Reviewed', updated: '2026-08-20', version: 'v2.1' },
+                { title: 'Patient consent governance', owner: 'Compliance Office', status: 'Active', updated: '2026-08-18', version: 'v1.8' },
+                { title: 'Critical lab escalation protocol', owner: 'Lab Services', status: 'Pending review', updated: '2026-08-12', version: 'v4.0' }
+            ];
+
+            const files = [
+                { name: 'HIPAA Privacy Notice.pdf', category: 'Privacy', owner: 'Compliance', updated: '2026-09-01', status: 'Approved' },
+                { name: 'Medication Error Reporting SOP.docx', category: 'Safety', owner: 'Clinical Safety', updated: '2026-08-29', status: 'Reviewed' },
+                { name: 'Incident Escalation Matrix.xlsx', category: 'Governance', owner: 'Operations', updated: '2026-08-26', status: 'Approved' }
+            ];
+
+            return (
+                <div className="p-6 space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900">Compliance Vault</h2>
+                            <p className="text-slate-500 mt-1">Document control, policy access, and governance oversight</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="secondary" icon={Icons.Upload}>Upload Policy</Button>
+                            <Button variant="primary" icon={Icons.FileText}>New Review</Button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard title="Active Policies" value="42" icon={Icons.ShieldCheck} color="emerald" />
+                        <StatCard title="Pending Reviews" value="6" icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Documents" value="168" icon={Icons.FileText} color="medical" />
+                        <StatCard title="Compliance Rate" value="96%" icon={Icons.BarChart3} color="violet" />
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <Card title="Policy register">
+                            <div className="space-y-3">
+                                {compliancePolicies.map((policy) => (
+                                    <div key={policy.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="font-medium text-slate-900">{policy.title}</p>
+                                                <p className="text-xs text-slate-500">Owner: {policy.owner}</p>
+                                            </div>
+                                            <Badge variant={policy.status === 'Active' ? 'success' : policy.status === 'Reviewed' ? 'info' : policy.status === 'Pending review' ? 'warning' : 'default'}>{policy.status}</Badge>
+                                        </div>
+                                        <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                                            <span>Updated {policy.updated}</span>
+                                            <span>Version {policy.version}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        <Card title="Document repository">
+                            <DataTable
+                                columns={[
+                                    { key: 'name', title: 'Document' },
+                                    { key: 'category', title: 'Category' },
+                                    { key: 'owner', title: 'Owner' },
+                                    { key: 'updated', title: 'Updated' },
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Approved' ? 'success' : row.status === 'Reviewed' ? 'info' : 'warning'}>{row.status}</Badge> }
+                                ]}
+                                data={files}
+                                actions={() => (
+                                    <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                                )}
+                            />
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
         // SETTINGS MODULE
         // ==========================================
         const SettingsModule = () => {
@@ -176,6 +254,10 @@
                         radiology: true,
                         pharmacy: true,
                         billing: true,
+                        insurance: true,
+                        payments: true,
+                        documents: true,
+                        compliance: true,
                         admissions: true,
                         surgeries: true,
                         clinical_safety: true,
@@ -198,6 +280,10 @@
                         radiology: true,
                         pharmacy: false,
                         billing: false,
+                        insurance: false,
+                        payments: false,
+                        documents: true,
+                        compliance: true,
                         admissions: false,
                         surgeries: false,
                         clinical_safety: true,
@@ -220,6 +306,10 @@
                         radiology: false,
                         pharmacy: false,
                         billing: false,
+                        insurance: false,
+                        payments: false,
+                        documents: true,
+                        compliance: true,
                         admissions: true,
                         surgeries: false,
                         clinical_safety: true,
@@ -242,6 +332,10 @@
                         radiology: false,
                         pharmacy: true,
                         billing: false,
+                        insurance: false,
+                        payments: false,
+                        documents: true,
+                        compliance: false,
                         admissions: false,
                         surgeries: false,
                         clinical_safety: false,
@@ -264,6 +358,10 @@
                         radiology: false,
                         pharmacy: false,
                         billing: true,
+                        insurance: false,
+                        payments: false,
+                        documents: false,
+                        compliance: false,
                         admissions: false,
                         surgeries: false,
                         clinical_safety: false,
@@ -310,6 +408,10 @@
                                 radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
                                 pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
                                 billing: row.permissions?.billing ?? false,
+                                insurance: row.permissions?.insurance ?? row.permissions?.insurance_claims ?? row.permissions?.claims ?? false,
+                                payments: row.permissions?.payments ?? row.permissions?.payment ?? false,
+                                documents: row.permissions?.documents ?? row.permissions?.document_control ?? row.permissions?.clinical_documents ?? false,
+                                compliance: row.permissions?.compliance ?? row.permissions?.governance ?? row.permissions?.policy_library ?? false,
                                 admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
                                 surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
                                 clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,
@@ -384,6 +486,10 @@
                             radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
                             pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
                             billing: row.permissions?.billing ?? false,
+                            insurance: row.permissions?.insurance ?? row.permissions?.insurance_claims ?? row.permissions?.claims ?? false,
+                            payments: row.permissions?.payments ?? row.permissions?.payment ?? false,
+                            documents: row.permissions?.documents ?? row.permissions?.document_control ?? row.permissions?.clinical_documents ?? false,
+                            compliance: row.permissions?.compliance ?? row.permissions?.governance ?? row.permissions?.policy_library ?? false,
                             admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
                             surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
                             clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,

@@ -5,6 +5,9 @@
             // Do not render controls that have no behavior. This prevents demo-only
             // buttons from appearing actionable in the clinical application.
             if (type === 'button' && typeof onClick !== 'function') return null;
+            if ((type === 'reset' || type === 'submit') && typeof onClick !== 'function') {
+                // keep real form controls active so login and other forms can submit normally
+            }
             const variants = {
                 primary: 'bg-medical-600 text-white hover:bg-medical-700 border-transparent shadow-sm hover:shadow-md',
                 secondary: 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-sm',
