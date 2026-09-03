@@ -214,6 +214,35 @@
             severity: row.severity || 'info'
         }));
 
+        const normalizeWards = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            name: row.name,
+            capacity: row.capacity ?? 0,
+            occupied: row.occupied ?? 0,
+            specialty: row.specialty || '',
+            status: row.status || 'active'
+        }));
+
+        const normalizeBeds = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            wardId: row.ward_id || row.wardId,
+            bedNumber: row.bed_number || row.bedNumber,
+            status: row.status || 'available'
+        }));
+
+        const normalizeInsuranceClaims = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            claimNumber: row.claim_number || row.claimNumber,
+            provider: row.provider,
+            amountClaimed: row.amount_claimed ?? row.amountClaimed ?? 0,
+            amountApproved: row.amount_approved ?? row.amountApproved ?? 0,
+            status: row.status || 'pending'
+        }));
+
         const normalizeOffices = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -291,6 +320,9 @@
                 { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
                 { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
                 { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
+                { dbTable: 'wards', appTable: 'wards', mapper: normalizeWards },
+                { dbTable: 'beds', appTable: 'beds', mapper: normalizeBeds },
+                { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
                 { dbTable: 'medical_offices', appTable: 'offices', mapper: normalizeOffices },
                 { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff }
             ];
@@ -2847,6 +2879,64 @@
         // ==========================================
         const RadiologyModule = () => {
             const [selectedStudy, setSelectedStudy] = useState(null);
+            const [showNewOrder, setShowNewOrder] = useState(false);
+            const [studies, setStudies] = useState(hydrateSeedData().radiologyOrders || []);
+            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+
+            const handleCreateStudy = async () => {
+                if (!orderForm.patientId || !orderForm.studyType) return;
+                const payload = {
+                    id: 'rad_' + Date.now(),
+                    patientId: orderForm.patientId,
+                    doctorId: 'u2',
+                    studyType: orderForm.studyType,
+                    modality: orderForm.modality,
+                    priority: orderForm.priority,
+                    status: 'requested',
+                    scheduledDate: orderForm.scheduledDate,
+                    report: orderForm.report || '',
+                    orderedDate: new Date().toISOString().split('T')[0]
+                };
+
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                if (client) {
+                    const { data, error } = await client.from('radiology_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType, modality: payload.modality, priority: payload.priority, status: payload.status, scheduled_date: payload.scheduledDate, report: payload.report, ordered_date: payload.orderedDate }]).select();
+                    if (!error && data && data[0]) {
+                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, studyType: data[0].study_type || payload.studyType, scheduledDate: data[0].scheduled_date || payload.scheduledDate, report: data[0].report || payload.report };
+                        const next = [...studies, mapped];
+                        persistSeedTable('radiologyOrders', next);
+                        setStudies(next);
+                        setShowNewOrder(false);
+                        setOrderForm({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+                        return;
+                    }
+                }
+
+                const next = [...studies, payload];
+                persistSeedTable('radiologyOrders', next);
+                setStudies(next);
+                setShowNewOrder(false);
+                setOrderForm({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+            };
+
+            const handleReportStudy = async (row) => {
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const updated = { ...row, status: 'reported', report: row.report || 'Report finalized by radiology team.' };
+
+                if (client) {
+                    const { error } = await client.from('radiology_orders').update({ status: 'reported', report: updated.report }).eq('id', row.id);
+                    if (!error) {
+                        const next = studies.map((item) => item.id === row.id ? updated : item);
+                        persistSeedTable('radiologyOrders', next);
+                        setStudies(next);
+                        return;
+                    }
+                }
+
+                const next = studies.map((item) => item.id === row.id ? updated : item);
+                persistSeedTable('radiologyOrders', next);
+                setStudies(next);
+            };
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -2855,16 +2945,16 @@
                             <h2 className="text-2xl font-bold text-slate-900">Radiology</h2>
                             <p className="text-slate-500 mt-1">Imaging orders and reports</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>New Imaging Order</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewOrder(true)}>New Imaging Order</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         {[
-                            { label: 'X-Ray', value: seedData.radiologyOrders.filter(r => r.modality === 'X-Ray').length, icon: Icons.Image },
-                            { label: 'MRI', value: seedData.radiologyOrders.filter(r => r.modality === 'MRI').length, icon: Icons.Image },
-                            { label: 'CT', value: seedData.radiologyOrders.filter(r => r.modality === 'CT').length, icon: Icons.Image },
-                            { label: 'Ultrasound', value: seedData.radiologyOrders.filter(r => r.modality === 'Ultrasound').length, icon: Icons.Image },
-                            { label: 'ECG', value: seedData.radiologyOrders.filter(r => r.modality === 'ECG').length, icon: Icons.Activity },
+                            { label: 'X-Ray', value: studies.filter(r => r.modality === 'X-Ray').length, icon: Icons.Image },
+                            { label: 'MRI', value: studies.filter(r => r.modality === 'MRI').length, icon: Icons.Image },
+                            { label: 'CT', value: studies.filter(r => r.modality === 'CT').length, icon: Icons.Image },
+                            { label: 'Ultrasound', value: studies.filter(r => r.modality === 'Ultrasound').length, icon: Icons.Image },
+                            { label: 'ECG', value: studies.filter(r => r.modality === 'ECG').length, icon: Icons.Activity },
                         ].map(mod => (
                             <Card key={mod.label} className="text-center hover-lift cursor-pointer">
                                 <mod.icon size={24} className="mx-auto text-medical-600 mb-2" />
@@ -2888,15 +2978,37 @@
                                 { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'reported' ? 'success' : row.status === 'completed' ? 'info' : 'warning'}>{row.status}</Badge> },
                                 { key: 'scheduledDate', title: 'Scheduled', render: (row) => formatDate(row.scheduledDate) }
                             ]}
-                            data={seedData.radiologyOrders}
+                            data={studies}
                             actions={(row) => (
                                 <>
                                     <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View Images</Button>
-                                    {row.status !== 'reported' && <Button variant="secondary" size="sm">Report</Button>}
+                                    {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => handleReportStudy(row)}>Report</Button>}
                                 </>
                             )}
                         />
                     </Card>
+
+                    <Modal
+                        isOpen={showNewOrder}
+                        onClose={() => setShowNewOrder(false)}
+                        title="New Imaging Order"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowNewOrder(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateStudy}>Create Order</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Input label="Study Type" value={orderForm.studyType} onChange={(e) => setOrderForm(prev => ({ ...prev, studyType: e.target.value }))} />
+                            <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
+                            <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
+                            <Input label="Scheduled Date" type="date" value={orderForm.scheduledDate} onChange={(e) => setOrderForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
+                            <TextArea label="Radiologist Notes" value={orderForm.report} onChange={(e) => setOrderForm(prev => ({ ...prev, report: e.target.value }))} rows={3} />
+                        </div>
+                    </Modal>
 
                     <Modal
                         isOpen={!!selectedStudy}
@@ -2942,10 +3054,13 @@
         const PharmacyModule = () => {
             const [activeTab, setActiveTab] = useState('dispensary');
             const [searchQuery, setSearchQuery] = useState('');
+            const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
+            const [showAddStock, setShowAddStock] = useState(false);
+            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
 
-            const filteredDrugs = seedData.pharmacyInventory.filter(d => 
-                d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                d.category.toLowerCase().includes(searchQuery.toLowerCase())
+            const filteredDrugs = (inventory || []).filter(d => 
+                (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (d.category || '').toLowerCase().includes(searchQuery.toLowerCase())
             );
 
             const tabs = [
@@ -2954,6 +3069,66 @@
                 { id: 'prescriptions', label: 'Prescriptions' },
                 { id: 'purchase', label: 'Purchase Orders' },
             ];
+
+            const handleAddStock = async () => {
+                if (!stockForm.name) return;
+                const payload = {
+                    id: 'med_' + Date.now(),
+                    name: stockForm.name,
+                    genericName: stockForm.genericName,
+                    category: stockForm.category,
+                    stockQuantity: Number(stockForm.stockQuantity || 0),
+                    reorderLevel: Number(stockForm.reorderLevel || 0),
+                    unitPrice: Number(stockForm.unitPrice || 0),
+                    expiryDate: stockForm.expiryDate,
+                    supplier: stockForm.supplier,
+                    status: Number(stockForm.stockQuantity) <= Number(stockForm.reorderLevel) ? 'low_stock' : 'active'
+                };
+
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                if (client) {
+                    const { data, error } = await client.from('pharmacy_inventory').insert([{ ...payload, generic_name: payload.genericName, stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel, unit_price: payload.unitPrice, expiry_date: payload.expiryDate }]).select();
+                    if (!error && data && data[0]) {
+                        const mapped = { ...payload, id: data[0].id || payload.id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
+                        const next = [...inventory, mapped];
+                        persistSeedTable('pharmacyInventory', next);
+                        setInventory(next);
+                        setShowAddStock(false);
+                        setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
+                        return;
+                    }
+                }
+
+                const next = [...inventory, payload];
+                persistSeedTable('pharmacyInventory', next);
+                setInventory(next);
+                setShowAddStock(false);
+                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
+            };
+
+            const handleDispense = async (prescription) => {
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const updatedPrescription = { ...prescription, status: 'dispensed' };
+
+                if (client) {
+                    const { error } = await client.from('prescriptions').update({ status: 'dispensed' }).eq('id', prescription.id);
+                    if (error) {
+                        console.error('Prescription dispense failed:', error);
+                    }
+                }
+
+                const nextInventory = inventory.map((item) => {
+                    if (prescription.medications && prescription.medications.length > 0 && item.name === prescription.medications[0].name) {
+                        return { ...item, stockQuantity: Math.max(0, Number(item.stockQuantity || 0) - Number(prescription.medications[0].quantity || 1)) };
+                    }
+                    return item;
+                });
+
+                persistSeedTable('pharmacyInventory', nextInventory);
+                setInventory(nextInventory);
+                const nextPrescriptions = (seedData.prescriptions || []).map((item) => item.id === prescription.id ? updatedPrescription : item);
+                persistSeedTable('prescriptions', nextPrescriptions);
+            };
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -2964,14 +3139,14 @@
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" icon={Icons.ScanLine}>Scan Barcode</Button>
-                            <Button variant="primary" icon={Icons.Plus}>Add Stock</Button>
+                            <Button variant="primary" icon={Icons.Plus} onClick={() => setShowAddStock(true)}>Add Stock</Button>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Total Items" value={seedData.pharmacyInventory.length} icon={Icons.Package} color="medical" />
-                        <StatCard title="Low Stock" value={seedData.pharmacyInventory.filter(d => d.status === 'low_stock').length} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Expiring Soon" value={seedData.pharmacyInventory.filter(d => {
+                        <StatCard title="Total Items" value={inventory.length} icon={Icons.Package} color="medical" />
+                        <StatCard title="Low Stock" value={inventory.filter(d => d.status === 'low_stock').length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Expiring Soon" value={inventory.filter(d => {
                             const expiry = new Date(d.expiryDate);
                             const threeMonths = new Date('2026-09-01');
                             threeMonths.setMonth(threeMonths.getMonth() + 3);
@@ -2998,7 +3173,7 @@
                                     ]}
                                     data={seedData.prescriptions.filter(p => p.status === 'active')}
                                     actions={(row) => (
-                                        <Button variant="primary" size="sm" icon={Icons.Check}>Dispense</Button>
+                                        <Button variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
                                     )}
                                 />
                             </Card>
@@ -3006,13 +3181,13 @@
                                 <div className="space-y-4">
                                     <SearchBar placeholder="Search medication..." />
                                     <div className="space-y-2">
-                                        {seedData.pharmacyInventory.slice(0, 5).map(drug => (
+                                        {inventory.slice(0, 5).map(drug => (
                                             <div key={drug.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
                                                 <div>
                                                     <p className="text-sm font-medium text-slate-900">{drug.name}</p>
                                                     <p className="text-xs text-slate-500">{drug.category} - Stock: {drug.stockQuantity}</p>
                                                 </div>
-                                                <Button variant="ghost" size="sm" icon={Icons.Plus} />
+                                                <Button variant="ghost" size="sm" icon={Icons.Plus} onClick={() => setShowAddStock(true)} />
                                             </div>
                                         ))}
                                     </div>
@@ -3091,10 +3266,34 @@
                             <div className="text-center py-12">
                                 <Icons.ShoppingCart size={48} className="mx-auto text-slate-300 mb-4" />
                                 <p className="text-slate-500">No active purchase orders</p>
-                                <Button variant="primary" icon={Icons.Plus} className="mt-4">Create PO</Button>
+                                <Button variant="primary" icon={Icons.Plus} className="mt-4" onClick={() => setShowAddStock(true)}>Create PO</Button>
                             </div>
                         </Card>
                     )}
+
+                    <Modal
+                        isOpen={showAddStock}
+                        onClose={() => setShowAddStock(false)}
+                        title="Add Medical Stock"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowAddStock(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleAddStock}>Save Stock</Button>
+                            </div>
+                        }
+                    >
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Drug Name" value={stockForm.name} onChange={(e) => setStockForm(prev => ({ ...prev, name: e.target.value }))} className="col-span-2" />
+                            <Input label="Generic Name" value={stockForm.genericName} onChange={(e) => setStockForm(prev => ({ ...prev, genericName: e.target.value }))} className="col-span-2" />
+                            <Input label="Category" value={stockForm.category} onChange={(e) => setStockForm(prev => ({ ...prev, category: e.target.value }))} />
+                            <Input label="Stock Qty" type="number" value={stockForm.stockQuantity} onChange={(e) => setStockForm(prev => ({ ...prev, stockQuantity: e.target.value }))} />
+                            <Input label="Reorder Level" type="number" value={stockForm.reorderLevel} onChange={(e) => setStockForm(prev => ({ ...prev, reorderLevel: e.target.value }))} />
+                            <Input label="Unit Price" type="number" value={stockForm.unitPrice} onChange={(e) => setStockForm(prev => ({ ...prev, unitPrice: e.target.value }))} />
+                            <Input label="Expiry Date" type="date" value={stockForm.expiryDate} onChange={(e) => setStockForm(prev => ({ ...prev, expiryDate: e.target.value }))} />
+                            <Input label="Supplier" value={stockForm.supplier} onChange={(e) => setStockForm(prev => ({ ...prev, supplier: e.target.value }))} className="col-span-2" />
+                        </div>
+                    </Modal>
                 </div>
             );
         };
@@ -3105,6 +3304,9 @@
         const BillingModule = () => {
             const [activeTab, setActiveTab] = useState('invoices');
             const [selectedInvoice, setSelectedInvoice] = useState(null);
+            const [showNewInvoice, setShowNewInvoice] = useState(false);
+            const [invoices, setInvoices] = useState(hydrateSeedData().billing || []);
+            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
 
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
@@ -3113,6 +3315,44 @@
                 { id: 'reports', label: 'Financial Reports' },
             ];
 
+            const handleCreateInvoice = async () => {
+                if (!invoiceForm.patientId) return;
+                const payload = {
+                    id: 'inv_' + Date.now(),
+                    patientId: invoiceForm.patientId,
+                    invoiceNumber: invoiceForm.invoiceNumber || 'INV-' + Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    subtotal: Number(invoiceForm.total || 0),
+                    discount: 0,
+                    tax: 0,
+                    total: Number(invoiceForm.total || 0),
+                    paid: Number(invoiceForm.paid || 0),
+                    balance: Math.max(0, Number(invoiceForm.total || 0) - Number(invoiceForm.paid || 0)),
+                    paymentMethod: 'cash',
+                    status: Number(invoiceForm.paid || 0) >= Number(invoiceForm.total || 0) ? 'paid' : 'pending'
+                };
+
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                if (client) {
+                    const { data, error } = await client.from('billing').insert([{ ...payload, patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date, subtotal: payload.subtotal, tax: payload.tax, total: payload.total, paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status }]).select();
+                    if (!error && data && data[0]) {
+                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
+                        const next = [...invoices, mapped];
+                        persistSeedTable('billing', next);
+                        setInvoices(next);
+                        setShowNewInvoice(false);
+                        setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
+                        return;
+                    }
+                }
+
+                const next = [...invoices, payload];
+                persistSeedTable('billing', next);
+                setInvoices(next);
+                setShowNewInvoice(false);
+                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -3120,14 +3360,14 @@
                             <h2 className="text-2xl font-bold text-slate-900">Billing</h2>
                             <p className="text-slate-500 mt-1">Invoices, payments, and insurance</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>Create Invoice</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewInvoice(true)}>Create Invoice</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Total Revenue" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.total), 0))} icon={Icons.DollarSign} color="emerald" />
-                        <StatCard title="Outstanding" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.balance), 0))} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Collected" value={formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.paid), 0))} icon={Icons.CheckCircle} color="medical" />
-                        <StatCard title="Pending Claims" value={seedData.insuranceClaims.filter(c => c.status === 'pending').length} icon={Icons.Shield} color="violet" />
+                        <StatCard title="Total Revenue" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0))} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Outstanding" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0))} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Collected" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0))} icon={Icons.CheckCircle} color="medical" />
+                        <StatCard title="Pending Claims" value={(seedData.insuranceClaims || []).filter(c => c.status === 'pending').length} icon={Icons.Shield} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -3147,7 +3387,7 @@
                                     { key: 'balance', title: 'Balance', render: (row) => <span className={parseFloat(row.balance) > 0 ? 'text-red-600 font-medium' : 'text-emerald-600'}>{formatCurrency(row.balance)}</span> },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : row.status === 'partial' ? 'warning' : row.status === 'overdue' ? 'danger' : 'default'}>{row.status}</Badge> }
                                 ]}
-                                data={seedData.billing}
+                                data={invoices}
                                 actions={(row) => (
                                     <>
                                         <Button variant="primary" size="sm" onClick={() => setSelectedInvoice(row)}>View</Button>
@@ -3170,7 +3410,7 @@
                                     { key: 'paymentMethod', title: 'Method' },
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) }
                                 ]}
-                                data={seedData.billing.filter(b => parseFloat(b.paid) > 0)}
+                                data={invoices.filter(b => parseFloat(b.paid || 0) > 0)}
                             />
                         </Card>
                     )}
@@ -3189,7 +3429,7 @@
                                     { key: 'amountApproved', title: 'Approved', render: (row) => formatCurrency(row.amountApproved) },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' || row.status === 'paid' ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
                                 ]}
-                                data={seedData.insuranceClaims}
+                                data={seedData.insuranceClaims || []}
                             />
                         </Card>
                     )}
@@ -3214,20 +3454,40 @@
                                 <div className="space-y-4">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-700">Invoices</span>
-                                        <span className="font-medium text-slate-900">{seedData.billing.length}</span>
+                                        <span className="font-medium text-slate-900">{invoices.length}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-700">Collected</span>
-                                        <span className="font-medium text-slate-900">{formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.paid), 0))}</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0))}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-700">Outstanding</span>
-                                        <span className="font-medium text-slate-900">{formatCurrency(seedData.billing.reduce((s, b) => s + parseFloat(b.balance), 0))}</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0))}</span>
                                     </div>
                                 </div>
                             </Card>
                         </div>
                     )}
+
+                    <Modal
+                        isOpen={showNewInvoice}
+                        onClose={() => setShowNewInvoice(false)}
+                        title="Create Invoice"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowNewInvoice(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateInvoice}>Save Invoice</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Patient" value={invoiceForm.patientId} onChange={(e) => setInvoiceForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
+                            <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
+                            <Input label="Amount Paid" type="number" value={invoiceForm.paid} onChange={(e) => setInvoiceForm(prev => ({ ...prev, paid: e.target.value }))} />
+                        </div>
+                    </Modal>
 
                     <Modal
                         isOpen={!!selectedInvoice}
@@ -3258,32 +3518,32 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {selectedInvoice.items.map((item, i) => (
+                                            {selectedInvoice.items ? selectedInvoice.items.map((item, i) => (
                                                 <tr key={i} className="border-b border-slate-50">
                                                     <td className="py-2">{item.description}</td>
                                                     <td className="py-2 text-right">{item.quantity}</td>
                                                     <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
                                                     <td className="py-2 text-right font-medium">{formatCurrency(item.total)}</td>
                                                 </tr>
-                                            ))}
+                                            )) : <tr><td className="py-2 text-slate-500" colSpan="4">No line items</td></tr>}
                                         </tbody>
                                     </table>
                                 </div>
                                 <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between"><span className="text-slate-500">Subtotal:</span><span>{formatCurrency(selectedInvoice.subtotal)}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Discount:</span><span>-{formatCurrency(selectedInvoice.discount)}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Tax:</span><span>{formatCurrency(selectedInvoice.tax)}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Subtotal:</span><span>{formatCurrency(selectedInvoice.subtotal || 0)}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Discount:</span><span>-{formatCurrency(selectedInvoice.discount || 0)}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Tax:</span><span>{formatCurrency(selectedInvoice.tax || 0)}</span></div>
                                     <div className="flex justify-between text-base font-bold border-t border-slate-100 pt-2">
                                         <span>Total:</span>
-                                        <span>{formatCurrency(selectedInvoice.total)}</span>
+                                        <span>{formatCurrency(selectedInvoice.total || 0)}</span>
                                     </div>
                                     <div className="flex justify-between text-emerald-600">
                                         <span>Paid:</span>
-                                        <span>{formatCurrency(selectedInvoice.paid)}</span>
+                                        <span>{formatCurrency(selectedInvoice.paid || 0)}</span>
                                     </div>
                                     <div className="flex justify-between text-red-600 font-medium">
                                         <span>Balance:</span>
-                                        <span>{formatCurrency(selectedInvoice.balance)}</span>
+                                        <span>{formatCurrency(selectedInvoice.balance || 0)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -3298,6 +3558,45 @@
         // ==========================================
         const AdmissionsModule = () => {
             const [selectedWard, setSelectedWard] = useState(null);
+            const [showNewAdmission, setShowNewAdmission] = useState(false);
+            const [admissions, setAdmissions] = useState(hydrateSeedData().admissions || []);
+            const [admissionForm, setAdmissionForm] = useState({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
+
+            const handleCreateAdmission = async () => {
+                if (!admissionForm.patientId) return;
+                const payload = {
+                    id: 'adm_' + Date.now(),
+                    patientId: admissionForm.patientId,
+                    ward: admissionForm.ward,
+                    bedNumber: admissionForm.bedNumber,
+                    admissionDate: new Date().toISOString().split('T')[0],
+                    dischargeDate: null,
+                    doctorId: admissionForm.doctorId,
+                    diagnosis: admissionForm.diagnosis,
+                    status: 'active',
+                    acuity: admissionForm.acuity
+                };
+
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                if (client) {
+                    const { data, error } = await client.from('admissions').insert([{ ...payload, patient_id: payload.patientId, ward: payload.ward, bed_number: payload.bedNumber, admission_date: payload.admissionDate, doctor_id: payload.doctorId, diagnosis: payload.diagnosis, status: payload.status, acuity: payload.acuity }]).select();
+                    if (!error && data && data[0]) {
+                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
+                        const next = [...admissions, mapped];
+                        persistSeedTable('admissions', next);
+                        setAdmissions(next);
+                        setShowNewAdmission(false);
+                        setAdmissionForm({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
+                        return;
+                    }
+                }
+
+                const next = [...admissions, payload];
+                persistSeedTable('admissions', next);
+                setAdmissions(next);
+                setShowNewAdmission(false);
+                setAdmissionForm({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
+            };
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -3306,11 +3605,11 @@
                             <h2 className="text-2xl font-bold text-slate-900">Ward Management</h2>
                             <p className="text-slate-500 mt-1">Bed allocation and patient admissions</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>New Admission</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewAdmission(true)}>New Admission</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {seedData.wards.map(ward => (
+                        {(seedData.wards || []).map(ward => (
                             <Card 
                                 key={ward.id} 
                                 className="cursor-pointer hover:border-medical-300 transition-colors"
@@ -3353,7 +3652,7 @@
                                 }},
                                 { key: 'acuity', title: 'Acuity', render: (row) => <Badge variant={row.acuity === 'critical' ? 'danger' : row.acuity === 'moderate' ? 'warning' : 'success'}>{row.acuity}</Badge> }
                             ]}
-                            data={seedData.admissions.filter(a => a.status === 'active')}
+                            data={admissions.filter(a => a.status === 'active')}
                             actions={(row) => (
                                 <>
                                     <Button variant="primary" size="sm">Transfer</Button>
@@ -3364,6 +3663,28 @@
                     </Card>
 
                     <Modal
+                        isOpen={showNewAdmission}
+                        onClose={() => setShowNewAdmission(false)}
+                        title="New Admission"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowNewAdmission(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateAdmission}>Admit Patient</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Ward" value={admissionForm.ward} onChange={(e) => setAdmissionForm(prev => ({ ...prev, ward: e.target.value }))} options={[{ value: 'General Ward', label: 'General Ward' }, { value: 'ICU', label: 'ICU' }, { value: 'Maternity', label: 'Maternity' }, { value: 'Pediatrics', label: 'Pediatrics' }]} />
+                            <Input label="Bed Number" value={admissionForm.bedNumber} onChange={(e) => setAdmissionForm(prev => ({ ...prev, bedNumber: e.target.value }))} />
+                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                            <Input label="Diagnosis" value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                            <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
+                        </div>
+                    </Modal>
+
+                    <Modal
                         isOpen={!!selectedWard}
                         onClose={() => setSelectedWard(null)}
                         title={(selectedWard?.name || '') + ' - Bed Map'}
@@ -3371,7 +3692,7 @@
                     >
                         {selectedWard && (
                             <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                                {seedData.beds.filter(b => b.wardId === selectedWard.id).map(bed => (
+                                {(seedData.beds || []).filter(b => b.wardId === selectedWard.id).map(bed => (
                                     <div 
                                         key={bed.id} 
                                         className={'p-4 rounded-xl border-2 text-center cursor-pointer transition-all ' + (bed.status === 'occupied' ? 'border-red-200 bg-red-50' : bed.status === 'available' ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-200 bg-slate-50')}
@@ -3392,6 +3713,48 @@
         // SURGERIES MODULE
         // ==========================================
         const SurgeriesModule = () => {
+            const [showSchedule, setShowSchedule] = useState(false);
+            const [surgeries, setSurgeries] = useState(hydrateSeedData().surgeries || []);
+            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
+
+            const handleScheduleSurgery = async () => {
+                if (!surgeryForm.patientId || !surgeryForm.procedure) return;
+
+                const payload = {
+                    id: 'srg_' + Date.now(),
+                    patientId: surgeryForm.patientId,
+                    surgeonId: surgeryForm.surgeonId,
+                    procedure: surgeryForm.procedure,
+                    scheduledDate: surgeryForm.scheduledDate,
+                    scheduledTime: surgeryForm.scheduledTime,
+                    duration: '90 min',
+                    status: 'scheduled',
+                    otRoom: surgeryForm.otRoom,
+                    anesthesia: surgeryForm.anesthesia,
+                    priority: surgeryForm.priority
+                };
+
+                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                if (client) {
+                    const { data, error } = await client.from('surgeries').insert([{ ...payload, patient_id: payload.patientId, surgeon_id: payload.surgeonId, procedure: payload.procedure, scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime, duration: payload.duration, status: payload.status, ot_room: payload.otRoom, anesthesia: payload.anesthesia, priority: payload.priority }]).select();
+                    if (!error && data && data[0]) {
+                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
+                        const next = [...surgeries, mapped];
+                        persistSeedTable('surgeries', next);
+                        setSurgeries(next);
+                        setShowSchedule(false);
+                        setSurgeryForm({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
+                        return;
+                    }
+                }
+
+                const next = [...surgeries, payload];
+                persistSeedTable('surgeries', next);
+                setSurgeries(next);
+                setShowSchedule(false);
+                setSurgeryForm({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -3399,14 +3762,14 @@
                             <h2 className="text-2xl font-bold text-slate-900">Operating Theatre</h2>
                             <p className="text-slate-500 mt-1">Surgery scheduling and management</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>Schedule Surgery</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowSchedule(true)}>Schedule Surgery</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Scheduled Today" value={seedData.surgeries.filter(s => s.scheduledDate === '2026-09-01').length} icon={Icons.Calendar} color="medical" />
-                        <StatCard title="In Progress" value={seedData.surgeries.filter(s => s.status === 'in-progress').length} icon={Icons.Activity} color="amber" />
-                        <StatCard title="Completed" value={seedData.surgeries.filter(s => s.status === 'completed').length} icon={Icons.CheckCircle} color="emerald" />
-                        <StatCard title="Emergency" value={seedData.surgeries.filter(s => s.priority === 'emergency').length} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Scheduled Today" value={surgeries.filter(s => s.scheduledDate === '2026-09-01').length} icon={Icons.Calendar} color="medical" />
+                        <StatCard title="In Progress" value={surgeries.filter(s => s.status === 'in-progress').length} icon={Icons.Activity} color="amber" />
+                        <StatCard title="Completed" value={surgeries.filter(s => s.status === 'completed').length} icon={Icons.CheckCircle} color="emerald" />
+                        <StatCard title="Emergency" value={surgeries.filter(s => s.priority === 'emergency').length} icon={Icons.AlertCircle} color="red" />
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3427,7 +3790,7 @@
                                     { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'emergency' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority}</Badge> },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
-                                data={seedData.surgeries.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime))}
+                                data={surgeries.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''))}
                                 actions={(row) => (
                                     <Button variant="primary" size="sm">Details</Button>
                                 )}
@@ -3437,7 +3800,7 @@
                             <div className="space-y-3">
                                 {Array.from({ length: 6 }, (_, i) => {
                                     const room = 'OT-' + (i + 1);
-                                    const currentSurgery = seedData.surgeries.find(s => s.otRoom === room && s.status === 'in-progress');
+                                    const currentSurgery = surgeries.find(s => s.otRoom === room && s.status === 'in-progress');
                                     return (
                                         <div key={room} className={'p-3 rounded-lg border ' + (currentSurgery ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200')}>
                                             <div className="flex items-center justify-between">
@@ -3453,6 +3816,32 @@
                             </div>
                         </Card>
                     </div>
+
+                    <Modal
+                        isOpen={showSchedule}
+                        onClose={() => setShowSchedule(false)}
+                        title="Schedule Surgery"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowSchedule(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleScheduleSurgery}>Save Surgery</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                            <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
+                                <Input label="Time" type="time" value={surgeryForm.scheduledTime} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledTime: e.target.value }))} />
+                            </div>
+                            <Select label="OT Room" value={surgeryForm.otRoom} onChange={(e) => setSurgeryForm(prev => ({ ...prev, otRoom: e.target.value }))} options={[{ value: 'OT-1', label: 'OT-1' }, { value: 'OT-2', label: 'OT-2' }, { value: 'OT-3', label: 'OT-3' }, { value: 'OT-4', label: 'OT-4' }]} />
+                            <Select label="Priority" value={surgeryForm.priority} onChange={(e) => setSurgeryForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'elective', label: 'Elective' }, { value: 'urgent', label: 'Urgent' }, { value: 'emergency', label: 'Emergency' }]} />
+                            <Input label="Anesthesia" value={surgeryForm.anesthesia} onChange={(e) => setSurgeryForm(prev => ({ ...prev, anesthesia: e.target.value }))} />
+                        </div>
+                    </Modal>
                 </div>
             );
         };
@@ -3471,6 +3860,29 @@
                 { id: 'admissions', label: 'Admissions Report', icon: Icons.Bed },
             ];
 
+            const handleExport = () => {
+                const typeData = {
+                    patients: seedData.patients,
+                    revenue: seedData.billing,
+                    pharmacy: seedData.pharmacyInventory,
+                    lab: seedData.labOrders,
+                    admissions: seedData.admissions
+                }[reportType] || [];
+
+                if (!typeData.length) return;
+                const keys = Object.keys(typeData[0]);
+                const csv = [keys.join(',')].concat(typeData.map(row => keys.map(key => JSON.stringify(row[key] ?? '')).join(','))).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `${reportType}-report.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -3480,7 +3892,7 @@
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" icon={Icons.Calendar}>Date Range</Button>
-                            <Button variant="primary" icon={Icons.Download}>Export</Button>
+                            <Button variant="primary" icon={Icons.Download} onClick={handleExport}>Export</Button>
                         </div>
                     </div>
 
