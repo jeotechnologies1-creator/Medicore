@@ -105,7 +105,8 @@
         if (!client) {
             return null;
         }
-        const { data: authData, error: authError } = await client.auth.signInWithPassword({ email, password });
+        const normalizedEmail = email.trim().toLowerCase() === 'admin' ? 'admin@medicore.local' : email.trim();
+        const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: normalizedEmail, password });
         if (authError || !authData.user) return null;
         const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
         if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };

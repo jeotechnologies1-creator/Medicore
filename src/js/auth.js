@@ -121,9 +121,8 @@
                                     </div>
                                 )}
                                 <Input
-                                    label="Email"
-                                    type="email"
-                                    placeholder="Enter your email"
+                                    label="Email or username"
+                                    placeholder="Enter your email or username"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     icon={Icons.Mail}
@@ -169,10 +168,9 @@
 
                         <div className="mt-6 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-center">
                             <p className="text-xs font-medium uppercase tracking-wide text-medical-700">Secure sign-in</p>
-                            <p className="mt-1 text-sm text-medical-700">Use a staff account created in Supabase Auth. Demo passwords are not stored in MediCore.</p>
+                            <p className="mt-1 text-sm text-medical-700">Development admin: username <strong>admin</strong>, password <strong>admin</strong>. Create staff from HR & Staff after signing in.</p>
                         </div>
                     </div>
                 </div>
             );
         };
-

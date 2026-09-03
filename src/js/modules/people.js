@@ -1,6 +1,7 @@
         // MAIN APP LAYOUT
         // ==========================================
         const HRStaffModule = () => {
+            const { user } = useAuth();
             const [officeForm, setOfficeForm] = useState({
                 name: '',
                 officeType: 'Clinic',
@@ -12,6 +13,9 @@
             });
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
+            const [staffForm, setStaffForm] = useState({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+            const [staffMessage, setStaffMessage] = useState('');
+            const [creatingStaff, setCreatingStaff] = useState(false);
 
             const offices = seedData.offices || [];
             const experts = (seedData.users || []).filter(user => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(user.role) || user.role.includes('doctor') || user.role.includes('nurse'));
@@ -71,6 +75,31 @@
                 }
             };
 
+            const handleCreateStaff = async () => {
+                if (user?.role !== 'super_admin') {
+                    setStaffMessage('Only the system administrator can create staff accounts.');
+                    return;
+                }
+                setCreatingStaff(true);
+                setStaffMessage('');
+                try {
+                    const client = window.MedicoreSupabase?.getClient?.();
+                    if (!client) throw new Error('Supabase client is not available.');
+                    const { data, error } = await client.functions.invoke('create-staff', { body: staffForm });
+                    if (error) throw error;
+                    if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
+                    const created = normalizeUsers([data.staff])[0];
+                    seedData.users = [...(seedData.users || []), created];
+                    setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+                    setStaffMessage(`${created.fullName} can now sign in.`);
+                } catch (error) {
+                    console.error(error);
+                    setStaffMessage(error.message || 'Unable to create the staff account.');
+                } finally {
+                    setCreatingStaff(false);
+                }
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -81,6 +110,21 @@
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <Card title="Create Staff Account">
+                            {user?.role === 'super_admin' ? (
+                                <div className="space-y-4">
+                                    <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
+                                    <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
+                                    <Input label="Temporary password" type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
+                                    <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant'].map(value => ({ value, label: value.replaceAll('_', ' ') }))} />
+                                    <Input label="Department" value={staffForm.department} onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })} />
+                                    {staffMessage && <p className={'text-sm ' + (staffMessage.includes('now sign in') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
+                                    <Button variant="primary" className="w-full justify-center" onClick={handleCreateStaff} disabled={creatingStaff} icon={creatingStaff ? Icons.RefreshCw : Icons.UserPlus}>
+                                        {creatingStaff ? 'Creating account...' : 'Create Staff Account'}
+                                    </Button>
+                                </div>
+                            ) : <p className="text-sm text-slate-500">Staff accounts are created by the system administrator.</p>}
+                        </Card>
                         <Card title="Create Office">
                             <div className="space-y-4">
                                 <Input label="Office Name" value={officeForm.name} onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })} />
@@ -159,4 +203,3 @@
                 </div>
             );
         };
-
