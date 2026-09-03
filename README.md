@@ -22,8 +22,11 @@ Run the SQL files in this order in the Supabase SQL editor:
 4. `supabase/wards_beds_insurance.sql`
 5. `supabase/clinical_modules.sql`
 6. `supabase/clinical_safety.sql`
+7. `supabase/bootstrap_admin.sql` (local development only)
 
 The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
+
+For local development, the optional bootstrap script creates a confirmed email/password administrator with username `admin` (or email `admin@medicore.local`) and password `admin`. Rerun the script to reset that development password. It must never be used in a shared, staging, or production project.
 
 ## Required production setup
 
