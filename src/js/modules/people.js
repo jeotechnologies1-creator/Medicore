@@ -163,6 +163,11 @@
 
         const DoctorsModule = () => {
             const doctors = (seedData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
+            const activeDoctors = doctors.filter(doc => doc.status === 'active');
+            const specialties = new Set(activeDoctors.map(doc => doc.department || 'General')).size;
+            const consultationsCount = (seedData.consultations || []).length;
+            const avgPatientsPerDoctor = activeDoctors.length ? Math.round((seedData.patients || []).length / activeDoctors.length) : 0;
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -174,10 +179,10 @@
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <StatCard title="Active Doctors" value={doctors.length} icon={Icons.Stethoscope} color="medical" />
-                        <StatCard title="Specialties" value={new Set(doctors.map(doc => doc.department || 'General')).size} icon={Icons.ClipboardList} color="emerald" />
-                        <StatCard title="On Call" value={Math.max(2, Math.ceil(doctors.length * 0.35))} icon={Icons.Activity} color="amber" />
-                        <StatCard title="Avg. Patients" value={18} icon={Icons.Users} color="violet" />
+                        <StatCard title="Active Doctors" value={activeDoctors.length} icon={Icons.Stethoscope} color="medical" />
+                        <StatCard title="Specialties" value={specialties} icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="Consultations" value={consultationsCount} icon={Icons.Activity} color="amber" />
+                        <StatCard title="Avg. Patients/Doctor" value={avgPatientsPerDoctor} icon={Icons.Users} color="violet" />
                     </div>
 
                     <Card>

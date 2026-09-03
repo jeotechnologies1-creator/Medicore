@@ -95,14 +95,14 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Total Items" value={inventory.length} icon={Icons.Package} color="medical" />
-                        <StatCard title="Low Stock" value={inventory.filter(d => d.status === 'low_stock').length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Low Stock" value={inventory.filter(d => Number(d.stockQuantity || 0) <= Number(d.reorderLevel || 0)).length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Expiring Soon" value={inventory.filter(d => {
                             const expiry = new Date(d.expiryDate);
                             const threeMonths = new Date();
                             threeMonths.setMonth(threeMonths.getMonth() + 3);
                             return expiry <= threeMonths;
                         }).length} icon={Icons.Clock} color="red" />
-                        <StatCard title="Today's Sales" value={formatCurrency(1245.50)} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Inventory Value" value={formatCurrency(inventory.reduce((sum, item) => sum + (Number(item.unitPrice || 0) * Number(item.stockQuantity || 0)), 0))} icon={Icons.DollarSign} color="emerald" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
