@@ -105,9 +105,105 @@
                 const patientVitals = seedData.vitals.filter(v => v.patientId === patient.id).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                 const patientBilling = seedData.billing.filter(b => b.patientId === patient.id);
                 const patientAdmissions = seedData.admissions.filter(a => a.patientId === patient.id);
+                const patientAllergies = (seedData.allergies || []).filter(a => a.patientId === patient.id);
+                const patientConditions = (seedData.conditions || []).filter(c => c.patientId === patient.id);
+                const patientMedicationOrders = (seedData.medicationOrders || []).filter(m => m.patientId === patient.id);
+                const patientCarePlans = (seedData.carePlans || []).filter(c => c.patientId === patient.id);
+                const encounterNotes = (seedData.consultations || []).filter(c => c.patientId === patient.id);
+                const [medicationForm, setMedicationForm] = useState({
+                    medicationName: '',
+                    dose: '',
+                    doseUnit: 'mg',
+                    route: 'oral',
+                    frequency: 'Daily',
+                    indication: ''
+                });
+                const [encounterForm, setEncounterForm] = useState({
+                    chiefComplaint: '',
+                    diagnosis: '',
+                    assessment: '',
+                    plan: '',
+                    followUpDate: ''
+                });
+                const [carePlanForm, setCarePlanForm] = useState({
+                    title: '',
+                    description: '',
+                    targetDate: ''
+                });
+
+                const allergyMatch = medicationForm.medicationName
+                    ? patientAllergies.find((allergy) => {
+                        const substance = (allergy.substance || '').toLowerCase();
+                        const medName = medicationForm.medicationName.toLowerCase();
+                        return substance && (substance.includes(medName) || medName.includes(substance));
+                    })
+                    : null;
+
+                const handleSaveMedicationOrder = () => {
+                    if (!medicationForm.medicationName.trim()) return;
+
+                    const nextOrder = {
+                        id: 'med_order_' + Date.now(),
+                        patientId: patient.id,
+                        medicationName: medicationForm.medicationName.trim(),
+                        dose: medicationForm.dose || '1',
+                        doseUnit: medicationForm.doseUnit,
+                        route: medicationForm.route,
+                        frequency: medicationForm.frequency,
+                        indication: medicationForm.indication || 'Clinical review required',
+                        status: 'active'
+                    };
+
+                    const next = [nextOrder, ...(seedData.medicationOrders || [])];
+                    persistSeedTable('medicationOrders', next);
+                    seedData.medicationOrders = next;
+                    setMedicationForm({ medicationName: '', dose: '', doseUnit: 'mg', route: 'oral', frequency: 'Daily', indication: '' });
+                };
+
+                const handleSaveEncounterNote = () => {
+                    if (!encounterForm.chiefComplaint.trim()) return;
+
+                    const nextEncounter = {
+                        id: 'enc_' + Date.now(),
+                        patientId: patient.id,
+                        doctorId: 'u2',
+                        chiefComplaint: encounterForm.chiefComplaint.trim(),
+                        diagnosis: encounterForm.diagnosis.trim() || 'Assessment pending',
+                        assessment: encounterForm.assessment.trim() || 'Clinical assessment recorded',
+                        plan: encounterForm.plan.trim() || 'Continue monitoring',
+                        followUpDate: encounterForm.followUpDate || null,
+                        status: 'completed',
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const next = [nextEncounter, ...(seedData.consultations || [])];
+                    persistSeedTable('consultations', next);
+                    seedData.consultations = next;
+                    setEncounterForm({ chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+                };
+
+                const handleSaveCarePlan = () => {
+                    if (!carePlanForm.title.trim()) return;
+
+                    const nextCarePlan = {
+                        id: 'care_' + Date.now(),
+                        patientId: patient.id,
+                        title: carePlanForm.title.trim(),
+                        description: carePlanForm.description.trim() || 'Follow-up care plan',
+                        targetDate: carePlanForm.targetDate || null,
+                        status: 'active',
+                        reviewDate: carePlanForm.targetDate || null
+                    };
+
+                    const next = [nextCarePlan, ...(seedData.carePlans || [])];
+                    persistSeedTable('carePlans', next);
+                    seedData.carePlans = next;
+                    setCarePlanForm({ title: '', description: '', targetDate: '' });
+                };
 
                 const tabs = [
                     { id: 'overview', label: 'Overview' },
+                    { id: 'chart', label: 'Clinical Chart' },
                     { id: 'visits', label: 'Visits & Appointments' },
                     { id: 'labs', label: 'Lab Results' },
                     { id: 'prescriptions', label: 'Prescriptions' },
@@ -257,6 +353,140 @@
                                                     <span className="font-medium text-slate-900">{patientAdmissions.length}</span>
                                                 </div>
                                             </div>
+                                        </Card>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'chart' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <StatCard title="Allergies" value={patientAllergies.length} icon={Icons.Shield} color="amber" subtitle="Recorded safety issues" />
+                                        <StatCard title="Active problems" value={patientConditions.filter(c => c.clinicalStatus === 'active').length} icon={Icons.ClipboardList} color="medical" subtitle="Current diagnoses" />
+                                        <StatCard title="Medication orders" value={patientMedicationOrders.length} icon={Icons.Pill} color="emerald" subtitle="Active treatments" />
+                                        <StatCard title="Last visit" value={patientAppointments[0] ? formatDate(patientAppointments[0].date) : 'N/A'} icon={Icons.Calendar} color="violet" subtitle="Most recent encounter" />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                        <Card title="Encounter documentation" subtitle="Clinical note and diagnosis capture">
+                                            <div className="space-y-4">
+                                                <Input label="Chief complaint" value={encounterForm.chiefComplaint} onChange={(e) => setEncounterForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
+                                                <Input label="Diagnosis" value={encounterForm.diagnosis} onChange={(e) => setEncounterForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                                <TextArea label="Assessment" rows={3} value={encounterForm.assessment} onChange={(e) => setEncounterForm(prev => ({ ...prev, assessment: e.target.value }))} />
+                                                <TextArea label="Plan / treatment" rows={3} value={encounterForm.plan} onChange={(e) => setEncounterForm(prev => ({ ...prev, plan: e.target.value }))} />
+                                                <Input label="Follow-up date" type="date" value={encounterForm.followUpDate} onChange={(e) => setEncounterForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.FileText} onClick={handleSaveEncounterNote}>Save Encounter Note</Button>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Medication safety" subtitle="Allergy-aware prescribing">
+                                            <div className="space-y-4">
+                                                <Input label="Medication name" value={medicationForm.medicationName} onChange={(e) => setMedicationForm(prev => ({ ...prev, medicationName: e.target.value }))} />
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Input label="Dose" value={medicationForm.dose} onChange={(e) => setMedicationForm(prev => ({ ...prev, dose: e.target.value }))} />
+                                                    <Select label="Unit" value={medicationForm.doseUnit} onChange={(e) => setMedicationForm(prev => ({ ...prev, doseUnit: e.target.value }))} options={[{ value: 'mg', label: 'mg' }, { value: 'g', label: 'g' }, { value: 'ml', label: 'ml' }, { value: 'mcg', label: 'mcg' }]} />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Select label="Route" value={medicationForm.route} onChange={(e) => setMedicationForm(prev => ({ ...prev, route: e.target.value }))} options={[{ value: 'oral', label: 'Oral' }, { value: 'iv', label: 'IV' }, { value: 'im', label: 'IM' }, { value: 'topical', label: 'Topical' }]} />
+                                                    <Select label="Frequency" value={medicationForm.frequency} onChange={(e) => setMedicationForm(prev => ({ ...prev, frequency: e.target.value }))} options={[{ value: 'Daily', label: 'Daily' }, { value: 'BD', label: 'BD' }, { value: 'TDS', label: 'TDS' }, { value: 'PRN', label: 'PRN' }]} />
+                                                </div>
+                                                <Input label="Indication" value={medicationForm.indication} onChange={(e) => setMedicationForm(prev => ({ ...prev, indication: e.target.value }))} />
+                                                {allergyMatch && (
+                                                    <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
+                                                        Allergy warning: {allergyMatch.substance} has already been recorded for this patient.
+                                                    </div>
+                                                )}
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.Pill} onClick={handleSaveMedicationOrder}>Save Medication Order</Button>
+                                            </div>
+                                        </Card>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                        <Card title="Problem list & safety summary">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Current issues</p>
+                                                    {patientConditions.length ? (
+                                                        <div className="space-y-2">
+                                                            {patientConditions.slice(0, 5).map((condition) => (
+                                                                <div key={condition.id} className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-sm text-slate-700">
+                                                                    <div className="font-medium text-slate-900">{condition.conditionName}</div>
+                                                                    <div className="text-xs text-slate-500">{condition.clinicalStatus} • {condition.onsetDate ? formatDate(condition.onsetDate) : 'No date'}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-slate-500">No active clinical problems recorded.</p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Allergy list</p>
+                                                    {patientAllergies.length ? (
+                                                        <div className="space-y-2">
+                                                            {patientAllergies.slice(0, 5).map((allergy) => (
+                                                                <div key={allergy.id} className="p-3 rounded-lg bg-amber-50 border border-amber-100 text-sm text-amber-800">
+                                                                    <div className="font-medium">{allergy.substance}</div>
+                                                                    <div className="text-xs text-amber-700">{allergy.reaction || 'No reaction recorded'} • {allergy.severity}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-slate-500">No allergies recorded.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Care plan & follow-up">
+                                            <div className="space-y-4">
+                                                <Input label="Care plan title" value={carePlanForm.title} onChange={(e) => setCarePlanForm(prev => ({ ...prev, title: e.target.value }))} />
+                                                <TextArea label="Plan details" rows={3} value={carePlanForm.description} onChange={(e) => setCarePlanForm(prev => ({ ...prev, description: e.target.value }))} />
+                                                <Input label="Target date" type="date" value={carePlanForm.targetDate} onChange={(e) => setCarePlanForm(prev => ({ ...prev, targetDate: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.CheckCircle} onClick={handleSaveCarePlan}>Save Care Plan</Button>
+                                                {patientCarePlans.length ? (
+                                                    <div className="space-y-2 pt-2">
+                                                        {patientCarePlans.slice(0, 4).map((plan) => (
+                                                            <div key={plan.id} className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 text-sm text-emerald-800">
+                                                                <div className="font-medium">{plan.title}</div>
+                                                                <div className="text-xs mt-1">{plan.description}</div>
+                                                                <div className="text-[11px] mt-1 opacity-80">{plan.targetDate ? `Target: ${formatDate(plan.targetDate)}` : 'Target date not set'}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-slate-500 pt-2">No care plans recorded.</p>
+                                                )}
+                                            </div>
+                                        </Card>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                        <Card title="Recent encounter notes">
+                                            <DataTable
+                                                columns={[
+                                                    { key: 'createdAt', title: 'Date', render: (row) => formatDateTime(row.createdAt) },
+                                                    { key: 'chiefComplaint', title: 'Complaint' },
+                                                    { key: 'diagnosis', title: 'Diagnosis' },
+                                                    { key: 'plan', title: 'Plan' }
+                                                ]}
+                                                data={encounterNotes.slice(0, 6)}
+                                                emptyMessage="No encounter notes recorded for this patient"
+                                            />
+                                        </Card>
+
+                                        <Card title="Medication orders history">
+                                            <DataTable
+                                                columns={[
+                                                    { key: 'medicationName', title: 'Medication' },
+                                                    { key: 'dose', title: 'Dose', render: (row) => `${row.dose} ${row.doseUnit}` },
+                                                    { key: 'frequency', title: 'Frequency' },
+                                                    { key: 'route', title: 'Route' },
+                                                    { key: 'indication', title: 'Indication' },
+                                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
+                                                ]}
+                                                data={patientMedicationOrders.slice(0, 10)}
+                                                emptyMessage="No medication orders recorded for this patient"
+                                            />
                                         </Card>
                                     </div>
                                 </div>
