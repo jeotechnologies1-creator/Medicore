@@ -30,6 +30,10 @@ begin
     update auth.users
     set encrypted_password = crypt('admin', gen_salt('bf')),
         email_confirmed_at = coalesce(email_confirmed_at, now()),
+        confirmation_token = coalesce(confirmation_token, ''),
+        recovery_token = coalesce(recovery_token, ''),
+        email_change_token_new = coalesce(email_change_token_new, ''),
+        email_change = coalesce(email_change, ''),
         updated_at = now()
     where id = admin_auth_id;
   end if;
