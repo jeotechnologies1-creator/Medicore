@@ -40,55 +40,34 @@
         });
     };
 
-    const getStore = () => {
-        try {
-            const value = localStorage.getItem('medicore_store');
-            if (!value) {
-                return {
-                    users: [],
-                    patients: [],
-                    appointments: [],
-                    labOrders: [],
-                    radiologyOrders: [],
-                    prescriptions: [],
-                    pharmacyInventory: [],
-                    billing: [],
-                    admissions: [],
-                    surgeries: [],
-                    notifications: [],
-                    auditLogs: [],
-                    vitals: []
-                };
-            }
-            return JSON.parse(value);
-        } catch (e) {
-            return {
-                users: [],
-                patients: [],
-                appointments: [],
-                labOrders: [],
-                radiologyOrders: [],
-                prescriptions: [],
-                pharmacyInventory: [],
-                billing: [],
-                admissions: [],
-                surgeries: [],
-                notifications: [],
-                auditLogs: [],
-                vitals: []
-            };
-        }
-    };
+    const getStore = () => ({
+        users: [],
+        patients: [],
+        appointments: [],
+        labOrders: [],
+        radiologyOrders: [],
+        prescriptions: [],
+        pharmacyInventory: [],
+        billing: [],
+        admissions: [],
+        surgeries: [],
+        notifications: [],
+        auditLogs: [],
+        vitals: [],
+        wards: []
+    });
 
     const saveStore = (data) => {
-        localStorage.setItem('medicore_store', JSON.stringify(data));
+        if (!data) return;
+        try {
+            localStorage.setItem('medicore_store', JSON.stringify(data));
+        } catch (e) {}
     };
 
     const readRows = async (table) => {
         const client = getClient();
         if (!client) {
-            const store = getStore();
-            return { data: store[table] || [], error: null };
+            return { data: [], error: new Error('Supabase client is not configured.') };
         }
 
         const { data, error } = await client.from(table).select('*');
@@ -102,13 +81,7 @@
     const insertRow = async (table, payload) => {
         const client = getClient();
         if (!client) {
-            const store = getStore();
-            const items = store[table] || [];
-            const result = Array.isArray(payload) ? payload : [payload];
-            const data = [...items, ...result];
-            store[table] = data;
-            saveStore(store);
-            return { data: result, error: null };
+            return { data: [], error: new Error('Supabase client is not configured.') };
         }
 
         const { data, error } = await client.from(table).insert(Array.isArray(payload) ? payload : [payload]).select();
@@ -118,11 +91,7 @@
     const updateRow = async (table, id, updates) => {
         const client = getClient();
         if (!client) {
-            const store = getStore();
-            const items = (store[table] || []).map((row) => (row.id === id ? { ...row, ...updates } : row));
-            store[table] = items;
-            saveStore(store);
-            return { data: items.filter((row) => row.id === id), error: null };
+            return { data: [], error: new Error('Supabase client is not configured.') };
         }
 
         const { data, error } = await client.from(table).update(updates).eq('id', id).select();
@@ -131,19 +100,17 @@
 
     const loginProfile = async (email, password) => {
         const client = getClient();
-        if (client) {
-            const { data, error } = await client.from('profiles').select('*').eq('email', email).maybeSingle();
-            if (!error && data && data.password === password) {
-                const safe = { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
-                delete safe.password;
-                return safe;
-            }
+        if (!client) {
             return null;
         }
 
-        const store = getStore();
-        const profile = (store.users || []).find((user) => user.email === email && user.password === password);
-        return profile || null;
+        const { data, error } = await client.from('profiles').select('*').eq('email', email).maybeSingle();
+        if (!error && data && data.password === password) {
+            const safe = { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
+            delete safe.password;
+            return safe;
+        }
+        return null;
     };
 
     window.MedicoreSupabase = {

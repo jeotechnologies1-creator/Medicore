@@ -4,30 +4,266 @@
         // ==========================================
         // DATABASE & SEED DATA
         // ==========================================
-        const seedData = window.MediCoreSeedData || {};
+        const seedData = new Proxy({
+            users: [],
+            patients: [],
+            appointments: [],
+            labOrders: [],
+            radiologyOrders: [],
+            prescriptions: [],
+            pharmacyInventory: [],
+            billing: [],
+            admissions: [],
+            surgeries: [],
+            notifications: [],
+            auditLogs: [],
+            vitals: [],
+            wards: [],
+            beds: [],
+            insuranceClaims: []
+        }, {
+            get(target, prop) {
+                if (!(prop in target)) {
+                    target[prop] = [];
+                }
+                return target[prop];
+            },
+            set(target, prop, value) {
+                target[prop] = value;
+                return true;
+            }
+        });
+
+        const normalizeUsers = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            email: row.email,
+            password: row.password,
+            role: row.role || 'super_admin',
+            name: row.full_name || row.name || row.email,
+            fullName: row.full_name || row.name || row.email,
+            department: row.department || '',
+            status: row.status || 'active',
+            createdAt: row.created_at || row.createdAt
+        }));
+
+        const normalizePatients = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientNumber: row.patient_number || row.patientNumber,
+            firstName: row.first_name || row.firstName,
+            lastName: row.last_name || row.lastName,
+            dateOfBirth: row.date_of_birth || row.dateOfBirth,
+            gender: row.gender,
+            phone: row.phone,
+            email: row.email,
+            address: row.address,
+            bloodGroup: row.blood_group || row.bloodGroup,
+            emergencyContact: {
+                name: row.emergency_contact_name || row.emergencyContact?.name || '',
+                phone: row.emergency_contact_phone || row.emergencyContact?.phone || ''
+            },
+            insurance: {
+                provider: row.insurance_provider || row.insurance?.provider || 'Not Provided',
+                policyNumber: row.insurance_policy_number || row.insurance?.policyNumber || 'N/A'
+            },
+            registrationDate: row.registration_date || row.registrationDate || new Date().toISOString().split('T')[0],
+            status: row.status || 'active',
+            allergies: row.allergies || 'None',
+            chronicConditions: row.chronic_conditions || row.chronicConditions || 'None'
+        }));
+
+        const normalizeAppointments = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            doctorId: row.doctor_id || row.doctorId,
+            date: row.appointment_date || row.date,
+            time: row.appointment_time || row.time,
+            type: row.appointment_type || row.type,
+            department: row.department || '',
+            status: row.status || 'scheduled',
+            notes: row.notes || '',
+            createdAt: row.created_at || row.createdAt
+        }));
+
+        const normalizeLabOrders = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            doctorId: row.doctor_id || row.doctorId,
+            testType: row.test_type || row.testType,
+            category: row.category || '',
+            priority: row.priority || 'routine',
+            status: row.status || 'pending',
+            orderedDate: row.ordered_date || row.orderedDate,
+            resultDate: row.result_date || row.resultDate || null,
+            results: row.results || null,
+            technicianId: row.technician_id || row.technicianId
+        }));
+
+        const normalizeRadiologyOrders = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            doctorId: row.doctor_id || row.doctorId,
+            studyType: row.study_type || row.studyType,
+            modality: row.modality,
+            status: row.status || 'requested',
+            priority: row.priority || 'routine',
+            orderedDate: row.ordered_date || row.orderedDate,
+            scheduledDate: row.scheduled_date || row.scheduledDate,
+            report: row.report || '',
+            radiologistId: row.radiologist_id || row.radiologistId
+        }));
+
+        const normalizePrescriptions = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            doctorId: row.doctor_id || row.doctorId,
+            diagnosis: row.diagnosis,
+            medications: Array.isArray(row.medications) ? row.medications : [],
+            status: row.status || 'active',
+            prescriptionDate: row.prescription_date || row.prescriptionDate,
+            notes: row.notes || ''
+        }));
+
+        const normalizeInventory = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            name: row.name,
+            genericName: row.generic_name || row.genericName,
+            category: row.category,
+            stockQuantity: row.stock_quantity ?? row.stockQuantity ?? 0,
+            reorderLevel: row.reorder_level ?? row.reorderLevel ?? 0,
+            unitPrice: row.unit_price ?? row.unitPrice ?? 0,
+            expiryDate: row.expiry_date || row.expiryDate,
+            batchNumber: row.batch_number || row.batchNumber,
+            supplier: row.supplier,
+            location: row.location,
+            status: row.status || 'active'
+        }));
+
+        const normalizeBilling = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            invoiceNumber: row.invoice_number || row.invoiceNumber,
+            date: row.invoice_date || row.date,
+            subtotal: row.subtotal ?? 0,
+            discount: row.discount ?? 0,
+            tax: row.tax ?? 0,
+            total: row.total ?? 0,
+            paid: row.paid ?? 0,
+            balance: row.balance ?? 0,
+            paymentMethod: row.payment_method || row.paymentMethod,
+            status: row.status || 'pending'
+        }));
+
+        const normalizeAdmissions = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            ward: row.ward,
+            bedNumber: row.bed_number || row.bedNumber,
+            admissionDate: row.admission_date || row.admissionDate,
+            dischargeDate: row.discharge_date || row.dischargeDate,
+            doctorId: row.doctor_id || row.doctorId,
+            diagnosis: row.diagnosis,
+            status: row.status || 'active',
+            acuity: row.acuity || 'stable'
+        }));
+
+        const normalizeSurgeries = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            surgeonId: row.surgeon_id || row.surgeonId,
+            procedure: row.procedure,
+            scheduledDate: row.scheduled_date || row.scheduledDate,
+            scheduledTime: row.scheduled_time || row.scheduledTime,
+            duration: row.duration,
+            status: row.status || 'scheduled',
+            otRoom: row.ot_room || row.otRoom,
+            anesthesia: row.anesthesia,
+            priority: row.priority || 'elective'
+        }));
+
+        const normalizeNotifications = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            userId: row.user_id || row.userId,
+            type: row.type,
+            title: row.title,
+            message: row.message,
+            read: Boolean(row.read),
+            priority: row.priority || 'medium'
+        }));
+
+        const normalizeAuditLogs = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            userId: row.user_id || row.userId,
+            action: row.action,
+            entityType: row.entity_type || row.entityType,
+            entityId: row.entity_id || row.entityId,
+            timestamp: row.timestamp || row.created_at,
+            severity: row.severity || 'info'
+        }));
 
         const hydrateSeedData = () => {
-            const store = window.MedicoreSupabase && typeof window.MedicoreSupabase.getStore === 'function'
-                ? window.MedicoreSupabase.getStore()
-                : {};
             const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'wards'];
+            const next = {};
             tables.forEach((table) => {
-                if (Array.isArray(store[table]) && store[table].length > 0) {
-                    seedData[table] = store[table];
-                }
+                next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
             });
-            return seedData;
+            return next;
         };
 
         const persistSeedTable = (table, rows) => {
             const nextRows = Array.isArray(rows) ? rows : [];
             if (seedData) seedData[table] = nextRows;
-            if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveStore === 'function') {
-                const store = window.MedicoreSupabase.getStore();
-                store[table] = nextRows;
-                window.MedicoreSupabase.saveStore(store);
-            }
             return nextRows;
+        };
+
+        const loadSupabaseTables = async () => {
+            const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function'
+                ? window.MedicoreSupabase.getClient()
+                : null;
+            if (!client) {
+                return null;
+            }
+
+            const lookups = [
+                { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
+                { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
+                { dbTable: 'appointments', appTable: 'appointments', mapper: normalizeAppointments },
+                { dbTable: 'lab_orders', appTable: 'labOrders', mapper: normalizeLabOrders },
+                { dbTable: 'radiology_orders', appTable: 'radiologyOrders', mapper: normalizeRadiologyOrders },
+                { dbTable: 'prescriptions', appTable: 'prescriptions', mapper: normalizePrescriptions },
+                { dbTable: 'pharmacy_inventory', appTable: 'pharmacyInventory', mapper: normalizeInventory },
+                { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
+                { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
+                { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
+                { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
+                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs }
+            ];
+
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], wards: [], beds: [], insuranceClaims: [] };
+            for (const entry of lookups) {
+                const { data, error } = await client.from(entry.dbTable).select('*');
+                if (error) {
+                    console.error(`Failed to load ${entry.dbTable}:`, error);
+                    nextStore[entry.appTable] = [];
+                    continue;
+                }
+                nextStore[entry.appTable] = entry.mapper(data || []);
+            }
+
+            Object.keys(seedData).forEach((key) => delete seedData[key]);
+            Object.assign(seedData, nextStore);
+            return nextStore;
         };
 
 // ==========================================
@@ -992,10 +1228,6 @@
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
                         found = await window.MedicoreSupabase.loginProfile(email, password);
                     }
-                    if (!found) {
-                        const sourceUsers = hydrateSeedData().users || [];
-                        found = sourceUsers.find(u => u.email === email && u.password === password) || null;
-                    }
                     if (found) {
                         const safeUser = {
                             ...found,
@@ -1075,16 +1307,6 @@
                 }
             };
 
-            const demoAccounts = [
-                { role: 'Super Admin', email: 'admin@medicore.com', pass: 'admin123' },
-                { role: 'Doctor', email: 'dr.smith@medicore.com', pass: 'doctor123' },
-                { role: 'Nurse', email: 'nurse.wilson@medicore.com', pass: 'nurse123' },
-                { role: 'Receptionist', email: 'reception@medicore.com', pass: 'recept123' },
-                { role: 'Lab Scientist', email: 'lab.tech@medicore.com', pass: 'lab123' },
-                { role: 'Pharmacist', email: 'pharmacy@medicore.com', pass: 'pharma123' },
-                { role: 'Patient', email: 'patient@demo.com', pass: 'patient123' }
-            ];
-
             return (
                 <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-medical-50 via-white to-emerald-50">
                     <div className="w-full max-w-md mx-4">
@@ -1151,20 +1373,9 @@
                             </form>
                         </Card>
 
-                        <div className="mt-6">
-                            <p className="text-xs text-slate-500 text-center mb-3">Demo Accounts (click to auto-fill)</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                {demoAccounts.map((acc) => (
-                                    <button
-                                        key={acc.email}
-                                        onClick={() => { setEmail(acc.email); setPassword(acc.pass); }}
-                                        className="text-left px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-medical-300 hover:bg-medical-50 transition-all text-xs"
-                                    >
-                                        <span className="font-medium text-slate-700 block">{acc.role}</span>
-                                        <span className="text-slate-400">{acc.email}</span>
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="mt-6 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-center">
+                            <p className="text-xs font-medium uppercase tracking-wide text-medical-700">Live Supabase access</p>
+                            <p className="mt-1 text-sm text-medical-700">Use the project admin account: admin@medicore.local / admin123</p>
                         </div>
                     </div>
                 </div>
@@ -3686,8 +3897,9 @@
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-            const [notifications, setNotifications] = useState(seedData.notifications);
+            const [notifications, setNotifications] = useState(seedData.notifications || []);
             const [toasts, setToasts] = useState([]);
+            const [dataVersion, setDataVersion] = useState(0);
 
             const { user } = useAuth();
 
@@ -3697,6 +3909,22 @@
                     if (saved) setIsAuthenticated(true);
                 } catch (e) {}
             }, []);
+
+            useEffect(() => {
+                if (!isAuthenticated) return undefined;
+
+                let cancelled = false;
+                const syncLiveData = async () => {
+                    const synced = await loadSupabaseTables();
+                    if (!cancelled && synced) {
+                        setNotifications((seedData.notifications || []).slice(0));
+                        setDataVersion((value) => value + 1);
+                    }
+                };
+
+                syncLiveData();
+                return () => { cancelled = true; };
+            }, [isAuthenticated]);
 
             const handleLogin = () => setIsAuthenticated(true);
 
