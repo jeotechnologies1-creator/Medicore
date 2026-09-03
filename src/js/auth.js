@@ -302,7 +302,7 @@
             };
 
             return (
-                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-medical-50 via-white to-emerald-50">
+                <div className="login-shell min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-sky-100">
                     <div className="w-full max-w-md mx-4">
                         <div className="text-center mb-8">
                             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-medical-600 text-white mb-4 shadow-lg shadow-medical-200">

@@ -126,7 +126,51 @@
         body .text-slate-500 { color: #9db2c8 !important; }
         body .text-slate-400 { color: #7ca0bd !important; }
         body .text-slate-300 { color: #c8d4e7 !important; }
-        body .placeholder-slate-400::placeholder { color: #7ca0bd !important; }
+        body .placeholder-slate-400::placeholder { color: #111827 !important; }
+        body input::placeholder,
+        body textarea::placeholder,
+        body select::placeholder {
+            color: #111827 !important;
+            opacity: 1;
+        }
+
+        .login-shell,
+        .login-shell * {
+            color: #111827 !important;
+        }
+
+        .login-shell h1,
+        .login-shell h2,
+        .login-shell h3,
+        .login-shell p,
+        .login-shell label,
+        .login-shell span,
+        .login-shell div,
+        .login-shell .text-slate-900,
+        .login-shell .text-slate-800,
+        .login-shell .text-slate-700,
+        .login-shell .text-slate-600,
+        .login-shell .text-slate-500,
+        .login-shell .text-slate-400,
+        .login-shell .text-slate-300 {
+            color: #111827 !important;
+        }
+
+        .login-shell input,
+        .login-shell textarea,
+        .login-shell select,
+        .login-shell input::placeholder,
+        .login-shell textarea::placeholder,
+        .login-shell select::placeholder {
+            color: #111827 !important;
+            opacity: 1;
+        }
+
+        .login-shell .bg-medical-600,
+        .login-shell .bg-gradient-to-br,
+        .login-shell .text-white {
+            color: #ffffff !important;
+        }
 
         @media (max-width: 768px) {
             html { scroll-padding-top: 1rem; }
