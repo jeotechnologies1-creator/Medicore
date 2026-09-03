@@ -3896,6 +3896,15 @@
                                         { key: 'balance', title: 'Balance', render: (row) => formatCurrency(row.balance) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : 'warning'}>{row.status}</Badge> },
                                         { key: 'action', title: 'Action', render: () => <span className="text-slate-500 text-sm">No online payment</span> }
+                                    ]}
+                                    data={seedData.billing.filter(b => b.patientId === patient.id)}
+                                />
+                            </Card>
+                        )}
+
+                        {activeTab === 'messages' && (
+                            <Card title="Messages">
+                                <div className="space-y-4">
                                     <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
                                         <Avatar name="Dr. Smith" size="sm" />
                                         <div className="flex-1">
