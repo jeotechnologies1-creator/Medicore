@@ -115,21 +115,21 @@
                     permissions: {
                         dashboard: true,
                         patients: true,
+                        appointments: true,
+                        doctors: true,
+                        laboratory: true,
+                        radiology: true,
+                        pharmacy: true,
                         billing: true,
-                        pharmacy: true,
-                        labs: true,
+                        admissions: true,
+                        surgeries: true,
+                        clinical_safety: true,
+                        inventory: true,
+                        hr: true,
+                        offices: true,
+                        reports: true,
+                        audit: true,
                         settings: true
-                    }
-                },
-                {
-                    role: 'Medical Director',
-                    permissions: {
-                        dashboard: true,
-                        patients: true,
-                        billing: false,
-                        pharmacy: true,
-                        labs: true,
-                        settings: false
                     }
                 },
                 {
@@ -137,9 +137,20 @@
                     permissions: {
                         dashboard: true,
                         patients: true,
-                        billing: false,
+                        appointments: true,
+                        doctors: true,
+                        laboratory: true,
+                        radiology: true,
                         pharmacy: false,
-                        labs: true,
+                        billing: false,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: true,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
                         settings: false
                     }
                 },
@@ -148,9 +159,20 @@
                     permissions: {
                         dashboard: true,
                         patients: true,
-                        billing: false,
+                        appointments: false,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
                         pharmacy: false,
-                        labs: true,
+                        billing: false,
+                        admissions: true,
+                        surgeries: false,
+                        clinical_safety: true,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
                         settings: false
                     }
                 },
@@ -159,9 +181,42 @@
                     permissions: {
                         dashboard: true,
                         patients: false,
-                        billing: false,
+                        appointments: false,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
                         pharmacy: true,
-                        labs: false,
+                        billing: false,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: false,
+                        inventory: true,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
+                        settings: false
+                    }
+                },
+                {
+                    role: 'Receptionist',
+                    permissions: {
+                        dashboard: true,
+                        patients: true,
+                        appointments: true,
+                        doctors: false,
+                        laboratory: false,
+                        radiology: false,
+                        pharmacy: false,
+                        billing: true,
+                        admissions: false,
+                        surgeries: false,
+                        clinical_safety: false,
+                        inventory: false,
+                        hr: false,
+                        offices: false,
+                        reports: false,
+                        audit: false,
                         settings: false
                     }
                 }
@@ -184,7 +239,37 @@
                 }
             });
             const [saveMessage, setSaveMessage] = useState('');
-            const [roleMatrix, setRoleMatrix] = useState(initialRoleMatrix);
+            const [roleMatrix, setRoleMatrix] = useState(() => {
+                try {
+                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                    if (Array.isArray(saved) && saved.length) {
+                        return saved.map((row) => ({
+                            ...row,
+                            permissions: {
+                                ...row.permissions,
+                                dashboard: row.permissions?.dashboard ?? true,
+                                patients: row.permissions?.patients ?? false,
+                                appointments: row.permissions?.appointments ?? row.permissions?.appointment ?? false,
+                                doctors: row.permissions?.doctors ?? row.permissions?.doctor ?? false,
+                                laboratory: row.permissions?.laboratory ?? row.permissions?.labs ?? row.permissions?.lab ?? false,
+                                radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
+                                pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
+                                billing: row.permissions?.billing ?? false,
+                                admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
+                                surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
+                                clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,
+                                inventory: row.permissions?.inventory ?? row.permissions?.stock ?? false,
+                                hr: row.permissions?.hr ?? row.permissions?.staff ?? row.permissions?.human_resources ?? false,
+                                offices: row.permissions?.offices ?? row.permissions?.medical_offices ?? row.permissions?.office ?? false,
+                                reports: row.permissions?.reports ?? row.permissions?.report ?? false,
+                                audit: row.permissions?.audit ?? row.permissions?.audit_logs ?? false,
+                                settings: row.permissions?.settings ?? row.permissions?.system_settings ?? false
+                            }
+                        }));
+                    }
+                } catch (e) {}
+                return initialRoleMatrix;
+            });
             const [departments, setDepartments] = useState(initialDepartments);
             const [exportHistory, setExportHistory] = useState([]);
             const [departmentDraft, setDepartmentDraft] = useState({
@@ -232,10 +317,34 @@
 
             const saveSettings = async () => {
                 try {
+                    const cleanedMatrix = roleMatrix.map((row) => ({
+                        ...row,
+                        permissions: {
+                            ...row.permissions,
+                            dashboard: row.permissions?.dashboard ?? true,
+                            patients: row.permissions?.patients ?? false,
+                            appointments: row.permissions?.appointments ?? row.permissions?.appointment ?? false,
+                            doctors: row.permissions?.doctors ?? row.permissions?.doctor ?? false,
+                            laboratory: row.permissions?.laboratory ?? row.permissions?.labs ?? row.permissions?.lab ?? false,
+                            radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
+                            pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
+                            billing: row.permissions?.billing ?? false,
+                            admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
+                            surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
+                            clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,
+                            inventory: row.permissions?.inventory ?? row.permissions?.stock ?? false,
+                            hr: row.permissions?.hr ?? row.permissions?.staff ?? row.permissions?.human_resources ?? false,
+                            offices: row.permissions?.offices ?? row.permissions?.medical_offices ?? row.permissions?.office ?? false,
+                            reports: row.permissions?.reports ?? row.permissions?.report ?? false,
+                            audit: row.permissions?.audit ?? row.permissions?.audit_logs ?? false,
+                            settings: row.permissions?.settings ?? row.permissions?.system_settings ?? false
+                        }
+                    }));
+                    setRoleMatrix(cleanedMatrix);
                     localStorage.setItem('medicore_settings', JSON.stringify(settings));
-                    localStorage.setItem('medicore_role_matrix', JSON.stringify(roleMatrix));
+                    localStorage.setItem('medicore_role_matrix', JSON.stringify(cleanedMatrix));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, roleMatrix);
+                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, cleanedMatrix);
                         if (error) {
                             setSaveMessage('Settings saved locally; Supabase sync failed.');
                             return;

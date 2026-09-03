@@ -5,8 +5,23 @@
             const [notifications, setNotifications] = useState(seedData.notifications || []);
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
+            const [theme, setTheme] = useState(() => {
+                try {
+                    return localStorage.getItem('medicore_theme') || 'dark';
+                } catch (e) {
+                    return 'dark';
+                }
+            });
 
             const { user, logout, hasModuleAccess } = useAuth();
+
+            useEffect(() => {
+                try {
+                    document.body.classList.remove('theme-light', 'theme-dark');
+                    document.body.classList.add(`theme-${theme}`);
+                    localStorage.setItem('medicore_theme', theme);
+                } catch (e) {}
+            }, [theme]);
 
             const handleLogout = () => {
                 logout();
@@ -96,36 +111,45 @@
             };
 
             if (!isAuthenticated) {
-                return <LoginPage onLogin={handleLogin} />;
+                return (
+                    <div className={`theme-shell theme-${theme}`}>
+                        <LoginPage onLogin={handleLogin} />
+                    </div>
+                );
             }
 
             return (
-                <div className="flex h-screen bg-slate-50">
-                    <Sidebar 
-                        activeModule={activeModule} 
-                        onModuleChange={setActiveModule}
-                        collapsed={sidebarCollapsed}
-                        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-                        onLogout={handleLogout}
-                    />
-                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                        <Header 
-                            notifications={notifications}
-                            onNavigate={setActiveModule}
-                            onNotificationClick={(notif) => {
-                                setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-                            }}
-                            onMarkAllNotificationsRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                <div className={`theme-shell theme-${theme}`}>
+                    <div className="app-shell flex h-screen">
+                        <Sidebar 
+                            activeModule={activeModule} 
+                            onModuleChange={setActiveModule}
+                            collapsed={sidebarCollapsed}
+                            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                             onLogout={handleLogout}
+                            theme={theme}
                         />
-                        <main className="flex-1 overflow-y-auto">
-                            {renderModule()}
-                        </main>
-                    </div>
-                    <div className="fixed bottom-4 right-4 space-y-2 z-50">
-                        {toasts.map(toast => (
-                            <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} />
-                        ))}
+                        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                            <Header 
+                                notifications={notifications}
+                                onNavigate={setActiveModule}
+                                onNotificationClick={(notif) => {
+                                    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+                                }}
+                                onMarkAllNotificationsRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                                onLogout={handleLogout}
+                                theme={theme}
+                                onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+                            />
+                            <main className="flex-1 overflow-y-auto app-main">
+                                {renderModule()}
+                            </main>
+                        </div>
+                        <div className="fixed bottom-4 right-4 space-y-2 z-50">
+                            {toasts.map(toast => (
+                                <Toast key={toast.id} message={toast.message} type={toast.type} onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} />
+                            ))}
+                        </div>
                     </div>
                 </div>
             );

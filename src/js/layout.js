@@ -1,7 +1,7 @@
         // ==========================================
         // SIDEBAR NAVIGATION
         // ==========================================
-        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout }) => {
+        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout, theme }) => {
             const { user } = useAuth();
             
             const getMenuItems = () => {
@@ -12,16 +12,16 @@
                     super_admin: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
-                        { id: 'doctors', label: 'Doctors & Clinical Staff', icon: Icons.Stethoscope },
+                        { id: 'doctors', label: 'Doctors', icon: Icons.Stethoscope },
                         { id: 'laboratory', label: 'Laboratory', icon: Icons.FlaskConical },
                         { id: 'radiology', label: 'Radiology', icon: Icons.Image },
-                        { id: 'pharmacy', label: 'Pharmacy & Dispensing', icon: Icons.Pill },
+                        { id: 'pharmacy', label: 'Pharmacy', icon: Icons.Pill },
                         { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
-                        { id: 'admissions', label: 'Ward Management', icon: Icons.Bed },
-                        { id: 'surgeries', label: 'Operating Theatre', icon: Icons.Scissors },
+                        { id: 'admissions', label: 'Admissions', icon: Icons.Bed },
+                        { id: 'surgeries', label: 'Surgeries', icon: Icons.Scissors },
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
-                        { id: 'inventory', label: 'Inventory & Stock Control', icon: Icons.Package },
-                        { id: 'hr', label: 'Staff & HR', icon: Icons.UserCog },
+                        { id: 'inventory', label: 'Inventory', icon: Icons.Package },
+                        { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
                         { id: 'offices', label: 'Medical Offices', icon: Icons.Building2 },
                         { id: 'reports', label: 'Reports', icon: Icons.BarChart3 },
                         { id: 'audit', label: 'Audit Logs', icon: Icons.Shield },
@@ -85,16 +85,16 @@
             const menuItems = getMenuItems();
 
             return (
-                <div className={(collapsed ? 'w-16' : 'w-64') + ' bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-r border-slate-800 flex flex-col transition-all duration-300 h-screen sticky top-0 z-40 shadow-[0_0_30px_rgba(2,6,23,0.35)]'}>
-                    <div className="h-20 flex items-center px-4 border-b border-slate-800 bg-gradient-to-r from-slate-950 via-sky-950/40 to-slate-900">
+                <div className={(collapsed ? 'w-16' : 'w-64') + ' sidebar-shell flex flex-col transition-all duration-300 h-screen sticky top-0 z-40'}>
+                    <div className="h-16 flex items-center px-4 border-b border-slate-100 sidebar-brand">
                         <div className={'flex items-center gap-3 ' + (collapsed ? 'justify-center w-full' : '')}>
-                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 via-cyan-500 to-sky-700 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-sky-500/30">
+                            <div className="w-10 h-10 rounded-xl bg-medical-600 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-medical-500/20">
                                 <Icons.HeartPulse size={22} />
                             </div>
                             {!collapsed && (
                                 <div>
-                                    <h1 className="font-bold text-white text-lg leading-tight">MediCore</h1>
-                                    <p className="text-[10px] uppercase tracking-[0.2em] text-sky-200/80">Health Platform</p>
+                                    <h1 className="font-bold text-slate-900 text-lg leading-tight">MediCore</h1>
+                                    <p className="text-xs text-slate-400">EMR System</p>
                                 </div>
                             )}
                         </div>
@@ -105,25 +105,25 @@
                             <button
                                 key={item.id}
                                 onClick={() => onModuleChange(item.id)}
-                                className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ' + (activeModule === item.id ? 'bg-sky-500/10 text-white border-sky-400/20 shadow-lg shadow-sky-500/10' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white border-transparent') + ' ' + (collapsed ? 'justify-center' : '')}
+                                className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (collapsed ? 'justify-center' : '')}
                                 title={collapsed ? item.label : ''}
                             >
-                                <item.icon size={20} className={activeModule === item.id ? 'text-sky-300' : 'text-slate-400'} />
+                                <item.icon size={20} className={activeModule === item.id ? 'text-medical-600' : 'text-slate-400'} />
                                 {!collapsed && <span>{item.label}</span>}
                             </button>
                         ))}
                     </div>
 
-                    <div className="p-4 border-t border-slate-800 bg-slate-950/60">
+                    <div className="p-4 border-t border-slate-100">
                         <button
                             onClick={onToggle}
-                            className={'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-slate-300 hover:bg-slate-800/80 transition-all border border-transparent ' + (collapsed ? 'justify-center' : '')}
+                            className={'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-50 transition-all ' + (collapsed ? 'justify-center' : '')}
                         >
                             {collapsed ? <Icons.PanelLeft size={18} /> : <><Icons.PanelLeft size={18} className="rotate-180" /> <span>Collapse</span></>}
                         </button>
                         <button
                             onClick={onLogout}
-                            className={'w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-xl text-sm text-red-300 hover:bg-red-500/10 transition-all border border-transparent ' + (collapsed ? 'justify-center' : '')}
+                            className={'w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all ' + (collapsed ? 'justify-center' : '')}
                         >
                             <Icons.LogOut size={18} />
                             {!collapsed && <span>Sign Out</span>}
@@ -136,7 +136,7 @@
         // ==========================================
         // HEADER
         // ==========================================
-        const Header = ({ onSearch, notifications, onNotificationClick, onMarkAllNotificationsRead, onNavigate, onLogout }) => {
+        const Header = ({ onSearch, notifications, onNotificationClick, onMarkAllNotificationsRead, onNavigate, onLogout, theme, onToggleTheme }) => {
             const { user } = useAuth();
             const [showNotifications, setShowNotifications] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -149,61 +149,72 @@
             };
 
             return (
-                <header className="h-20 bg-slate-950/70 backdrop-blur-xl border-b border-slate-800 sticky top-0 z-30 px-6 flex items-center justify-between shadow-[0_10px_30px_rgba(2,6,23,0.25)]">
+                <header className="luxury-header sticky top-0 z-30 px-6 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
-                        <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2 shadow-inner shadow-slate-950/60">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-cyan-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/20">
+                        <div className="brand-lockup hidden lg:flex items-center gap-3 pr-4 border-r border-white/10">
+                            <div className="brand-mark">
                                 <Icons.HeartPulse size={18} />
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-sky-200/80">MediCore</p>
-                                <p className="text-sm font-semibold text-slate-100">Clinical Intelligence Suite</p>
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.28em] text-medical-200">Care command</p>
+                                <h1 className="text-base font-semibold text-white">MediCore</h1>
                             </div>
                         </div>
-                        <div className="w-[min(28rem,45vw)]">
+                        <div className="w-full max-w-xl">
                             <SearchBar
                                 value={searchQuery}
                                 onChange={handleSearch}
                                 placeholder="Search patients, records, appointments..."
+                                className="header-search"
                             />
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={onToggleTheme}
+                            className="theme-toggle"
+                            aria-label="Toggle dark mode"
+                        >
+                            <span className={`theme-toggle-thumb ${theme === 'dark' ? 'right-1' : 'left-1'}`} />
+                            <span className="theme-toggle-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+                        </button>
+
                         <div className="relative">
                             <button
                                 onClick={() => setShowNotifications(!showNotifications)}
-                                className="relative p-2.5 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800 transition-colors"
+                                className="relative p-2.5 rounded-xl header-icon-button transition-colors"
                             >
-                                <Icons.Bell size={20} className="text-slate-200" />
+                                <Icons.Bell size={18} />
                                 {unreadCount > 0 && (
-                                    <span className="absolute top-1 right-1 w-5 h-5 bg-gradient-to-br from-rose-500 to-red-600 text-white text-[10px] rounded-full flex items-center justify-center notification-badge shadow-lg shadow-red-500/20">
+                                    <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center notification-badge">
                                         {unreadCount}
                                     </span>
                                 )}
                             </button>
                             {showNotifications && (
-                                <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900/95 rounded-2xl shadow-[0_22px_50px_rgba(2,6,23,0.4)] border border-slate-700 py-2 dropdown-menu z-50">
-                                    <div className="px-4 py-2 border-b border-slate-700 flex items-center justify-between">
-                                        <span className="font-semibold text-sm text-slate-100">Notifications</span>
-                                        <button onClick={onMarkAllNotificationsRead} className="text-xs text-sky-300 hover:underline">Mark all read</button>
+                                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-2 dropdown-menu z-50">
+                                    <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                                        <span className="font-semibold text-sm">Notifications</span>
+                                        <button onClick={onMarkAllNotificationsRead} className="text-xs text-medical-600 hover:underline">Mark all read</button>
                                     </div>
                                     <div className="max-h-80 overflow-y-auto">
                                         {notifications.slice(0, 8).map((n) => (
-                                            <div key={n.id} className={'px-4 py-3 hover:bg-slate-800/80 cursor-pointer border-b border-slate-800 ' + (!n.read ? 'bg-sky-500/5' : '')} onClick={() => { onNotificationClick && onNotificationClick(n); setShowNotifications(false); }}>
+                                            <div key={n.id} className={'px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 ' + (!n.read ? 'bg-medical-50/50' : '')} onClick={() => { onNotificationClick && onNotificationClick(n); setShowNotifications(false); }}>
                                                 <div className="flex items-start gap-3">
-                                                    <div className={'w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ' + (!n.read ? 'bg-sky-400' : 'bg-slate-500')} />
+                                                    <div className={'w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ' + (!n.read ? 'bg-medical-500' : 'bg-slate-300')} />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-slate-100 truncate">{n.title}</p>
-                                                        <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.message}</p>
-                                                        <p className="text-xs text-slate-500 mt-1">{formatDateTime(n.timestamp)}</p>
+                                                        <p className="text-sm font-medium text-slate-900 truncate">{n.title}</p>
+                                                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
+                                                        <p className="text-xs text-slate-400 mt-1">{formatDateTime(n.timestamp)}</p>
                                                     </div>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="px-4 py-2 border-t border-slate-700 text-center">
-                                        <button onClick={() => { onNavigate?.('audit'); setShowNotifications(false); }} className="text-sm text-sky-300 hover:underline">View audit log</button>
+                                    <div className="px-4 py-2 border-t border-slate-100 text-center">
+                                        <button onClick={() => { onNavigate?.('audit'); setShowNotifications(false); }} className="text-sm text-medical-600 hover:underline">View audit log</button>
                                     </div>
                                 </div>
                             )}
@@ -212,29 +223,29 @@
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfile(!showProfile)}
-                                className="flex items-center gap-3 p-1.5 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800 transition-colors"
+                                className="flex items-center gap-3 p-1.5 rounded-xl header-profile-button transition-colors"
                             >
                                 <Avatar name={user?.name} size="sm" />
                                 <div className="hidden md:block text-left">
-                                    <p className="text-sm font-medium text-slate-100 leading-tight">{user?.name}</p>
-                                    <p className="text-xs text-slate-400 capitalize">{user?.role?.replace('_', ' ')}</p>
+                                    <p className="text-sm font-semibold text-white leading-tight">{user?.name}</p>
+                                    <p className="text-[11px] text-medical-100 uppercase tracking-[0.14em]">{user?.role?.replace('_', ' ')}</p>
                                 </div>
-                                <Icons.ChevronDown size={16} className="text-slate-400" />
+                                <Icons.ChevronDown size={16} className="text-medical-100" />
                             </button>
                             {showProfile && (
-                                <div className="absolute right-0 top-full mt-2 w-56 bg-slate-900/95 rounded-2xl shadow-[0_20px_40px_rgba(2,6,23,0.35)] border border-slate-700 py-2 dropdown-menu z-50">
-                                    <div className="px-4 py-3 border-b border-slate-700">
-                                        <p className="font-medium text-sm text-slate-100">{user?.name}</p>
-                                        <p className="text-xs text-slate-400">{user?.email}</p>
+                                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-2 dropdown-menu z-50">
+                                    <div className="px-4 py-3 border-b border-slate-100">
+                                        <p className="font-medium text-sm text-slate-900">{user?.name}</p>
+                                        <p className="text-xs text-slate-500">{user?.email}</p>
                                     </div>
-                                    <button onClick={() => { onNavigate?.('patients'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 flex items-center gap-2">
+                                    <button onClick={() => { onNavigate?.('patients'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                         <Icons.User size={16} /> Profile
                                     </button>
-                                    <button onClick={() => { onNavigate?.('settings'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 flex items-center gap-2">
+                                    <button onClick={() => { onNavigate?.('settings'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                         <Icons.Settings size={16} /> Settings
                                     </button>
-                                    <div className="border-t border-slate-700 mt-1 pt-1">
-                                        <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-red-500/10 flex items-center gap-2">
+                                    <div className="border-t border-slate-100 mt-1 pt-1">
+                                        <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
                                             <Icons.LogOut size={16} /> Sign Out
                                         </button>
                                     </div>
