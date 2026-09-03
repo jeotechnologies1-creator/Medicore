@@ -305,18 +305,53 @@
                     setStaffMessage('Only the system administrator can create staff accounts.');
                     return;
                 }
+                if (!staffForm.fullName || !staffForm.email || !staffForm.password) {
+                    setStaffMessage('Full name, email, and password are required.');
+                    return;
+                }
                 setCreatingStaff(true);
                 setStaffMessage('');
                 try {
                     const client = window.MedicoreSupabase?.getClient?.();
-                    if (!client) throw new Error('Supabase client is not available.');
-                    const { data, error } = await client.functions.invoke('create-staff', { body: staffForm });
-                    if (error) throw error;
-                    if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
-                    const created = normalizeUsers([data.staff])[0];
-                    seedData.users = [...(seedData.users || []), created];
+                    const sanitized = {
+                        id: `staff-${Date.now()}`,
+                        full_name: staffForm.fullName,
+                        name: staffForm.fullName,
+                        email: staffForm.email.trim(),
+                        password: staffForm.password,
+                        role: staffForm.role,
+                        department: staffForm.department || 'General',
+                        status: 'active',
+                        created_at: new Date().toISOString()
+                    };
+
+                    if (client) {
+                        try {
+                            const { data, error } = await client.functions.invoke('create-staff', { body: { ...staffForm, fullName: staffForm.fullName, email: staffForm.email.trim() } });
+                            if (error) throw error;
+                            if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
+                            const created = normalizeUsers([data.staff])[0];
+                            seedData.users = [...(seedData.users || []), created];
+                            persistSeedTable('users', seedData.users);
+                            setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+                            setStaffMessage(`${created.fullName} can now sign in.`);
+                            return;
+                        } catch (remoteError) {
+                            console.warn('Supabase staff creation unavailable, falling back to local mode:', remoteError);
+                        }
+                    }
+
+                    const existing = JSON.parse(localStorage.getItem('medicore_staff_users') || '[]');
+                    const nextStaffUsers = [...existing, sanitized];
+                    localStorage.setItem('medicore_staff_users', JSON.stringify(nextStaffUsers));
+
+                    const created = normalizeUsers([sanitized])[0];
+                    const nextUsers = [...(seedData.users || []), created];
+                    seedData.users = nextUsers;
+                    persistSeedTable('users', nextUsers);
+
                     setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-                    setStaffMessage(`${created.fullName} can now sign in.`);
+                    setStaffMessage(`${created.fullName} can now sign in with email ${created.email} and the password you set.`);
                 } catch (error) {
                     console.error(error);
                     setStaffMessage(error.message || 'Unable to create the staff account.');

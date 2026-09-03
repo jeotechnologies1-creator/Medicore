@@ -543,6 +543,29 @@
                     }))
                 ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+                const longitudinalSummary = [
+                    {
+                        title: 'Primary diagnosis',
+                        value: encounterNotes[0]?.diagnosis || (patientConditions[0]?.conditionName || 'No diagnosis yet'),
+                        accent: 'medical'
+                    },
+                    {
+                        title: 'Current medications',
+                        value: patientMedicationOrders.length ? patientMedicationOrders.slice(0, 3).map(item => item.medicationName).join(', ') : 'No active medication orders',
+                        accent: 'emerald'
+                    },
+                    {
+                        title: 'Allergy status',
+                        value: patientAllergies.length ? patientAllergies.slice(0, 2).map(item => item.substance).join(', ') : 'No recorded allergies',
+                        accent: 'amber'
+                    },
+                    {
+                        title: 'Recent admission',
+                        value: patientAdmissions[0]?.diagnosis || 'No active admission',
+                        accent: 'violet'
+                    }
+                ];
+
                 const tabs = [
                     { id: 'overview', label: 'Overview' },
                     { id: 'chart', label: 'Clinical Chart' },
@@ -607,6 +630,17 @@
                                                     <p className="text-xs text-slate-500 uppercase tracking-wide">Registration Date</p>
                                                     <p className="text-sm font-medium text-slate-900">{formatDate(patient.registrationDate)}</p>
                                                 </div>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Longitudinal Clinical Summary">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {longitudinalSummary.map((item) => (
+                                                    <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                                        <p className="text-xs uppercase tracking-wide text-slate-500">{item.title}</p>
+                                                        <p className="mt-2 text-sm font-medium text-slate-900">{item.value}</p>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </Card>
 

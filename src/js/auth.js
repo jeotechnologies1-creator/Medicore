@@ -2,6 +2,36 @@
         // AUTH CONTEXT
         // ==========================================
         const AuthContext = React.createContext(null);
+        const LOCAL_STAFF_STORE_KEY = 'medicore_staff_users';
+        const DEFAULT_LOCAL_STAFF_USERS = [
+            { id: 'staff-doctor-1', name: 'Dr. Sarah Smith', full_name: 'Dr. Sarah Smith', email: 'doctor@medicore.local', password: 'doctor123', role: 'doctor', department: 'General Medicine', status: 'active' },
+            { id: 'staff-nurse-1', name: 'Grace Okafor', full_name: 'Grace Okafor', email: 'nurse@medicore.local', password: 'nurse123', role: 'nurse', department: 'Emergency', status: 'active' },
+            { id: 'staff-reception-1', name: 'Musa Bello', full_name: 'Musa Bello', email: 'reception@medicore.local', password: 'reception123', role: 'receptionist', department: 'Front Desk', status: 'active' }
+        ];
+
+        const getStoredStaffUsers = () => {
+            try {
+                const raw = localStorage.getItem(LOCAL_STAFF_STORE_KEY);
+                if (!raw) {
+                    localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(DEFAULT_LOCAL_STAFF_USERS));
+                    return DEFAULT_LOCAL_STAFF_USERS;
+                }
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed) || !parsed.length) {
+                    localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(DEFAULT_LOCAL_STAFF_USERS));
+                    return DEFAULT_LOCAL_STAFF_USERS;
+                }
+                return parsed;
+            } catch (e) {
+                return DEFAULT_LOCAL_STAFF_USERS;
+            }
+        };
+
+        const saveStoredStaffUsers = (staffUsers) => {
+            try {
+                localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(staffUsers));
+            } catch (e) {}
+        };
 
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology',
@@ -281,6 +311,12 @@
                     const normalizedEmail = String(email || '').trim();
                     const normalizedPassword = String(password || '');
                     const isLocalAdmin = normalizedEmail.toLowerCase() === 'admin' && normalizedPassword === 'admin';
+                    const localStaffUsers = getStoredStaffUsers();
+                    const matchingStaff = localStaffUsers.find((person) => {
+                        const storedEmail = String(person.email || '').trim().toLowerCase();
+                        const storedPassword = String(person.password || '');
+                        return storedEmail === normalizedEmail.toLowerCase() && storedPassword === normalizedPassword;
+                    });
 
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
                         try {
@@ -289,6 +325,17 @@
                             console.warn('Supabase login fallback failed:', error);
                             found = null;
                         }
+                    }
+
+                    if (!found && matchingStaff) {
+                        found = {
+                            id: matchingStaff.id || `staff-${Date.now()}`,
+                            name: matchingStaff.name || matchingStaff.full_name || matchingStaff.email,
+                            full_name: matchingStaff.full_name || matchingStaff.name || matchingStaff.email,
+                            email: matchingStaff.email,
+                            role: matchingStaff.role || 'doctor',
+                            department: matchingStaff.department || ''
+                        };
                     }
 
                     if (!found && isLocalAdmin) {
@@ -462,6 +509,7 @@
                                     icon={Icons.Mail}
                                     required
                                 />
+                                <div className="-mt-2 text-xs text-slate-500">Default admin: admin / admin · Staff accounts created by admin also work here.</div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
                                     <div className="relative">

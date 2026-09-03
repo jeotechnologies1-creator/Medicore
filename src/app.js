@@ -1,3 +1,25 @@
+        const UnauthorizedModule = () => {
+            const { user } = useAuth();
+            return (
+                <div className="p-6 animate-fade-in">
+                    <div className="max-w-xl mx-auto">
+                        <Card title="Access restricted">
+                            <div className="space-y-4">
+                                <div className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">Permission denied</div>
+                                <p className="text-slate-700">
+                                    This module is not available for the current role: <span className="font-semibold text-slate-900">{user?.role || 'Unknown role'}</span>.
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                    Please contact your super administrator to request access or update the role matrix permissions.
+                                </p>
+                                <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: 'dashboard' }))}>Return to dashboard</Button>
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
@@ -74,7 +96,7 @@
 
             const renderModule = () => {
                 if (user && !hasModuleAccess(activeModule)) {
-                    return <DashboardModule />;
+                    return <UnauthorizedModule />;
                 }
 
                 switch (activeModule) {

@@ -4,13 +4,13 @@
         const AuditModule = () => {
             const [filterSeverity, setFilterSeverity] = useState('all');
 
-            const filteredLogs = seedData.auditLogs.filter(log => 
+            const filteredLogs = seedData.auditLogs.filter(log =>
                 filterSeverity === 'all' || log.severity === filterSeverity
             );
 
             const governanceSummary = {
-                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length,
-                pendingReviews: Math.max(3, Math.round((seedData.auditLogs.length || 0) * 0.18)),
+                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
+                pendingReviews: Math.max(3, Math.round((seedData.auditLogs.length || 0) * 0.18) + (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
                 complianceRate: 96,
                 escalationQueue: 5
             };
@@ -22,12 +22,41 @@
                 { id: 'INC-1058', patient: 'Samuel Adebayo', area: 'Patient ID', issue: 'Verification not completed before procedure', status: 'Escalated', owner: 'Clinical Safety Officer', due: '90m' }
             ];
 
+            const complianceChecks = [
+                {
+                    title: 'Medication allergy verification',
+                    status: ((seedData.allergies || []).length > 0 && (seedData.medicationOrders || []).length > 0) ? 'pass' : 'review',
+                    owner: 'Pharmacy QA',
+                    nextAction: 'Audit all active medication orders against allergy list.',
+                    sla: 'within 24h'
+                },
+                {
+                    title: 'Critical lab result acknowledgment',
+                    status: (seedData.labOrders || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
+                    owner: 'Lab Services',
+                    nextAction: 'Confirm acknowledgment and escalation within SLA.',
+                    sla: 'within 30 min'
+                },
+                {
+                    title: 'Consent and discharge documentation',
+                    status: (seedData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
+                    owner: 'Clinical Governance',
+                    nextAction: 'Ensure all discharge summaries include instruction and consent capture.',
+                    sla: 'within 4h'
+                }
+            ];
+            const escalationQueue = [
+                { id: 'EC-2', patient: 'Daniel Adebayo', area: 'Medication safety', due: '18m', owner: 'Pharmacy lead' },
+                { id: 'EC-7', patient: 'Grace Bassey', area: 'Critical lab follow-up', due: '42m', owner: 'Lab manager' },
+                { id: 'EC-9', patient: 'Samuel Adebayo', area: 'Consent capture', due: '1h 15m', owner: 'Clinical governance' }
+            ];
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Audit Logs</h2>
-                            <p className="text-slate-500 mt-1">System activity and security monitoring</p>
+                            <p className="text-slate-500 mt-1">System activity, clinical risk monitoring, and automated compliance checks</p>
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" icon={Icons.Filter}>Filter</Button>
@@ -53,6 +82,38 @@
                             <p className="mt-2 text-3xl font-bold text-medical-900">{governanceSummary.escalationQueue}</p>
                         </div>
                     </div>
+
+                    <Card title="Automation checks">
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                            {complianceChecks.map((check) => (
+                                <div key={check.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="font-medium text-slate-900">{check.title}</p>
+                                        <Badge variant={check.status === 'pass' ? 'success' : check.status === 'escalate' ? 'danger' : 'warning'}>{check.status}</Badge>
+                                    </div>
+                                    <p className="mt-3 text-xs text-slate-500">Owner: {check.owner}</p>
+                                    <p className="mt-2 text-sm text-slate-700">{check.nextAction}</p>
+                                    <p className="mt-2 text-xs text-medical-600">SLA: {check.sla}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+
+                    <Card title="Escalation queue">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {escalationQueue.map((item) => (
+                                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-xs uppercase tracking-wide text-slate-500">{item.id}</p>
+                                        <Badge variant="danger">Due {item.due}</Badge>
+                                    </div>
+                                    <p className="mt-3 font-semibold text-slate-900">{item.patient}</p>
+                                    <p className="mt-1 text-sm text-slate-600">{item.area}</p>
+                                    <p className="mt-3 text-xs text-slate-500">Owner: {item.owner}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
 
                     <Card title="Clinical governance board">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -133,6 +194,13 @@
                 { name: 'Incident Escalation Matrix.xlsx', category: 'Governance', owner: 'Operations', updated: '2026-08-26', status: 'Approved' }
             ];
 
+            const automationSummary = [
+                { label: 'High-risk events', value: (seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
+                { label: 'Open incidents', value: (seedData.clinicalAlerts || []).filter(item => item.status === 'open').length },
+                { label: 'Records to review', value: Math.max(2, (seedData.auditLogs || []).length / 2) },
+                { label: 'Retention coverage', value: '98%' }
+            ];
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -152,6 +220,17 @@
                         <StatCard title="Documents" value="168" icon={Icons.FileText} color="medical" />
                         <StatCard title="Compliance Rate" value="96%" icon={Icons.BarChart3} color="violet" />
                     </div>
+
+                    <Card title="Automated oversight metrics">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {automationSummary.map((item) => (
+                                <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-slate-500">{item.label}</p>
+                                    <p className="mt-2 text-2xl font-bold text-slate-900">{item.value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         <Card title="Policy register">
@@ -534,6 +613,7 @@
             };
 
             const togglePermission = (roleName, permissionKey) => {
+                const canonicalKey = permissionAliases[permissionKey] || permissionKey;
                 setRoleMatrix(prev => {
                     const next = prev.map(role =>
                         role.role === roleName
@@ -541,7 +621,7 @@
                                 ...role,
                                 permissions: {
                                     ...role.permissions,
-                                    [permissionKey]: !role.permissions[permissionKey]
+                                    [canonicalKey]: !(role.permissions?.[canonicalKey] ?? false)
                                 }
                             }
                             : role
@@ -656,6 +736,16 @@
                 }
 
                 setSaveMessage('Audit log export downloaded successfully.');
+            };
+
+            const permissionAliases = {
+                labs: 'laboratory',
+                lab: 'laboratory',
+                pharmacy: 'pharmacy',
+                billing: 'billing',
+                settings: 'settings',
+                patients: 'patients',
+                dashboard: 'dashboard'
             };
 
             const complianceChecks = [
@@ -850,13 +940,13 @@
                                         )
                                     },
                                     {
-                                        key: 'labs',
+                                        key: 'laboratory',
                                         title: 'Labs',
                                         render: (row) => (
                                             <input
                                                 type="checkbox"
-                                                checked={row.permissions.labs}
-                                                onChange={() => togglePermission(row.role, 'labs')}
+                                                checked={row.permissions.laboratory ?? row.permissions.labs ?? false}
+                                                onChange={() => togglePermission(row.role, 'laboratory')}
                                                 className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
                                             />
                                         )

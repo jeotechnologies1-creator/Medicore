@@ -772,8 +772,13 @@
             const [activeTab, setActiveTab] = useState('invoices');
             const [selectedInvoice, setSelectedInvoice] = useState(null);
             const [showNewInvoice, setShowNewInvoice] = useState(false);
+            const [showPaymentModal, setShowPaymentModal] = useState(false);
+            const [showInsuranceModal, setShowInsuranceModal] = useState(false);
             const [invoices, setInvoices] = useState(hydrateSeedData().billing || []);
+            const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
+            const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
+            const [claimForm, setClaimForm] = useState({ patientId: '', provider: 'AXA Health', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
 
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
@@ -820,21 +825,94 @@
                 setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
             };
 
+            const handleProcessPayment = () => {
+                if (!paymentForm.invoiceId || !Number(paymentForm.amount || 0)) return;
+                const updated = invoices.map((invoice) => {
+                    if (invoice.id !== paymentForm.invoiceId) return invoice;
+                    const paidNow = Number(invoice.paid || 0) + Number(paymentForm.amount || 0);
+                    const total = Number(invoice.total || 0);
+                    const balance = Math.max(0, total - paidNow);
+                    const status = paidNow >= total ? 'paid' : balance > 0 ? 'partial' : 'paid';
+                    return { ...invoice, paid: paidNow, balance, status, paymentMethod: paymentForm.method || invoice.paymentMethod };
+                });
+                persistSeedTable('billing', updated);
+                setInvoices(updated);
+                setShowPaymentModal(false);
+                setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
+            };
+
+            const handleAdvanceClaim = (claimId) => {
+                const queue = ['pending', 'under_review', 'approved', 'paid'];
+                const nextClaims = (seedData.insuranceClaims || []).map((claim) => {
+                    if (claim.id !== claimId) return claim;
+                    const currentIndex = queue.indexOf(claim.status || 'pending');
+                    const nextStatus = queue[Math.min(queue.length - 1, currentIndex + 1)] || 'pending';
+                    return { ...claim, status: nextStatus, amountApproved: Number(claim.amountApproved || 0) || Number(claim.amountClaimed || 0) };
+                });
+                persistSeedTable('insuranceClaims', nextClaims);
+                seedData.insuranceClaims = nextClaims;
+                persistSeedTable('auditLogs', [
+                    ...((seedData.auditLogs || [])),
+                    { id: 'audit-' + Date.now(), userId: 'user-admin', action: 'Insurance claim status advanced', entityType: 'insurance_claim', entityId: claimId, timestamp: new Date().toISOString(), severity: 'info' }
+                ]);
+            };
+
+            const handleSubmitInsuranceClaim = () => {
+                if (!claimForm.patientId) return;
+                const nextClaim = {
+                    id: 'claim_' + Date.now(),
+                    patientId: claimForm.patientId,
+                    claimNumber: claimForm.claimNumber || 'CLM-' + Date.now(),
+                    provider: claimForm.provider,
+                    amountClaimed: Number(claimForm.amountClaimed || 0),
+                    amountApproved: Number(claimForm.amountApproved || 0),
+                    status: Number(claimForm.amountApproved || 0) > 0 ? 'under_review' : 'pending'
+                };
+                const next = [...(seedData.insuranceClaims || []), nextClaim];
+                persistSeedTable('insuranceClaims', next);
+                seedData.insuranceClaims = next;
+                persistSeedTable('auditLogs', [
+                    ...((seedData.auditLogs || [])),
+                    { id: 'audit-' + Date.now(), userId: 'user-admin', action: 'Insurance claim submitted', entityType: 'insurance_claim', entityId: nextClaim.id, timestamp: new Date().toISOString(), severity: 'info' }
+                ]);
+                setShowInsuranceModal(false);
+                setClaimForm({ patientId: '', provider: 'AXA Health', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+            };
+
+            const totalRevenue = invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0);
+            const totalCollected = invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0);
+            const totalOutstanding = invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0);
+            const insuranceClaims = seedData.insuranceClaims || [];
+            const pendingClaims = insuranceClaims.filter(c => c.status === 'pending' || c.status === 'under_review').length;
+            const approvedClaims = insuranceClaims.filter(c => c.status === 'approved' || c.status === 'paid').length;
+            const deniedClaims = insuranceClaims.filter(c => c.status === 'denied').length;
+            const claimApprovalRate = insuranceClaims.length ? Math.round((approvedClaims / insuranceClaims.length) * 100) : 0;
+            const allowedInsurance = insuranceClaims.reduce((s, claim) => s + Number(claim.amountApproved || 0), 0);
+            const agingSummary = [
+                { label: 'Current', value: invoices.filter(i => Number(i.balance || 0) <= 30).length },
+                { label: '31-60 days', value: invoices.filter(i => Number(i.balance || 0) > 30 && Number(i.balance || 0) <= 60).length },
+                { label: '61-90 days', value: invoices.filter(i => Number(i.balance || 0) > 60 && Number(i.balance || 0) <= 90).length },
+                { label: '90+ days', value: invoices.filter(i => Number(i.balance || 0) > 90).length }
+            ];
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Billing</h2>
-                            <p className="text-slate-500 mt-1">Invoices, payments, and insurance</p>
+                            <p className="text-slate-500 mt-1">Invoices, payments, and insurance workflows</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewInvoice(true)}>Create Invoice</Button>
+                        <div className="flex gap-2">
+                            <Button variant="secondary" onClick={() => setShowInsuranceModal(true)}>New Claim</Button>
+                            <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewInvoice(true)}>Create Invoice</Button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Total Revenue" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0))} icon={Icons.DollarSign} color="emerald" />
-                        <StatCard title="Outstanding" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0))} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Collected" value={formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0))} icon={Icons.CheckCircle} color="medical" />
-                        <StatCard title="Pending Claims" value={(seedData.insuranceClaims || []).filter(c => c.status === 'pending').length} icon={Icons.Shield} color="violet" />
+                        <StatCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Outstanding" value={formatCurrency(totalOutstanding)} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Collected" value={formatCurrency(totalCollected)} icon={Icons.CheckCircle} color="medical" />
+                        <StatCard title="Pending Claims" value={pendingClaims} icon={Icons.Shield} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -858,6 +936,7 @@
                                 actions={(row) => (
                                     <>
                                         <Button variant="primary" size="sm" onClick={() => setSelectedInvoice(row)}>View</Button>
+                                        <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '' }); setShowPaymentModal(true); }}>Post Payment</Button>
                                     </>
                                 )}
                             />
@@ -883,38 +962,73 @@
                     )}
 
                     {activeTab === 'insurance' && (
-                        <Card>
-                            <DataTable
-                                columns={[
-                                    { key: 'claimNumber', title: 'Claim #' },
-                                    { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
-                                        return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
-                                    }},
-                                    { key: 'provider', title: 'Provider' },
-                                    { key: 'amountClaimed', title: 'Claimed', render: (row) => formatCurrency(row.amountClaimed) },
-                                    { key: 'amountApproved', title: 'Approved', render: (row) => formatCurrency(row.amountApproved) },
-                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' || row.status === 'paid' ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
-                                ]}
-                                data={seedData.insuranceClaims || []}
-                            />
-                        </Card>
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="rounded-2xl border border-medical-200 bg-medical-50 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-medical-600">Approval rate</p>
+                                    <p className="mt-2 text-2xl font-bold text-medical-900">{claimApprovalRate}%</p>
+                                </div>
+                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-emerald-600">Approved</p>
+                                    <p className="mt-2 text-2xl font-bold text-emerald-900">{approvedClaims}</p>
+                                </div>
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-amber-600">Pending</p>
+                                    <p className="mt-2 text-2xl font-bold text-amber-900">{pendingClaims}</p>
+                                </div>
+                                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                                    <p className="text-xs uppercase tracking-wide text-red-600">Denied</p>
+                                    <p className="mt-2 text-2xl font-bold text-red-900">{deniedClaims}</p>
+                                </div>
+                            </div>
+
+                            <Card title="Claims queue">
+                                <div className="mb-4 flex flex-wrap gap-2">
+                                    {['all', 'pending', 'under_review', 'approved', 'paid', 'denied'].map((status) => (
+                                        <button
+                                            key={status}
+                                            onClick={() => setInsuranceFilter(status)}
+                                            className={'rounded-full px-3 py-1.5 text-xs font-medium transition ' + (insuranceFilter === status ? 'bg-medical-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')}
+                                        >
+                                            {status === 'all' ? 'All' : status.replace('_', ' ')}
+                                        </button>
+                                    ))}
+                                </div>
+                                <DataTable
+                                    columns={[
+                                        { key: 'claimNumber', title: 'Claim #' },
+                                        { key: 'patient', title: 'Patient', render: (row) => {
+                                            const patient = seedData.patients.find(p => p.id === row.patientId);
+                                            return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
+                                        }},
+                                        { key: 'provider', title: 'Provider' },
+                                        { key: 'amountClaimed', title: 'Claimed', render: (row) => formatCurrency(row.amountClaimed) },
+                                        { key: 'amountApproved', title: 'Approved', render: (row) => formatCurrency(row.amountApproved) },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' || row.status === 'paid' ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
+                                    ]}
+                                    data={(insuranceClaims || []).filter((claim) => insuranceFilter === 'all' || claim.status === insuranceFilter)}
+                                    actions={(row) => (
+                                        <Button variant="secondary" size="sm" onClick={() => handleAdvanceClaim(row.id)}>Advance</Button>
+                                    )}
+                                />
+                            </Card>
+                        </div>
                     )}
 
                     {activeTab === 'reports' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Revenue by Department">
-                                <BarChart 
+                                <BarChart
                                     data={[
                                         { label: 'Consult', value: 35000 },
                                         { label: 'Lab', value: 28000 },
                                         { label: 'Radio', value: 22000 },
                                         { label: 'Pharm', value: 18000 },
                                         { label: 'Surgery', value: 45000 }
-                                    ]} 
-                                    width={500} 
-                                    height={250} 
-                                    color="#2563eb" 
+                                    ]}
+                                    width={500}
+                                    height={250}
+                                    color="#2563eb"
                                 />
                             </Card>
                             <Card title="Payment Summary">
@@ -925,12 +1039,26 @@
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-700">Collected</span>
-                                        <span className="font-medium text-slate-900">{formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0))}</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(totalCollected)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-700">Outstanding</span>
-                                        <span className="font-medium text-slate-900">{formatCurrency(invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0))}</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(totalOutstanding)}</span>
                                     </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-700">Insurance approved</span>
+                                        <span className="font-medium text-slate-900">{formatCurrency(allowedInsurance)}</span>
+                                    </div>
+                                </div>
+                            </Card>
+                            <Card title="Aging summary" className="lg:col-span-2">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {agingSummary.map((bucket) => (
+                                        <div key={bucket.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                            <p className="text-xs uppercase tracking-wide text-slate-500">{bucket.label}</p>
+                                            <p className="mt-2 text-2xl font-bold text-slate-900">{bucket.value}</p>
+                                        </div>
+                                    ))}
                                 </div>
                             </Card>
                         </div>
@@ -953,6 +1081,46 @@
                             <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
                             <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
                             <Input label="Amount Paid" type="number" value={invoiceForm.paid} onChange={(e) => setInvoiceForm(prev => ({ ...prev, paid: e.target.value }))} />
+                        </div>
+                    </Modal>
+
+                    <Modal
+                        isOpen={showPaymentModal}
+                        onClose={() => setShowPaymentModal(false)}
+                        title="Post payment"
+                        size="sm"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.CheckCircle} onClick={handleProcessPayment}>Save payment</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Payment method" value={paymentForm.method} onChange={(e) => setPaymentForm(prev => ({ ...prev, method: e.target.value }))} options={[{ value: 'Card', label: 'Card' }, { value: 'Cash', label: 'Cash' }, { value: 'Bank Transfer', label: 'Bank Transfer' }, { value: 'Insurance', label: 'Insurance' }]} />
+                            <Input label="Amount" type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))} />
+                            <Input label="Reference" value={paymentForm.reference} onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))} />
+                        </div>
+                    </Modal>
+
+                    <Modal
+                        isOpen={showInsuranceModal}
+                        onClose={() => setShowInsuranceModal(false)}
+                        title="Add insurance claim"
+                        size="md"
+                        footer={
+                            <div className="flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowInsuranceModal(false)}>Cancel</Button>
+                                <Button variant="primary" icon={Icons.Shield} onClick={handleSubmitInsuranceClaim}>Submit claim</Button>
+                            </div>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Input label="Provider" value={claimForm.provider} onChange={(e) => setClaimForm(prev => ({ ...prev, provider: e.target.value }))} />
+                            <Input label="Claim Number" value={claimForm.claimNumber} onChange={(e) => setClaimForm(prev => ({ ...prev, claimNumber: e.target.value }))} />
+                            <Input label="Amount Claimed" type="number" value={claimForm.amountClaimed} onChange={(e) => setClaimForm(prev => ({ ...prev, amountClaimed: e.target.value }))} />
+                            <Input label="Amount Approved" type="number" value={claimForm.amountApproved} onChange={(e) => setClaimForm(prev => ({ ...prev, amountApproved: e.target.value }))} />
                         </div>
                     </Modal>
 
