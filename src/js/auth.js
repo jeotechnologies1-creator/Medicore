@@ -3,6 +3,87 @@
         // ==========================================
         const AuthContext = React.createContext(null);
 
+        const canonicalModuleKeys = [
+            'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology',
+            'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
+            'hr', 'offices', 'reports', 'audit', 'settings', 'consultations', 'results',
+            'upload', 'ward', 'vitals', 'medications', 'prescriptions', 'portal', 'messages',
+            'documents', 'lab_results'
+        ];
+
+        const normalizeModulePermissionKey = (moduleId) => {
+            const key = String(moduleId || '').trim().toLowerCase();
+            const aliases = {
+                appointment: 'appointments',
+                appointments: 'appointments',
+                doctor: 'doctors',
+                doctors: 'doctors',
+                lab: 'laboratory',
+                labs: 'laboratory',
+                laboratory: 'laboratory',
+                imaging: 'radiology',
+                radiology: 'radiology',
+                pharmacy: 'pharmacy',
+                inventory: 'inventory',
+                admission: 'admissions',
+                admissions: 'admissions',
+                surgery: 'surgeries',
+                surgeries: 'surgeries',
+                clinicalsafety: 'clinical_safety',
+                clinical_safety: 'clinical_safety',
+                safety: 'clinical_safety',
+                auditlog: 'audit',
+                auditlogs: 'audit',
+                audit: 'audit',
+                report: 'reports',
+                reports: 'reports',
+                office: 'offices',
+                offices: 'offices',
+                medical_offices: 'offices',
+                staff: 'hr',
+                hr: 'hr',
+                human_resources: 'hr',
+                'hr_staff': 'hr',
+                settings: 'settings',
+                dashboard: 'dashboard',
+                patient: 'patients',
+                patients: 'patients',
+                'medical offices': 'offices',
+                'hr & staff': 'hr',
+                'clinical safety': 'clinical_safety'
+            };
+            return aliases[key] || key;
+        };
+
+        const repairRoleMatrix = (matrix) => {
+            const basePermissions = canonicalModuleKeys.reduce((acc, moduleKey) => {
+                acc[moduleKey] = false;
+                return acc;
+            }, {});
+
+            const seededSuperAdmin = { ...basePermissions, dashboard: true, patients: true, appointments: true, doctors: true, laboratory: true, radiology: true, pharmacy: true, billing: true, admissions: true, surgeries: true, clinical_safety: true, inventory: true, hr: true, offices: true, reports: true, audit: true, settings: true };
+
+            return (Array.isArray(matrix) ? matrix : []).map((role) => {
+                const rawPermissions = role && typeof role.permissions === 'object' ? role.permissions : {};
+                const normalizedPermissions = Object.entries(rawPermissions).reduce((acc, [moduleKey, value]) => {
+                    const normalizedKey = normalizeModulePermissionKey(moduleKey);
+                    if (canonicalModuleKeys.includes(normalizedKey)) {
+                        acc[normalizedKey] = Boolean(value);
+                    }
+                    return acc;
+                }, { ...basePermissions });
+
+                const computedPermissions = (String(role?.role || '').toLowerCase().includes('super') || String(role?.role || '').toLowerCase().includes('admin'))
+                    ? { ...seededSuperAdmin, ...normalizedPermissions }
+                    : { ...basePermissions, ...normalizedPermissions };
+
+                return {
+                    ...role,
+                    permissions: computedPermissions
+                };
+            });
+        };
+
         const defaultRoleMatrix = [
             {
                 role: 'Super Admin',
@@ -148,7 +229,9 @@
                         })();
 
                         if (savedLocal.length) {
-                            setRoleMatrix(savedLocal);
+                            const repaired = repairRoleMatrix(savedLocal);
+                            setRoleMatrix(repaired);
+                            localStorage.setItem('medicore_role_matrix', JSON.stringify(repaired));
                             return;
                         }
 
@@ -156,8 +239,9 @@
                             const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
                             const remoteMatrix = Array.isArray(remoteSettings.roleMatrix) ? remoteSettings.roleMatrix : [];
                             if (remoteMatrix.length) {
-                                setRoleMatrix(remoteMatrix);
-                                localStorage.setItem('medicore_role_matrix', JSON.stringify(remoteMatrix));
+                                const repaired = repairRoleMatrix(remoteMatrix);
+                                setRoleMatrix(repaired);
+                                localStorage.setItem('medicore_role_matrix', JSON.stringify(repaired));
                             }
                         }
                     } catch (e) {
@@ -211,9 +295,29 @@
             const getStoredRoleMatrix = () => {
                 try {
                     const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
-                    return Array.isArray(saved) && saved.length ? saved : roleMatrix;
+                    const candidates = Array.isArray(saved) && saved.length ? saved : roleMatrix;
+                    const repaired = repairRoleMatrix(candidates);
+                    const superAdmin = repaired.find(row => normalizeRoleKey(row.role) === 'super_admin');
+                    if (!superAdmin || !superAdmin.permissions || !superAdmin.permissions.appointments || !superAdmin.permissions.reports || !superAdmin.permissions.audit) {
+                        const forcedSuperAdmin = {
+                            role: 'Super Admin',
+                            permissions: canonicalModuleKeys.reduce((acc, moduleKey) => {
+                                acc[moduleKey] = true;
+                                return acc;
+                            }, {})
+                        };
+                        const merged = repaired.some(row => normalizeRoleKey(row.role) === 'super_admin')
+                            ? repaired.map(row => normalizeRoleKey(row.role) === 'super_admin' ? forcedSuperAdmin : row)
+                            : [...repaired, forcedSuperAdmin];
+                        localStorage.setItem('medicore_role_matrix', JSON.stringify(merged));
+                        return merged;
+                    }
+                    if (JSON.stringify(repaired) !== JSON.stringify(candidates)) {
+                        localStorage.setItem('medicore_role_matrix', JSON.stringify(repaired));
+                    }
+                    return repaired;
                 } catch (e) {
-                    return roleMatrix;
+                    return repairRoleMatrix(roleMatrix);
                 }
             };
 
@@ -247,10 +351,15 @@
             const hasModuleAccess = useCallback((moduleId) => {
                 if (!user) return false;
                 const normalizedRole = normalizeRoleKey(user.role);
+                const normalizedModule = normalizeModulePermissionKey(moduleId);
+                if (normalizedRole === 'super_admin') {
+                    return canonicalModuleKeys.includes(normalizedModule) || (normalizedModule === 'settings' || normalizedModule === 'dashboard');
+                }
+
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
                 if (match && match.permissions) {
-                    return Boolean(match.permissions[moduleId]);
+                    return Boolean(match.permissions[normalizedModule] ?? match.permissions[moduleId]);
                 }
 
                 const fallback = {
@@ -264,7 +373,7 @@
                     accountant: ['dashboard', 'billing', 'reports'],
                     patient: ['dashboard', 'portal', 'appointments', 'lab_results', 'prescriptions', 'billing', 'messages']
                 };
-                return (fallback[normalizedRole] || []).includes(moduleId);
+                return (fallback[normalizedRole] || []).includes(normalizedModule);
             }, [user, roleMatrix]);
 
             return (
