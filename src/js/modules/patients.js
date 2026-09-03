@@ -130,6 +130,31 @@
                     description: '',
                     targetDate: ''
                 });
+                const [admissionForm, setAdmissionForm] = useState({
+                    ward: 'General Ward',
+                    bedNumber: 'A-12',
+                    diagnosis: '',
+                    admissionDate: new Date().toISOString().split('T')[0],
+                    acuity: 'stable'
+                });
+                const [dischargeForm, setDischargeForm] = useState({
+                    dischargeDate: new Date().toISOString().split('T')[0],
+                    summary: '',
+                    followUp: '',
+                    instructions: ''
+                });
+                const [followUpForm, setFollowUpForm] = useState({
+                    clinic: 'Primary Care',
+                    provider: 'Dr. Ada Nwosu',
+                    nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    reason: '',
+                    instructions: ''
+                });
+                const [problemForm, setProblemForm] = useState({
+                    conditionName: '',
+                    status: 'active',
+                    onsetDate: ''
+                });
 
                 const allergyMatch = medicationForm.medicationName
                     ? patientAllergies.find((allergy) => {
@@ -200,6 +225,151 @@
                     seedData.carePlans = next;
                     setCarePlanForm({ title: '', description: '', targetDate: '' });
                 };
+
+                const handleAddProblem = () => {
+                    if (!problemForm.conditionName.trim()) return;
+
+                    const nextProblem = {
+                        id: 'cond_' + Date.now(),
+                        patientId: patient.id,
+                        conditionName: problemForm.conditionName.trim(),
+                        clinicalStatus: problemForm.status,
+                        verificationStatus: 'provisional',
+                        onsetDate: problemForm.onsetDate || new Date().toISOString().split('T')[0],
+                        notes: 'Added from patient chart'
+                    };
+
+                    const next = [nextProblem, ...(seedData.conditions || [])];
+                    persistSeedTable('conditions', next);
+                    seedData.conditions = next;
+                    setProblemForm({ conditionName: '', status: 'active', onsetDate: '' });
+                };
+
+                const handleSaveAdmissionNote = () => {
+                    const nextAdmission = {
+                        id: 'adm_' + Date.now(),
+                        patientId: patient.id,
+                        ward: admissionForm.ward,
+                        bedNumber: admissionForm.bedNumber,
+                        admissionDate: admissionForm.admissionDate || new Date().toISOString().split('T')[0],
+                        dischargeDate: null,
+                        doctorId: 'u2',
+                        diagnosis: admissionForm.diagnosis || 'Admission assessment pending',
+                        status: 'active',
+                        acuity: admissionForm.acuity || 'stable'
+                    };
+
+                    const next = [nextAdmission, ...(seedData.admissions || [])];
+                    persistSeedTable('admissions', next);
+                    seedData.admissions = next;
+                    setAdmissionForm({
+                        ward: 'General Ward',
+                        bedNumber: 'A-12',
+                        diagnosis: '',
+                        admissionDate: new Date().toISOString().split('T')[0],
+                        acuity: 'stable'
+                    });
+                };
+
+                const handleSaveDischargeSummary = () => {
+                    if (!dischargeForm.summary.trim() && !dischargeForm.followUp.trim() && !dischargeForm.instructions.trim()) return;
+
+                    const updatedAdmissions = (seedData.admissions || []).map((entry) => {
+                        if (entry.patientId === patient.id && entry.status === 'active') {
+                            return {
+                                ...entry,
+                                status: 'discharged',
+                                dischargeDate: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0],
+                                diagnosis: entry.diagnosis || dischargeForm.summary || 'Discharge follow-up planned'
+                            };
+                        }
+                        return entry;
+                    });
+
+                    persistSeedTable('admissions', updatedAdmissions);
+                    seedData.admissions = updatedAdmissions;
+
+                    const summaryDocument = {
+                        id: 'doc_' + Date.now(),
+                        patientId: patient.id,
+                        fileName: `Discharge Summary - ${patient.patientNumber}`,
+                        documentType: 'Discharge Summary',
+                        fileUrl: '',
+                        uploadedBy: 'Clinical Team',
+                        uploadedAt: new Date().toISOString(),
+                        size: '1.2 KB',
+                        summary: dischargeForm.summary,
+                        followUp: dischargeForm.followUp,
+                        instructions: dischargeForm.instructions
+                    };
+
+                    const nextDocuments = [summaryDocument, ...(seedData.documents || [])];
+                    persistSeedTable('documents', nextDocuments);
+                    seedData.documents = nextDocuments;
+
+                    setDischargeForm({
+                        dischargeDate: new Date().toISOString().split('T')[0],
+                        summary: '',
+                        followUp: '',
+                        instructions: ''
+                    });
+                };
+
+                const handleSaveFollowUp = () => {
+                    if (!followUpForm.reason.trim()) return;
+
+                    const nextFollowUp = {
+                        id: 'fup_' + Date.now(),
+                        patientId: patient.id,
+                        type: 'Follow-up',
+                        department: followUpForm.clinic,
+                        doctorId: 'u2',
+                        date: followUpForm.nextVisitDate,
+                        time: '09:00',
+                        status: 'scheduled',
+                        notes: followUpForm.reason.trim(),
+                        createdAt: new Date().toISOString()
+                    };
+
+                    const nextAppointments = [nextFollowUp, ...(seedData.appointments || [])];
+                    persistSeedTable('appointments', nextAppointments);
+                    seedData.appointments = nextAppointments;
+
+                    setFollowUpForm({
+                        clinic: 'Primary Care',
+                        provider: 'Dr. Ada Nwosu',
+                        nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        reason: '',
+                        instructions: ''
+                    });
+                };
+
+                const clinicalTimeline = [
+                    ...encounterNotes.map((encounter) => ({
+                        id: encounter.id,
+                        type: 'encounter',
+                        label: 'Encounter',
+                        title: encounter.diagnosis || 'Clinical note',
+                        detail: encounter.chiefComplaint,
+                        timestamp: encounter.createdAt
+                    })),
+                    ...patientConditions.map((condition) => ({
+                        id: condition.id,
+                        type: 'condition',
+                        label: 'Problem',
+                        title: condition.conditionName,
+                        detail: condition.clinicalStatus,
+                        timestamp: condition.onsetDate || new Date().toISOString()
+                    })),
+                    ...patientMedicationOrders.map((order) => ({
+                        id: order.id,
+                        type: 'medication',
+                        label: 'Medication',
+                        title: order.medicationName,
+                        detail: `${order.dose} ${order.doseUnit} • ${order.frequency}`,
+                        timestamp: new Date().toISOString()
+                    }))
+                ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
                 const tabs = [
                     { id: 'overview', label: 'Overview' },
@@ -420,6 +590,17 @@
                                                     )}
                                                 </div>
                                                 <div>
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Add diagnosis/problem</p>
+                                                    <div className="space-y-3">
+                                                        <Input label="Diagnosis/problem name" value={problemForm.conditionName} onChange={(e) => setProblemForm(prev => ({ ...prev, conditionName: e.target.value }))} />
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <Select label="Status" value={problemForm.status} onChange={(e) => setProblemForm(prev => ({ ...prev, status: e.target.value }))} options={[{ value: 'active', label: 'Active' }, { value: 'resolved', label: 'Resolved' }, { value: 'monitoring', label: 'Monitoring' }]} />
+                                                            <Input label="Onset date" type="date" value={problemForm.onsetDate} onChange={(e) => setProblemForm(prev => ({ ...prev, onsetDate: e.target.value }))} />
+                                                        </div>
+                                                        <Button variant="primary" className="w-full justify-center" icon={Icons.FileText} onClick={handleAddProblem}>Add Diagnosis</Button>
+                                                    </div>
+                                                </div>
+                                                <div>
                                                     <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Allergy list</p>
                                                     {patientAllergies.length ? (
                                                         <div className="space-y-2">
@@ -458,6 +639,56 @@
                                                 )}
                                             </div>
                                         </Card>
+
+                                        <Card title="Admission & discharge workflow" subtitle="Realistic inpatient continuity">
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Input label="Ward" value={admissionForm.ward} onChange={(e) => setAdmissionForm(prev => ({ ...prev, ward: e.target.value }))} />
+                                                    <Input label="Bed" value={admissionForm.bedNumber} onChange={(e) => setAdmissionForm(prev => ({ ...prev, bedNumber: e.target.value }))} />
+                                                </div>
+                                                <Input label="Admit date" type="date" value={admissionForm.admissionDate} onChange={(e) => setAdmissionForm(prev => ({ ...prev, admissionDate: e.target.value }))} />
+                                                <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'urgent', label: 'Urgent' }, { value: 'critical', label: 'Critical' }]} />
+                                                <TextArea label="Admission diagnosis / reason" rows={3} value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.Bed} onClick={handleSaveAdmissionNote}>Record Admission</Button>
+
+                                                <div className="border-t border-slate-200 pt-4 mt-2">
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Discharge summary</p>
+                                                    <Input label="Discharge date" type="date" value={dischargeForm.dischargeDate} onChange={(e) => setDischargeForm(prev => ({ ...prev, dischargeDate: e.target.value }))} />
+                                                    <TextArea label="Summary" rows={3} value={dischargeForm.summary} onChange={(e) => setDischargeForm(prev => ({ ...prev, summary: e.target.value }))} />
+                                                    <Input label="Follow-up plan" value={dischargeForm.followUp} onChange={(e) => setDischargeForm(prev => ({ ...prev, followUp: e.target.value }))} />
+                                                    <TextArea label="Patient instructions" rows={3} value={dischargeForm.instructions} onChange={(e) => setDischargeForm(prev => ({ ...prev, instructions: e.target.value }))} />
+                                                    <Button variant="secondary" className="w-full justify-center mt-2" icon={Icons.FileText} onClick={handleSaveDischargeSummary}>Finalize Discharge</Button>
+                                                </div>
+                                            </div>
+                                        </Card>
+
+                                        <Card title="Follow-up & medication reconciliation" subtitle="Continuity of care after discharge">
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Input label="Clinic" value={followUpForm.clinic} onChange={(e) => setFollowUpForm(prev => ({ ...prev, clinic: e.target.value }))} />
+                                                    <Input label="Provider" value={followUpForm.provider} onChange={(e) => setFollowUpForm(prev => ({ ...prev, provider: e.target.value }))} />
+                                                </div>
+                                                <Input label="Next visit date" type="date" value={followUpForm.nextVisitDate} onChange={(e) => setFollowUpForm(prev => ({ ...prev, nextVisitDate: e.target.value }))} />
+                                                <TextArea label="Reason for follow-up" rows={3} value={followUpForm.reason} onChange={(e) => setFollowUpForm(prev => ({ ...prev, reason: e.target.value }))} />
+                                                <TextArea label="Care instructions" rows={3} value={followUpForm.instructions} onChange={(e) => setFollowUpForm(prev => ({ ...prev, instructions: e.target.value }))} />
+                                                <Button variant="primary" className="w-full justify-center" icon={Icons.Calendar} onClick={handleSaveFollowUp}>Schedule Follow-up</Button>
+
+                                                <div className="border-t border-slate-200 pt-4">
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Recent reconciliation</p>
+                                                    <div className="space-y-2 text-sm text-slate-700">
+                                                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                                            Active meds: {patientMedicationOrders.length ? patientMedicationOrders.slice(0, 3).map(m => m.medicationName).join(', ') : 'No active medications'}
+                                                        </div>
+                                                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                                                            Prescriptions: {patientPrescriptions.length ? patientPrescriptions.length : 0} recorded entries
+                                                        </div>
+                                                        <div className="p-2 rounded-lg bg-amber-50 border border-amber-100 text-amber-700">
+                                                            {patientAllergies.length ? `Safety check: ${patientAllergies[0].substance} allergy on file.` : 'Safety check: no allergy flags recorded.'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </Card>
                                     </div>
 
                                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -474,21 +705,41 @@
                                             />
                                         </Card>
 
-                                        <Card title="Medication orders history">
-                                            <DataTable
-                                                columns={[
-                                                    { key: 'medicationName', title: 'Medication' },
-                                                    { key: 'dose', title: 'Dose', render: (row) => `${row.dose} ${row.doseUnit}` },
-                                                    { key: 'frequency', title: 'Frequency' },
-                                                    { key: 'route', title: 'Route' },
-                                                    { key: 'indication', title: 'Indication' },
-                                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
-                                                ]}
-                                                data={patientMedicationOrders.slice(0, 10)}
-                                                emptyMessage="No medication orders recorded for this patient"
-                                            />
+                                        <Card title="Clinical timeline">
+                                            <div className="space-y-3">
+                                                {clinicalTimeline.length ? clinicalTimeline.slice(0, 8).map((entry) => (
+                                                    <div key={entry.id} className="flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                                        <div className="mt-1 flex-shrink-0 h-8 w-8 rounded-full bg-medical-100 text-medical-600 flex items-center justify-center">
+                                                            {entry.type === 'encounter' ? <Icons.FileText size={14} /> : entry.type === 'condition' ? <Icons.Activity size={14} /> : <Icons.Pill size={14} />}
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <span className="text-xs uppercase tracking-wide text-slate-500">{entry.label}</span>
+                                                                <span className="text-[11px] text-slate-400">{formatDateTime(entry.timestamp)}</span>
+                                                            </div>
+                                                            <div className="font-medium text-slate-900 mt-1">{entry.title}</div>
+                                                            <div className="text-sm text-slate-600">{entry.detail}</div>
+                                                        </div>
+                                                    </div>
+                                                )) : <p className="text-sm text-slate-500">No clinical events recorded.</p>}
+                                            </div>
                                         </Card>
                                     </div>
+
+                                    <Card title="Medication orders history">
+                                        <DataTable
+                                            columns={[
+                                                { key: 'medicationName', title: 'Medication' },
+                                                { key: 'dose', title: 'Dose', render: (row) => `${row.dose} ${row.doseUnit}` },
+                                                { key: 'frequency', title: 'Frequency' },
+                                                { key: 'route', title: 'Route' },
+                                                { key: 'indication', title: 'Indication' },
+                                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
+                                            ]}
+                                            data={patientMedicationOrders.slice(0, 10)}
+                                            emptyMessage="No medication orders recorded for this patient"
+                                        />
+                                    </Card>
                                 </div>
                             )}
 
