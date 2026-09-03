@@ -98,7 +98,7 @@
                     case 'reports': return <ReportsModule />;
                     case 'audit': return <AuditModule />;
                     case 'settings': return <SettingsModule />;
-                    case 'offices': return <HRStaffModule />;
+                    case 'offices': return <MedicalOfficesModule />;
                     case 'hr': return <HRStaffModule />;
                     case 'portal': return <PatientPortalModule />;
                     case 'lab_results': return <PatientPortalModule />;
