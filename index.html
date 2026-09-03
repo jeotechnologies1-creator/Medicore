@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,8 +10,15 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="src/styles.css">
+    <script>
+        window.__MEDICORE_SUPABASE__ = {
+            url: 'https://wlarlseefitzcnfigyib.supabase.co/',
+            anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsYXJsc2VlZml0emNuZmlneWliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0Mzk1NzYsImV4cCI6MjEwNDAxNTU3Nn0.m1kSYgGQ6_ZovLljVHZkm14vkhSmqaQIwWnRB7Tm6TE'
+        };
+    </script>
     <script>
         tailwind.config = {
             theme: {
@@ -61,9 +69,11 @@
         }
     </script>
 </head>
+
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
     <script src="src/data/seedData.js"></script>
     <script type="text/babel" src="src/app.js"></script>
 </body>
+
 </html>
