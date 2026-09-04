@@ -671,6 +671,12 @@
                 nextStore[entry.appTable] = entry.mapper(data || []);
             }
 
+            const hasRemoteRows = Object.values(nextStore).some((value) => Array.isArray(value) && value.length > 0);
+            if (!hasRemoteRows) {
+                initializeLocalSeedData();
+                return seedData;
+            }
+
             Object.keys(seedData).forEach((key) => delete seedData[key]);
             Object.assign(seedData, nextStore);
             return nextStore;
