@@ -25,6 +25,8 @@ Run the SQL files in this order in the Supabase SQL editor:
 7. `supabase/patient_portal.sql`
 8. `supabase/production_hardening.sql`
 
+Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
+
 The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
 
 ## Required production setup
@@ -36,3 +38,5 @@ The last migration adds encounters, structured allergy/intolerance and problem l
 The same migration creates server-side audit triggers for clinical and operational changes. Audit records are read-only to application users and visible only to a super administrator.
 
 This is a clinical application, so it should also have a privacy review, a retention/backup plan, encrypted device/session management, a data-processing agreement where applicable, and clinical governance before real patient data is entered. It is not presented as a certified EHR.
+
+See [EMR_GO_LIVE_CHECKLIST.md](EMR_GO_LIVE_CHECKLIST.md) for the interoperability, safety, security, and operational controls required before go-live.

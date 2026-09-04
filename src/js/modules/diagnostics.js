@@ -213,7 +213,7 @@
                 const payload = {
                     id: 'lab_' + Date.now(),
                     patientId: newOrderForm.patientId,
-                    doctorId: 'u2',
+                    doctorId: null,
                     testType: newOrderForm.testType,
                     category: newOrderForm.category,
                     status: 'pending',
@@ -221,21 +221,14 @@
                     orderedDate: new Date().toISOString().split('T')[0],
                     resultDate: null,
                     results: null,
-                    technicianId: 'u5'
+                    technicianId: null
                 };
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('lab_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType, ordered_date: payload.orderedDate, technician_id: payload.technicianId, category: payload.category, priority: payload.priority, status: payload.status }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, testType: data[0].test_type || payload.testType, orderedDate: data[0].ordered_date || payload.orderedDate };
-                        const next = [...labOrders, mapped];
-                        persistSeedTable('labOrders', next);
-                        setLabOrders(next);
-                        setShowNewOrder(false);
-                        return;
-                    }
-                }
-                const next = [...labOrders, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('create laboratory order');
+                const { data, error } = await client.from('lab_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType, ordered_date: payload.orderedDate, technician_id: payload.technicianId, category: payload.category, priority: payload.priority, status: payload.status }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('create laboratory order', error);
+                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, testType: data[0].test_type || payload.testType, orderedDate: data[0].ordered_date || payload.orderedDate };
+                const next = [...labOrders, mapped];
                 persistSeedTable('labOrders', next);
                 setLabOrders(next);
                 setShowNewOrder(false);
@@ -249,17 +242,10 @@
                     resultDate: new Date().toISOString().split('T')[0],
                     results: { values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: 'normal' })) }
                 };
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { error } = await client.from('lab_orders').update({ status: 'completed', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
-                    if (!error) {
-                        const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
-                        persistSeedTable('labOrders', next);
-                        setLabOrders(next);
-                        setShowResultEntry(false);
-                        return;
-                    }
-                }
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('record laboratory results');
+                const { error } = await client.from('lab_orders').update({ status: 'completed', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
+                if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
                 persistSeedTable('labOrders', next);
                 setLabOrders(next);
@@ -522,21 +508,12 @@
                     orderedDate: new Date().toISOString().split('T')[0]
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('radiology_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType, modality: payload.modality, priority: payload.priority, status: payload.status, scheduled_date: payload.scheduledDate, report: payload.report, ordered_date: payload.orderedDate }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, studyType: data[0].study_type || payload.studyType, scheduledDate: data[0].scheduled_date || payload.scheduledDate, report: data[0].report || payload.report };
-                        const next = [...studies, mapped];
-                        persistSeedTable('radiologyOrders', next);
-                        setStudies(next);
-                        setShowNewOrder(false);
-                        setOrderForm({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
-                        return;
-                    }
-                }
-
-                const next = [...studies, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('create radiology order');
+                const { data, error } = await client.from('radiology_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType, modality: payload.modality, priority: payload.priority, status: payload.status, scheduled_date: payload.scheduledDate, report: payload.report, ordered_date: payload.orderedDate }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('create radiology order', error);
+                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, studyType: data[0].study_type || payload.studyType, scheduledDate: data[0].scheduled_date || payload.scheduledDate, report: data[0].report || payload.report };
+                const next = [...studies, mapped];
                 persistSeedTable('radiologyOrders', next);
                 setStudies(next);
                 setShowNewOrder(false);
@@ -544,19 +521,11 @@
             };
 
             const handleReportStudy = async (row) => {
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const client = window.MedicoreSupabase?.getClient?.();
                 const updated = { ...row, status: 'reported', report: row.report || 'Report finalized by radiology team.' };
-
-                if (client) {
-                    const { error } = await client.from('radiology_orders').update({ status: 'reported', report: updated.report }).eq('id', row.id);
-                    if (!error) {
-                        const next = studies.map((item) => item.id === row.id ? updated : item);
-                        persistSeedTable('radiologyOrders', next);
-                        setStudies(next);
-                        return;
-                    }
-                }
-
+                if (!client) return notifyPersistenceFailure('finalize radiology report');
+                const { error } = await client.from('radiology_orders').update({ status: 'reported', report: updated.report }).eq('id', row.id);
+                if (error) return notifyPersistenceFailure('finalize radiology report', error);
                 const next = studies.map((item) => item.id === row.id ? updated : item);
                 persistSeedTable('radiologyOrders', next);
                 setStudies(next);

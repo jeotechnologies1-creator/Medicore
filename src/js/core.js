@@ -394,6 +394,16 @@
             return nextRows;
         };
 
+        // Clinical and operational writes must never fall back to browser memory.
+        // A displayed record is therefore always a record that Supabase accepted.
+        const notifyPersistenceFailure = (operation, error) => {
+            const reason = error?.message ? ` ${error.message}` : '';
+            window.dispatchEvent(new CustomEvent('medicore:persistence-error', {
+                detail: `Unable to ${operation}. No changes were saved.${reason}`
+            }));
+            return null;
+        };
+
         const navigateTo = (module) => {
             window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: module }));
         };

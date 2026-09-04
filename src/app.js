@@ -61,6 +61,12 @@
             }, []);
 
             useEffect(() => {
+                const handlePersistenceError = (event) => addToast(event.detail || 'No changes were saved.', 'error');
+                window.addEventListener('medicore:persistence-error', handlePersistenceError);
+                return () => window.removeEventListener('medicore:persistence-error', handlePersistenceError);
+            }, []);
+
+            useEffect(() => {
                 setIsAuthenticated(Boolean(user));
             }, [user]);
 

@@ -248,23 +248,14 @@
                     setProblemForm({ conditionName: '', status: 'active', onsetDate: '' });
                 };
 
-                const handleSaveAdmissionNote = () => {
-                    const nextAdmission = {
-                        id: 'adm_' + Date.now(),
-                        patientId: patient.id,
-                        ward: admissionForm.ward,
-                        bedNumber: admissionForm.bedNumber,
-                        admissionDate: admissionForm.admissionDate || new Date().toISOString().split('T')[0],
-                        dischargeDate: null,
-                        doctorId: 'u2',
-                        diagnosis: admissionForm.diagnosis || 'Admission assessment pending',
-                        status: 'active',
-                        acuity: admissionForm.acuity || 'stable'
-                    };
-
-                    const next = [nextAdmission, ...(seedData.admissions || [])];
-                    persistSeedTable('admissions', next);
-                    seedData.admissions = next;
+                const handleSaveAdmissionNote = async () => {
+                    const saved = await insertClinicalRecord('admissions', {
+                        patient_id: patient.id, ward: admissionForm.ward || null, bed_number: admissionForm.bedNumber || null,
+                        admission_date: admissionForm.admissionDate || new Date().toISOString().split('T')[0],
+                        diagnosis: admissionForm.diagnosis || null, status: 'active', acuity: admissionForm.acuity || 'stable'
+                    });
+                    if (!saved) return;
+                    seedData.admissions = [normalizeAdmissions([saved])[0], ...(seedData.admissions || [])];
                     setAdmissionForm({
                         ward: 'General Ward',
                         bedNumber: 'A-12',
@@ -274,41 +265,15 @@
                     });
                 };
 
-                const handleSaveDischargeSummary = () => {
+                const handleSaveDischargeSummary = async () => {
                     if (!dischargeForm.summary.trim() && !dischargeForm.followUp.trim() && !dischargeForm.instructions.trim()) return;
-
-                    const updatedAdmissions = (seedData.admissions || []).map((entry) => {
-                        if (entry.patientId === patient.id && entry.status === 'active') {
-                            return {
-                                ...entry,
-                                status: 'discharged',
-                                dischargeDate: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0],
-                                diagnosis: entry.diagnosis || dischargeForm.summary || 'Discharge follow-up planned'
-                            };
-                        }
-                        return entry;
-                    });
-
-                    persistSeedTable('admissions', updatedAdmissions);
-                    seedData.admissions = updatedAdmissions;
-
-                    const summaryDocument = {
-                        id: 'doc_' + Date.now(),
-                        patientId: patient.id,
-                        fileName: `Discharge Summary - ${patient.patientNumber}`,
-                        documentType: 'Discharge Summary',
-                        fileUrl: '',
-                        uploadedBy: 'Clinical Team',
-                        uploadedAt: new Date().toISOString(),
-                        size: '1.2 KB',
-                        summary: dischargeForm.summary,
-                        followUp: dischargeForm.followUp,
-                        instructions: dischargeForm.instructions
-                    };
-
-                    const nextDocuments = [summaryDocument, ...(seedData.documents || [])];
-                    persistSeedTable('documents', nextDocuments);
-                    seedData.documents = nextDocuments;
+                    const activeAdmission = (seedData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
+                    const client = window.MedicoreSupabase?.getClient?.();
+                    if (!activeAdmission || !client) return notifyPersistenceFailure('finalize discharge');
+                    const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0], diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
+                    if (error || !data?.[0]) return notifyPersistenceFailure('finalize discharge', error);
+                    seedData.admissions = (seedData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);
+                    await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: 'Discharge summary', plan: [dischargeForm.summary, dischargeForm.followUp, dischargeForm.instructions].filter(Boolean).join('\n'), status: 'completed' });
 
                     setDischargeForm({
                         dischargeDate: new Date().toISOString().split('T')[0],
@@ -318,25 +283,11 @@
                     });
                 };
 
-                const handleSaveFollowUp = () => {
+                const handleSaveFollowUp = async () => {
                     if (!followUpForm.reason.trim()) return;
-
-                    const nextFollowUp = {
-                        id: 'fup_' + Date.now(),
-                        patientId: patient.id,
-                        type: 'Follow-up',
-                        department: followUpForm.clinic,
-                        doctorId: 'u2',
-                        date: followUpForm.nextVisitDate,
-                        time: '09:00',
-                        status: 'scheduled',
-                        notes: followUpForm.reason.trim(),
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const nextAppointments = [nextFollowUp, ...(seedData.appointments || [])];
-                    persistSeedTable('appointments', nextAppointments);
-                    seedData.appointments = nextAppointments;
+                    const saved = await insertClinicalRecord('appointments', { patient_id: patient.id, appointment_date: followUpForm.nextVisitDate, appointment_time: '09:00', appointment_type: 'Follow-up', department: followUpForm.clinic, status: 'scheduled', notes: [followUpForm.reason, followUpForm.instructions].filter(Boolean).join('\n') });
+                    if (!saved) return;
+                    seedData.appointments = [normalizeAppointments([saved])[0], ...(seedData.appointments || [])];
 
                     setFollowUpForm({
                         clinic: 'Primary Care',
@@ -347,28 +298,11 @@
                     });
                 };
 
-                const handleSaveReferral = () => {
+                const handleSaveReferral = async () => {
                     if (!referralForm.reason.trim()) return;
-
-                    const referralDocument = {
-                        id: 'ref_' + Date.now(),
-                        patientId: patient.id,
-                        fileName: `Referral - ${referralForm.department}`,
-                        documentType: 'Referral Letter',
-                        fileUrl: '',
-                        uploadedBy: referralForm.provider,
-                        uploadedAt: new Date().toISOString(),
-                        size: '0.9 KB',
-                        department: referralForm.department,
-                        urgency: referralForm.urgency,
-                        reason: referralForm.reason,
-                        notes: referralForm.notes,
-                        transferDate: referralForm.transferDate
-                    };
-
-                    const nextDocuments = [referralDocument, ...(seedData.documents || [])];
-                    persistSeedTable('documents', nextDocuments);
-                    seedData.documents = nextDocuments;
+                    const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Referral: ${referralForm.department}`, task_type: 'referral', due_at: referralForm.transferDate || null, priority: referralForm.urgency, notes: [referralForm.provider, referralForm.reason, referralForm.notes].filter(Boolean).join('\n') });
+                    if (!saved) return;
+                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
 
                     setReferralForm({
                         department: 'Cardiology',
@@ -380,52 +314,11 @@
                     });
                 };
 
-                const handleSaveOutcome = () => {
+                const handleSaveOutcome = async () => {
                     if (!outcomeForm.summary.trim()) return;
-
-                    const outcomeEntry = {
-                        id: 'outcome_' + Date.now(),
-                        patientId: patient.id,
-                        status: outcomeForm.status,
-                        summary: outcomeForm.summary,
-                        outcomeDate: outcomeForm.outcomeDate,
-                        dischargeInstructions: outcomeForm.dischargeInstructions,
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const nextDocuments = [
-                        {
-                            id: 'doc_outcome_' + Date.now(),
-                            patientId: patient.id,
-                            fileName: `Clinical Outcome - ${patient.patientNumber}`,
-                            documentType: 'Outcome Summary',
-                            fileUrl: '',
-                            uploadedBy: 'Clinical Team',
-                            uploadedAt: new Date().toISOString(),
-                            size: '1.0 KB',
-                            summary: outcomeForm.summary,
-                            status: outcomeForm.status
-                        },
-                        ...(seedData.documents || [])
-                    ];
-
-                    persistSeedTable('documents', nextDocuments);
-                    seedData.documents = nextDocuments;
-
-                    const nextAlerts = [
-                        {
-                            id: 'alert_' + Date.now(),
-                            patientId: patient.id,
-                            alertType: 'outcome',
-                            severity: outcomeForm.status === 'critical' ? 'high' : 'normal',
-                            message: `Outcome recorded: ${outcomeForm.status}`,
-                            status: 'closed',
-                            createdAt: new Date().toISOString()
-                        },
-                        ...(seedData.clinicalAlerts || [])
-                    ];
-                    persistSeedTable('clinicalAlerts', nextAlerts);
-                    seedData.clinicalAlerts = nextAlerts;
+                    const saved = await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: `Clinical outcome: ${outcomeForm.status}`, assessment: outcomeForm.summary, plan: outcomeForm.dischargeInstructions || null, status: 'completed' });
+                    if (!saved) return;
+                    seedData.consultations = [normalizeConsultations([saved])[0], ...(seedData.consultations || [])];
 
                     setOutcomeForm({
                         status: 'recovered',
@@ -435,23 +328,10 @@
                     });
                 };
 
-                const handleSaveQualityCheck = () => {
-                    const qualityNote = {
-                        id: 'quality_' + Date.now(),
-                        patientId: patient.id,
-                        idCheck: qualityForm.idCheck,
-                        allergyCheck: qualityForm.allergyCheck,
-                        consent: qualityForm.consent,
-                        medReconciliation: qualityForm.medReconciliation,
-                        dischargeEducation: qualityForm.dischargeEducation,
-                        riskScore: qualityForm.riskScore,
-                        auditNote: qualityForm.auditNote || 'Quality review completed',
-                        reviewedAt: new Date().toISOString()
-                    };
-
-                    const nextAudit = [qualityNote, ...(seedData.auditLogs || [])];
-                    persistSeedTable('auditLogs', nextAudit);
-                    seedData.auditLogs = nextAudit;
+                const handleSaveQualityCheck = async () => {
+                    const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: 'Quality and safety review', task_type: 'quality_review', priority: qualityForm.riskScore.toLowerCase() === 'high' ? 'urgent' : 'routine', status: 'completed', notes: JSON.stringify(qualityForm) });
+                    if (!saved) return;
+                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
 
                     setQualityForm({
                         idCheck: true,
@@ -464,21 +344,10 @@
                     });
                 };
 
-                const handleSaveCareCoordination = () => {
-                    const coordinationEntry = {
-                        id: 'coord_' + Date.now(),
-                        patientId: patient.id,
-                        careCoordinator: careCoordinationForm.careCoordinator || 'Care Team',
-                        dischargePlan: careCoordinationForm.dischargePlan || 'Discharge planning initiated',
-                        plannedDischargeDate: careCoordinationForm.plannedDischargeDate || new Date().toISOString().split('T')[0],
-                        readmissionRisk: careCoordinationForm.readmissionRisk || 'Low',
-                        handoffNote: careCoordinationForm.handoffNote || 'No additional handoff notes',
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const nextAudit = [coordinationEntry, ...(seedData.auditLogs || [])];
-                    persistSeedTable('auditLogs', nextAudit);
-                    seedData.auditLogs = nextAudit;
+                const handleSaveCareCoordination = async () => {
+                    const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Care coordination: ${careCoordinationForm.readmissionRisk} readmission risk`, task_type: 'care_coordination', due_at: careCoordinationForm.plannedDischargeDate || null, priority: careCoordinationForm.readmissionRisk.toLowerCase() === 'high' ? 'urgent' : 'routine', notes: [careCoordinationForm.careCoordinator, careCoordinationForm.dischargePlan, careCoordinationForm.handoffNote].filter(Boolean).join('\n') });
+                    if (!saved) return;
+                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
 
                     setCareCoordinationForm({
                         careCoordinator: 'Care Team',

@@ -511,7 +511,7 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
             const [showAddStock, setShowAddStock] = useState(false);
-            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
+            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', supplier: '' });
 
             const filteredDrugs = (inventory || []).filter(d => 
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -540,41 +540,36 @@
                     status: Number(stockForm.stockQuantity) <= Number(stockForm.reorderLevel) ? 'low_stock' : 'active'
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('pharmacy_inventory').insert([{ ...payload, generic_name: payload.genericName, stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel, unit_price: payload.unitPrice, expiry_date: payload.expiryDate }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
-                        const next = [...inventory, mapped];
-                        persistSeedTable('pharmacyInventory', next);
-                        setInventory(next);
-                        setShowAddStock(false);
-                        setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
-                        return;
-                    }
-                }
-
-                const next = [...inventory, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('add inventory');
+                const { data, error } = await client.from('pharmacy_inventory').insert([{ ...payload, generic_name: payload.genericName, stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel, unit_price: payload.unitPrice, expiry_date: payload.expiryDate }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('add inventory', error);
+                const mapped = { ...payload, id: data[0].id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
+                const next = [...inventory, mapped];
                 persistSeedTable('pharmacyInventory', next);
                 setInventory(next);
                 setShowAddStock(false);
-                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '2026-12-31', supplier: '' });
+                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '', supplier: '' });
             };
 
             const handleDispense = async (prescription) => {
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const client = window.MedicoreSupabase?.getClient?.();
                 const updatedPrescription = { ...prescription, status: 'dispensed' };
-
-                if (client) {
-                    const { error } = await client.from('prescriptions').update({ status: 'dispensed' }).eq('id', prescription.id);
-                    if (error) {
-                        console.error('Prescription dispense failed:', error);
-                    }
-                }
+                if (!client) return notifyPersistenceFailure('dispense medication');
+                const medication = prescription.medications?.[0];
+                const stockItem = medication && inventory.find((item) => item.name === medication.name);
+                if (!stockItem) return notifyPersistenceFailure('dispense medication', new Error('No matching inventory item was found.'));
+                const quantity = Number(medication.quantity || 1);
+                const remainingStock = Number(stockItem.stockQuantity || 0) - quantity;
+                if (remainingStock < 0) return notifyPersistenceFailure('dispense medication', new Error('Insufficient stock.'));
+                const { error: inventoryError } = await client.from('pharmacy_inventory').update({ stock_quantity: remainingStock }).eq('id', stockItem.id);
+                if (inventoryError) return notifyPersistenceFailure('dispense medication', inventoryError);
+                const { error } = await client.from('prescriptions').update({ status: 'dispensed' }).eq('id', prescription.id);
+                if (error) return notifyPersistenceFailure('dispense medication', error);
 
                 const nextInventory = inventory.map((item) => {
-                    if (prescription.medications && prescription.medications.length > 0 && item.name === prescription.medications[0].name) {
-                        return { ...item, stockQuantity: Math.max(0, Number(item.stockQuantity || 0) - Number(prescription.medications[0].quantity || 1)) };
+                    if (item.id === stockItem.id) {
+                        return { ...item, stockQuantity: remainingStock };
                     }
                     return item;
                 });
@@ -792,28 +787,19 @@
                     status: Number(invoiceForm.paid || 0) >= Number(invoiceForm.total || 0) ? 'paid' : 'pending'
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('billing').insert([{ ...payload, patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date, subtotal: payload.subtotal, tax: payload.tax, total: payload.total, paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
-                        const next = [...invoices, mapped];
-                        persistSeedTable('billing', next);
-                        setInvoices(next);
-                        setShowNewInvoice(false);
-                        setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
-                        return;
-                    }
-                }
-
-                const next = [...invoices, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('create invoice');
+                const { data, error } = await client.from('billing').insert([{ ...payload, patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date, subtotal: payload.subtotal, tax: payload.tax, total: payload.total, paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
+                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
+                const next = [...invoices, mapped];
                 persistSeedTable('billing', next);
                 setInvoices(next);
                 setShowNewInvoice(false);
-                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
+                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
             };
 
-            const handleProcessPayment = () => {
+            const handleProcessPayment = async () => {
                 if (!paymentForm.invoiceId || !Number(paymentForm.amount || 0)) return;
                 const updated = invoices.map((invoice) => {
                     if (invoice.id !== paymentForm.invoiceId) return invoice;
@@ -823,13 +809,18 @@
                     const status = paidNow >= total ? 'paid' : balance > 0 ? 'partial' : 'paid';
                     return { ...invoice, paid: paidNow, balance, status, paymentMethod: paymentForm.method || invoice.paymentMethod };
                 });
+                const changed = updated.find(invoice => invoice.id === paymentForm.invoiceId);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !changed) return notifyPersistenceFailure('process payment');
+                const { error } = await client.from('billing').update({ paid: changed.paid, balance: changed.balance, status: changed.status, payment_method: changed.paymentMethod }).eq('id', changed.id);
+                if (error) return notifyPersistenceFailure('process payment', error);
                 persistSeedTable('billing', updated);
                 setInvoices(updated);
                 setShowPaymentModal(false);
                 setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             };
 
-            const handleAdvanceClaim = (claimId) => {
+            const handleAdvanceClaim = async (claimId) => {
                 const queue = ['pending', 'under_review', 'approved', 'paid'];
                 const nextClaims = (seedData.insuranceClaims || []).map((claim) => {
                     if (claim.id !== claimId) return claim;
@@ -837,15 +828,16 @@
                     const nextStatus = queue[Math.min(queue.length - 1, currentIndex + 1)] || 'pending';
                     return { ...claim, status: nextStatus, amountApproved: Number(claim.amountApproved || 0) || Number(claim.amountClaimed || 0) };
                 });
+                const changed = nextClaims.find(claim => claim.id === claimId);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !changed) return notifyPersistenceFailure('advance insurance claim');
+                const { error } = await client.from('insurance_claims').update({ status: changed.status, amount_approved: changed.amountApproved }).eq('id', claimId);
+                if (error) return notifyPersistenceFailure('advance insurance claim', error);
                 persistSeedTable('insuranceClaims', nextClaims);
                 seedData.insuranceClaims = nextClaims;
-                persistSeedTable('auditLogs', [
-                    ...((seedData.auditLogs || [])),
-                    { id: 'audit-' + Date.now(), userId: 'user-admin', action: 'Insurance claim status advanced', entityType: 'insurance_claim', entityId: claimId, timestamp: new Date().toISOString(), severity: 'info' }
-                ]);
             };
 
-            const handleSubmitInsuranceClaim = () => {
+            const handleSubmitInsuranceClaim = async () => {
                 if (!claimForm.patientId) return;
                 const nextClaim = {
                     id: 'claim_' + Date.now(),
@@ -856,13 +848,14 @@
                     amountApproved: Number(claimForm.amountApproved || 0),
                     status: Number(claimForm.amountApproved || 0) > 0 ? 'under_review' : 'pending'
                 };
-                const next = [...(seedData.insuranceClaims || []), nextClaim];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('submit insurance claim');
+                const { data, error } = await client.from('insurance_claims').insert({ patient_id: nextClaim.patientId, claim_number: nextClaim.claimNumber, provider: nextClaim.provider, amount_claimed: nextClaim.amountClaimed, amount_approved: nextClaim.amountApproved, status: nextClaim.status }).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('submit insurance claim', error);
+                const savedClaim = normalizeInsuranceClaims(data)[0];
+                const next = [...(seedData.insuranceClaims || []), savedClaim];
                 persistSeedTable('insuranceClaims', next);
                 seedData.insuranceClaims = next;
-                persistSeedTable('auditLogs', [
-                    ...((seedData.auditLogs || [])),
-                    { id: 'audit-' + Date.now(), userId: 'user-admin', action: 'Insurance claim submitted', entityType: 'insurance_claim', entityId: nextClaim.id, timestamp: new Date().toISOString(), severity: 'info' }
-                ]);
                 setShowInsuranceModal(false);
                 setClaimForm({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
             };
@@ -1183,7 +1176,7 @@
             const [selectedWard, setSelectedWard] = useState(null);
             const [showNewAdmission, setShowNewAdmission] = useState(false);
             const [admissions, setAdmissions] = useState(hydrateSeedData().admissions || []);
-            const [admissionForm, setAdmissionForm] = useState({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
+            const [admissionForm, setAdmissionForm] = useState({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
 
             const handleCreateAdmission = async () => {
                 if (!admissionForm.patientId) return;
@@ -1200,25 +1193,16 @@
                     acuity: admissionForm.acuity
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('admissions').insert([{ ...payload, patient_id: payload.patientId, ward: payload.ward, bed_number: payload.bedNumber, admission_date: payload.admissionDate, doctor_id: payload.doctorId, diagnosis: payload.diagnosis, status: payload.status, acuity: payload.acuity }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
-                        const next = [...admissions, mapped];
-                        persistSeedTable('admissions', next);
-                        setAdmissions(next);
-                        setShowNewAdmission(false);
-                        setAdmissionForm({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
-                        return;
-                    }
-                }
-
-                const next = [...admissions, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('admit patient');
+                const { data, error } = await client.from('admissions').insert([{ ...payload, patient_id: payload.patientId, ward: payload.ward, bed_number: payload.bedNumber, admission_date: payload.admissionDate, doctor_id: payload.doctorId || null, diagnosis: payload.diagnosis, status: payload.status, acuity: payload.acuity }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('admit patient', error);
+                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
+                const next = [...admissions, mapped];
                 persistSeedTable('admissions', next);
                 setAdmissions(next);
                 setShowNewAdmission(false);
-                setAdmissionForm({ patientId: '', ward: 'General Ward', bedNumber: 'A-101', doctorId: 'u2', diagnosis: 'Observation', acuity: 'stable' });
+                setAdmissionForm({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
             };
 
             return (
@@ -1301,7 +1285,7 @@
                             <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Ward" value={admissionForm.ward} onChange={(e) => setAdmissionForm(prev => ({ ...prev, ward: e.target.value }))} options={[{ value: 'General Ward', label: 'General Ward' }, { value: 'ICU', label: 'ICU' }, { value: 'Maternity', label: 'Maternity' }, { value: 'Pediatrics', label: 'Pediatrics' }]} />
                             <Input label="Bed Number" value={admissionForm.bedNumber} onChange={(e) => setAdmissionForm(prev => ({ ...prev, bedNumber: e.target.value }))} />
-                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(seedData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Diagnosis" value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                             <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
                         </div>
@@ -1338,7 +1322,7 @@
         const SurgeriesModule = () => {
             const [showSchedule, setShowSchedule] = useState(false);
             const [surgeries, setSurgeries] = useState(hydrateSeedData().surgeries || []);
-            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
+            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
 
             const handleScheduleSurgery = async () => {
                 if (!surgeryForm.patientId || !surgeryForm.procedure) return;
@@ -1357,25 +1341,16 @@
                     priority: surgeryForm.priority
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (client) {
-                    const { data, error } = await client.from('surgeries').insert([{ ...payload, patient_id: payload.patientId, surgeon_id: payload.surgeonId, procedure: payload.procedure, scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime, duration: payload.duration, status: payload.status, ot_room: payload.otRoom, anesthesia: payload.anesthesia, priority: payload.priority }]).select();
-                    if (!error && data && data[0]) {
-                        const mapped = { ...payload, id: data[0].id || payload.id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
-                        const next = [...surgeries, mapped];
-                        persistSeedTable('surgeries', next);
-                        setSurgeries(next);
-                        setShowSchedule(false);
-                        setSurgeryForm({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
-                        return;
-                    }
-                }
-
-                const next = [...surgeries, payload];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('schedule surgery');
+                const { data, error } = await client.from('surgeries').insert([{ ...payload, patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure, scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime, duration: payload.duration, status: payload.status, ot_room: payload.otRoom, anesthesia: payload.anesthesia, priority: payload.priority }]).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('schedule surgery', error);
+                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
+                const next = [...surgeries, mapped];
                 persistSeedTable('surgeries', next);
                 setSurgeries(next);
                 setShowSchedule(false);
-                setSurgeryForm({ patientId: '', surgeonId: 'u2', procedure: 'Appendectomy', scheduledDate: '2026-09-01', scheduledTime: '09:00', otRoom: 'OT-1', anesthesia: 'General', priority: 'elective' });
+                setSurgeryForm({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
             };
 
             return (
@@ -1389,7 +1364,7 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Scheduled Today" value={surgeries.filter(s => s.scheduledDate === '2026-09-01').length} icon={Icons.Calendar} color="medical" />
+                        <StatCard title="Scheduled Today" value={surgeries.filter(s => s.scheduledDate === new Date().toISOString().slice(0, 10)).length} icon={Icons.Calendar} color="medical" />
                         <StatCard title="In Progress" value={surgeries.filter(s => s.status === 'in-progress').length} icon={Icons.Activity} color="amber" />
                         <StatCard title="Completed" value={surgeries.filter(s => s.status === 'completed').length} icon={Icons.CheckCircle} color="emerald" />
                         <StatCard title="Emergency" value={surgeries.filter(s => s.priority === 'emergency').length} icon={Icons.AlertCircle} color="red" />
@@ -1454,7 +1429,7 @@
                     >
                         <div className="space-y-4">
                             <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(seedData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
