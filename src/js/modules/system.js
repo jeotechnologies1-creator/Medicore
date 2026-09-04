@@ -10,46 +10,63 @@
 
             const governanceSummary = {
                 criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
-                pendingReviews: Math.max(3, Math.round((seedData.auditLogs.length || 0) * 0.18) + (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
-                complianceRate: 96,
-                escalationQueue: 5
+                pendingReviews: Math.max(0, Math.round((seedData.auditLogs.length || 0) * 0.18) + (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
+                complianceRate: (() => {
+                    const checks = [
+                        (seedData.allergies || []).length > 0 && (seedData.medicationOrders || []).length > 0,
+                        (seedData.labOrders || []).some(item => item.status === 'critical') === false,
+                        (seedData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge'))
+                    ].filter(Boolean).length;
+                    const base = checks === 0 ? 0 : Math.round((checks / 3) * 100);
+                    return Math.min(100, base || 0);
+                })(),
+                escalationQueue: (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length
             };
 
-            const incidentQueue = [
-                { id: 'INC-1042', patient: 'Jane Okafor', area: 'Medication Safety', issue: 'Allergy mismatch on discharge medication', status: 'Escalated', owner: 'Pharmacy Lead', due: '2h' },
-                { id: 'INC-1047', patient: 'Daniel Mensah', area: 'Clinical Documentation', issue: 'Discharge note missing signature', status: 'Pending review', owner: 'Ward Nurse', due: '4h' },
-                { id: 'INC-1051', patient: 'Grace Bassey', area: 'Lab Follow-up', issue: 'Critical lab result not acknowledged', status: 'Monitoring', owner: 'Lab Manager', due: '1h' },
-                { id: 'INC-1058', patient: 'Samuel Adebayo', area: 'Patient ID', issue: 'Verification not completed before procedure', status: 'Escalated', owner: 'Clinical Safety Officer', due: '90m' }
-            ];
+            const incidentQueue = (seedData.auditLogs || []).slice(0, 4).map((log) => ({
+                id: log.id || 'LOG-' + Date.now(),
+                patient: (seedData.patients || []).find(patient => patient.id === log.entityId)?.firstName && (seedData.patients || []).find(patient => patient.id === log.entityId)?.lastName
+                    ? `${(seedData.patients || []).find(patient => patient.id === log.entityId).firstName} ${(seedData.patients || []).find(patient => patient.id === log.entityId).lastName}`
+                    : 'Unassigned patient',
+                area: log.entityType || 'System event',
+                issue: log.action || 'Record reviewed',
+                status: log.severity === 'critical' ? 'Escalated' : 'Monitoring',
+                owner: 'System',
+                due: 'Live'
+            }));
 
             const complianceChecks = [
                 {
                     title: 'Medication allergy verification',
                     status: ((seedData.allergies || []).length > 0 && (seedData.medicationOrders || []).length > 0) ? 'pass' : 'review',
-                    owner: 'Pharmacy QA',
-                    nextAction: 'Audit all active medication orders against allergy list.',
+                    owner: 'Clinical safety',
+                    nextAction: 'Review active medication orders against the allergy list.',
                     sla: 'within 24h'
                 },
                 {
                     title: 'Critical lab result acknowledgment',
                     status: (seedData.labOrders || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
-                    owner: 'Lab Services',
-                    nextAction: 'Confirm acknowledgment and escalation within SLA.',
+                    owner: 'Laboratory',
+                    nextAction: 'Confirm timely acknowledgment and escalation for any critical findings.',
                     sla: 'within 30 min'
                 },
                 {
                     title: 'Consent and discharge documentation',
                     status: (seedData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
-                    owner: 'Clinical Governance',
-                    nextAction: 'Ensure all discharge summaries include instruction and consent capture.',
+                    owner: 'Clinical records',
+                    nextAction: 'Ensure discharge summaries capture patient instructions and consent milestones.',
                     sla: 'within 4h'
                 }
             ];
-            const escalationQueue = [
-                { id: 'EC-2', patient: 'Daniel Adebayo', area: 'Medication safety', due: '18m', owner: 'Pharmacy lead' },
-                { id: 'EC-7', patient: 'Grace Bassey', area: 'Critical lab follow-up', due: '42m', owner: 'Lab manager' },
-                { id: 'EC-9', patient: 'Samuel Adebayo', area: 'Consent capture', due: '1h 15m', owner: 'Clinical governance' }
-            ];
+            const escalationQueue = (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').slice(0, 3).map((alert) => ({
+                id: alert.id || 'ALERT-' + Date.now(),
+                patient: (seedData.patients || []).find(patient => patient.id === alert.patientId)
+                    ? `${(seedData.patients || []).find(patient => patient.id === alert.patientId).firstName} ${(seedData.patients || []).find(patient => patient.id === alert.patientId).lastName}`
+                    : 'Unassigned patient',
+                area: alert.alertType || 'Clinical alert',
+                due: alert.severity === 'critical' ? 'Immediate' : 'Review',
+                owner: 'Clinical governance'
+            }));
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -85,7 +102,7 @@
 
                     <Card title="Automation checks">
                         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                            {complianceChecks.map((check) => (
+                            {complianceChecks.length ? complianceChecks.map((check) => (
                                 <div key={check.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                     <div className="flex items-center justify-between gap-3">
                                         <p className="font-medium text-slate-900">{check.title}</p>
@@ -95,29 +112,33 @@
                                     <p className="mt-2 text-sm text-slate-700">{check.nextAction}</p>
                                     <p className="mt-2 text-xs text-medical-600">SLA: {check.sla}</p>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No compliance checks to display yet. Add records from the hospital workflow to populate this module.</div>
+                            )}
                         </div>
                     </Card>
 
                     <Card title="Escalation queue">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            {escalationQueue.map((item) => (
+                            {escalationQueue.length ? escalationQueue.map((item) => (
                                 <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                     <div className="flex items-center justify-between">
                                         <p className="text-xs uppercase tracking-wide text-slate-500">{item.id}</p>
-                                        <Badge variant="danger">Due {item.due}</Badge>
+                                        <Badge variant="danger">{item.due}</Badge>
                                     </div>
                                     <p className="mt-3 font-semibold text-slate-900">{item.patient}</p>
                                     <p className="mt-1 text-sm text-slate-600">{item.area}</p>
                                     <p className="mt-3 text-xs text-slate-500">Owner: {item.owner}</p>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No active escalations. This queue will populate automatically when clinical incidents are logged.</div>
+                            )}
                         </div>
                     </Card>
 
                     <Card title="Clinical governance board">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {incidentQueue.map((incident) => (
+                            {incidentQueue.length ? incidentQueue.map((incident) => (
                                 <div key={incident.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
@@ -130,10 +151,12 @@
                                     <p className="mt-2 text-sm text-slate-700">{incident.issue}</p>
                                     <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                                         <span>{incident.owner}</span>
-                                        <span>Due in {incident.due}</span>
+                                        <span>{incident.due}</span>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No governance events registered yet. Once logs and alerts are created, they will appear here automatically.</div>
+                            )}
                         </div>
                     </Card>
 
@@ -181,24 +204,14 @@
         // COMPLIANCE VAULT MODULE
         // ==========================================
         const ComplianceVaultModule = () => {
-            const compliancePolicies = [
-                { title: 'Clinical documentation retention', owner: 'Medical Records', status: 'Active', updated: '2026-08-28', version: 'v3.4' },
-                { title: 'Medication safety policy', owner: 'Pharmacy QA', status: 'Reviewed', updated: '2026-08-20', version: 'v2.1' },
-                { title: 'Patient consent governance', owner: 'Compliance Office', status: 'Active', updated: '2026-08-18', version: 'v1.8' },
-                { title: 'Critical lab escalation protocol', owner: 'Lab Services', status: 'Pending review', updated: '2026-08-12', version: 'v4.0' }
-            ];
-
-            const files = [
-                { name: 'HIPAA Privacy Notice.pdf', category: 'Privacy', owner: 'Compliance', updated: '2026-09-01', status: 'Approved' },
-                { name: 'Medication Error Reporting SOP.docx', category: 'Safety', owner: 'Clinical Safety', updated: '2026-08-29', status: 'Reviewed' },
-                { name: 'Incident Escalation Matrix.xlsx', category: 'Governance', owner: 'Operations', updated: '2026-08-26', status: 'Approved' }
-            ];
+            const compliancePolicies = [];
+            const files = [];
 
             const automationSummary = [
                 { label: 'High-risk events', value: (seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
                 { label: 'Open incidents', value: (seedData.clinicalAlerts || []).filter(item => item.status === 'open').length },
-                { label: 'Records to review', value: Math.max(2, (seedData.auditLogs || []).length / 2) },
-                { label: 'Retention coverage', value: '98%' }
+                { label: 'Records to review', value: Math.max(0, (seedData.auditLogs || []).length) },
+                { label: 'Retention coverage', value: '—' }
             ];
 
             return (
@@ -235,7 +248,7 @@
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         <Card title="Policy register">
                             <div className="space-y-3">
-                                {compliancePolicies.map((policy) => (
+                                {compliancePolicies.length ? compliancePolicies.map((policy) => (
                                     <div key={policy.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                                         <div className="flex items-center justify-between gap-3">
                                             <div>
@@ -249,24 +262,30 @@
                                             <span>Version {policy.version}</span>
                                         </div>
                                     </div>
-                                ))}
+                                )) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No policy records have been uploaded yet. Policies will appear here when they are added to the vault.</div>
+                                )}
                             </div>
                         </Card>
 
                         <Card title="Document repository">
-                            <DataTable
-                                columns={[
-                                    { key: 'name', title: 'Document' },
-                                    { key: 'category', title: 'Category' },
-                                    { key: 'owner', title: 'Owner' },
-                                    { key: 'updated', title: 'Updated' },
-                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Approved' ? 'success' : row.status === 'Reviewed' ? 'info' : 'warning'}>{row.status}</Badge> }
-                                ]}
-                                data={files}
-                                actions={() => (
-                                    <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
-                                )}
-                            />
+                            {files.length ? (
+                                <DataTable
+                                    columns={[
+                                        { key: 'name', title: 'Document' },
+                                        { key: 'category', title: 'Category' },
+                                        { key: 'owner', title: 'Owner' },
+                                        { key: 'updated', title: 'Updated' },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Approved' ? 'success' : row.status === 'Reviewed' ? 'info' : 'warning'}>{row.status}</Badge> }
+                                    ]}
+                                    data={files}
+                                    actions={() => (
+                                        <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                                    )}
+                                />
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No documents are in the compliance vault yet.</div>
+                            )}
                         </Card>
                     </div>
                 </div>

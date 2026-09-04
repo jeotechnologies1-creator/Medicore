@@ -766,7 +766,7 @@
             const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
-            const [claimForm, setClaimForm] = useState({ patientId: '', provider: 'AXA Health', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+            const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
 
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
@@ -864,7 +864,7 @@
                     { id: 'audit-' + Date.now(), userId: 'user-admin', action: 'Insurance claim submitted', entityType: 'insurance_claim', entityId: nextClaim.id, timestamp: new Date().toISOString(), severity: 'info' }
                 ]);
                 setShowInsuranceModal(false);
-                setClaimForm({ patientId: '', provider: 'AXA Health', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+                setClaimForm({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
             };
 
             const totalRevenue = invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0);
