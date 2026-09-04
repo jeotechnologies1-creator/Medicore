@@ -435,16 +435,15 @@
         // CLINICAL DECISION SUPPORT MODULE
         // ==========================================
         const ClinicalDecisionSupportModule = () => {
-            const alerts = [
-                { patient: 'Tina Okafor', condition: 'Severe allergy', detail: 'Penicillin allergy documented. Cefazolin contraindicated.', risk: 'High' },
-                { patient: 'Musa Ibrahim', condition: 'Drug interaction check', detail: 'Warfarin + trimethoprim-sulfamethoxazole requires dose review.', risk: 'High' },
-                { patient: 'Ifeoma Bello', condition: 'Duplicate therapy', detail: 'Two overlapping antihypertensives currently active; review indication.', risk: 'Moderate' }
-            ];
-
+            const patients = seedData.patients || [];
+            const alerts = (seedData.clinicalAlerts || []).filter(item => item.status === 'open').map((item) => {
+                const patient = patients.find(entry => entry.id === item.patientId);
+                return { id: item.id, patient: patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record', condition: item.alertType, detail: item.message, risk: item.severity };
+            });
             const guidance = [
-                { title: 'Medication safety', message: 'Check renal function before adjusting aminoglycoside dosing.', value: '92%' },
-                { title: 'Clinical protocols', message: 'Sepsis protocol reminders triggered for high-risk fever patient.', value: '88%' },
-                { title: 'Preventive care', message: 'Cancer screening due in next 30 days for eligible patient cohort.', value: '81%' }
+                { title: 'Open clinical alerts', message: 'Alerts generated from recorded clinical data that need acknowledgment.', value: alerts.length },
+                { title: 'Active medication orders', message: 'Current medication orders available for clinical review.', value: (seedData.medicationOrders || []).filter(item => item.status === 'active').length },
+                { title: 'Active allergies', message: 'Structured allergies available for medication safety checks.', value: (seedData.allergies || []).filter(item => item.clinicalStatus === 'active').length }
             ];
 
             return (
@@ -454,29 +453,30 @@
                             <h2 className="text-2xl font-bold text-slate-900">Clinical Decision Support</h2>
                             <p className="text-slate-500 mt-1">Evidence-based alerts, drug checks, and protocol guidance</p>
                         </div>
-                        <Button variant="primary" icon={Icons.ShieldCheck}>Run Safety Check</Button>
+                        <Button variant="primary" icon={Icons.ShieldCheck} onClick={() => window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: 'clinical_safety' }))}>Review Safety</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="High-risk alerts" value="7" icon={Icons.AlertCircle} color="red" />
-                        <StatCard title="Medication checks" value="128" icon={Icons.Pill} color="medical" />
-                        <StatCard title="Protocols active" value="19" icon={Icons.ClipboardList} color="emerald" />
-                        <StatCard title="Escalation queue" value="3" icon={Icons.Bell} color="amber" />
+                        <StatCard title="Critical alerts" value={alerts.filter(item => item.risk === 'critical').length} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Medication orders" value={(seedData.medicationOrders || []).length} icon={Icons.Pill} color="medical" />
+                        <StatCard title="Allergies" value={(seedData.allergies || []).length} icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="Open alerts" value={alerts.length} icon={Icons.Bell} color="amber" />
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         <Card title="Safety alerts">
                             <div className="space-y-4">
                                 {alerts.map((alert) => (
-                                    <div key={alert.patient} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <div key={alert.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                                         <div className="flex items-center justify-between">
                                             <span className="font-medium text-slate-800">{alert.patient}</span>
-                                            <Badge variant={alert.risk === 'High' ? 'danger' : 'warning'}>{alert.risk}</Badge>
+                                            <Badge variant={alert.risk === 'critical' ? 'danger' : 'warning'}>{alert.risk}</Badge>
                                         </div>
                                         <p className="mt-2 text-sm text-slate-600">{alert.condition}</p>
                                         <p className="mt-1 text-xs text-slate-500">{alert.detail}</p>
                                     </div>
                                 ))}
+                                {!alerts.length && <p className="text-sm text-slate-500">No open clinical alerts.</p>}
                             </div>
                         </Card>
 
@@ -505,14 +505,14 @@
             const [selectedStudy, setSelectedStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [studies, setStudies] = useState(hydrateSeedData().radiologyOrders || []);
-            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
 
             const handleCreateStudy = async () => {
                 if (!orderForm.patientId || !orderForm.studyType) return;
                 const payload = {
                     id: 'rad_' + Date.now(),
                     patientId: orderForm.patientId,
-                    doctorId: 'u2',
+                    doctorId: null,
                     studyType: orderForm.studyType,
                     modality: orderForm.modality,
                     priority: orderForm.priority,
@@ -531,7 +531,7 @@
                         persistSeedTable('radiologyOrders', next);
                         setStudies(next);
                         setShowNewOrder(false);
-                        setOrderForm({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+                        setOrderForm({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
                         return;
                     }
                 }
@@ -540,7 +540,7 @@
                 persistSeedTable('radiologyOrders', next);
                 setStudies(next);
                 setShowNewOrder(false);
-                setOrderForm({ patientId: '', studyType: 'Chest X-Ray', modality: 'X-Ray', priority: 'routine', scheduledDate: '2026-09-01', report: '' });
+                setOrderForm({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
             };
 
             const handleReportStudy = async (row) => {

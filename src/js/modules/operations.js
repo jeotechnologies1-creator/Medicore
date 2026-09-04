@@ -5,21 +5,37 @@
             const [activeTab, setActiveTab] = useState('flow');
             const [selectedDept, setSelectedDept] = useState('all');
 
-            const managementDepartments = [
-                { name: 'Emergency', patients: 48, waitMinutes: 18, occupancy: 82, turnaround: 91 },
-                { name: 'Inpatient', patients: 112, waitMinutes: 12, occupancy: 76, turnaround: 87 },
-                { name: 'Outpatient', patients: 164, waitMinutes: 14, occupancy: 80, turnaround: 93 },
-                { name: 'Diagnostics', patients: 96, waitMinutes: 22, occupancy: 71, turnaround: 85 },
-                { name: 'Surgery', patients: 24, waitMinutes: 9, occupancy: 68, turnaround: 89 }
-            ];
+            const activeAdmissions = (seedData.admissions || []).filter(item => item.status === 'active');
+            const managementDepartments = (seedData.wards || []).map((ward) => ({
+                name: ward.name,
+                patients: activeAdmissions.filter(item => item.ward === ward.name).length,
+                occupancy: ward.capacity ? Math.round((Number(ward.occupied || 0) / Number(ward.capacity)) * 100) : 0
+            }));
 
             const filteredDepartments = selectedDept === 'all'
                 ? managementDepartments
                 : managementDepartments.filter((department) => department.name.toLowerCase() === selectedDept.toLowerCase());
 
-            const avgWait = Math.round(filteredDepartments.reduce((sum, item) => sum + item.waitMinutes, 0) / Math.max(1, filteredDepartments.length));
             const avgOccupancy = Math.round(filteredDepartments.reduce((sum, item) => sum + item.occupancy, 0) / Math.max(1, filteredDepartments.length));
             const totalPatients = filteredDepartments.reduce((sum, item) => sum + item.patients, 0);
+            const today = new Date().toISOString().slice(0, 10);
+            const operationsPulse = [
+                { label: 'Admissions today', value: (seedData.admissions || []).filter(item => item.admissionDate === today).length },
+                { label: 'Discharges today', value: (seedData.admissions || []).filter(item => item.dischargeDate === today).length },
+                { label: 'Emergency appointments', value: (seedData.appointments || []).filter(item => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length },
+                { label: 'Cancelled appointments', value: (seedData.appointments || []).filter(item => item.date === today && item.status === 'cancelled').length }
+            ];
+            const resourceLoad = [
+                { name: 'Active doctors', value: (seedData.users || []).filter(item => item.role === 'doctor' && item.status === 'active').length },
+                { name: 'Active nurses', value: (seedData.users || []).filter(item => item.role === 'nurse' && item.status === 'active').length },
+                { name: 'Pending laboratory orders', value: (seedData.labOrders || []).filter(item => item.status !== 'completed').length },
+                { name: 'Pending imaging orders', value: (seedData.radiologyOrders || []).filter(item => item.status !== 'reported').length }
+            ];
+            const logistics = [
+                { title: 'Low-stock medicines', value: (seedData.pharmacyInventory || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
+                { title: 'Expiring inventory', value: (seedData.pharmacyInventory || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
+                { title: 'Pending refill requests', value: 0 }
+            ];
 
             const tabs = [
                 { id: 'flow', label: 'Patient Flow' },
@@ -48,9 +64,9 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Active Patients" value={totalPatients} icon={Icons.Users} color="medical" />
-                        <StatCard title="Avg Wait" value={`${avgWait} min`} icon={Icons.Clock} color="amber" />
+                        <StatCard title="Active admissions" value={activeAdmissions.length} icon={Icons.Clock} color="amber" />
                         <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
-                        <StatCard title="Throughput" value={`${Math.max(80, Math.min(99, avgOccupancy + 10))}%`} icon={Icons.Activity} color="violet" />
+                        <StatCard title="Open appointments" value={(seedData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -66,16 +82,9 @@
                                                     <p className="font-semibold text-slate-900">{department.name}</p>
                                                     <p className="text-xs text-slate-500">{department.patients} active encounters</p>
                                                 </div>
-                                                <Badge variant={department.turnaround >= 90 ? 'success' : department.turnaround >= 85 ? 'warning' : 'default'}>{department.turnaround}% turnaround</Badge>
+                                                <Badge variant={department.occupancy >= 90 ? 'danger' : department.occupancy >= 75 ? 'warning' : 'success'}>{department.occupancy}% occupied</Badge>
                                             </div>
                                             <div className="space-y-3">
-                                                <div>
-                                                    <div className="flex justify-between text-xs text-slate-500 mb-1">
-                                                        <span>Wait time</span>
-                                                        <span>{department.waitMinutes} min</span>
-                                                    </div>
-                                                    <ProgressBar value={Math.min(100, department.waitMinutes * 3)} max={100} color="amber" />
-                                                </div>
                                                 <div>
                                                     <div className="flex justify-between text-xs text-slate-500 mb-1">
                                                         <span>Occupancy</span>
@@ -91,16 +100,10 @@
 
                             <Card title="Live Operations Pulse">
                                 <div className="space-y-4">
-                                    {[
-                                        { label: 'Admissions today', value: '126', trend: '+8%' },
-                                        { label: 'Discharges today', value: '108', trend: '+5%' },
-                                        { label: 'Emergency arrivals', value: '34', trend: '+12%' },
-                                        { label: 'Cancelled appointments', value: '9', trend: '-3%' }
-                                    ].map((metric) => (
+                                    {operationsPulse.map((metric) => (
                                         <div key={metric.label} className="rounded-xl border border-slate-200 p-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-sm text-slate-600">{metric.label}</span>
-                                                <span className="text-xs font-medium text-emerald-600">{metric.trend}</span>
                                             </div>
                                             <p className="text-2xl font-bold text-slate-900 mt-2">{metric.value}</p>
                                         </div>
@@ -114,13 +117,7 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Bed Utilization">
                                 <BarChart
-                                    data={[
-                                        { label: 'ER', value: 82 },
-                                        { label: 'Ward', value: 76 },
-                                        { label: 'ICU', value: 68 },
-                                        { label: 'Maternity', value: 58 },
-                                        { label: 'Pediatrics', value: 63 }
-                                    ]}
+                                    data={managementDepartments.map(item => ({ label: item.name, value: item.occupancy }))}
                                     width={500}
                                     height={260}
                                     color="#2563eb"
@@ -129,18 +126,13 @@
 
                             <Card title="Clinical Resource Load">
                                 <div className="space-y-4">
-                                    {[
-                                        { name: 'Doctors on duty', value: 86 },
-                                        { name: 'Nurses assigned', value: 91 },
-                                        { name: 'Lab bench capacity', value: 74 },
-                                        { name: 'Imaging availability', value: 69 }
-                                    ].map((resource) => (
+                                    {resourceLoad.map((resource) => (
                                         <div key={resource.name}>
                                             <div className="flex items-center justify-between text-sm text-slate-600 mb-1">
                                                 <span>{resource.name}</span>
-                                                <span>{resource.value}%</span>
+                                                <span>{resource.value}</span>
                                             </div>
-                                            <ProgressBar value={resource.value} max={100} color={resource.value >= 85 ? 'emerald' : resource.value >= 70 ? 'amber' : 'medical'} />
+                                            <ProgressBar value={resource.value} max={Math.max(1, ...resourceLoad.map(item => item.value))} color="medical" />
                                         </div>
                                     ))}
                                 </div>
@@ -150,15 +142,11 @@
 
                     {activeTab === 'logistics' && (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {[
-                                { title: 'Pharmacy refill', status: 'On track', detail: '18 items due within 48h', tone: 'success' },
-                                { title: 'Medical supplies', status: 'Watchlist', detail: '4 SKUs below reorder threshold', tone: 'warning' },
-                                { title: 'Equipment uptime', status: 'Stable', detail: '97.4% availability across units', tone: 'info' }
-                            ].map((item) => (
+                            {logistics.map((item) => (
                                 <Card key={item.title} title={item.title}>
                                     <div className="space-y-3">
-                                        <Badge variant={item.tone === 'success' ? 'success' : item.tone === 'warning' ? 'warning' : 'info'}>{item.status}</Badge>
-                                        <p className="text-sm text-slate-600">{item.detail}</p>
+                                        <Badge variant={item.value ? 'warning' : 'success'}>{item.value ? 'Review needed' : 'Clear'}</Badge>
+                                        <p className="text-sm text-slate-600">{item.value} record{item.value === 1 ? '' : 's'} requiring attention.</p>
                                     </div>
                                 </Card>
                             ))}
