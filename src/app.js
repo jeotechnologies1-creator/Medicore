@@ -120,9 +120,9 @@
                     case 'upload': return <DocumentsModule />;
                     case 'pharmacy': return <PharmacyModule />;
                     case 'inventory': return <InventoryModule />;
-                    case 'billing': return <BillingModule />;
-                    case 'insurance': return <BillingModule />;
-                    case 'payments': return <BillingModule />;
+                    case 'billing': return <BillingModule initialTab="invoices" />;
+                    case 'insurance': return <BillingModule initialTab="insurance" />;
+                    case 'payments': return <BillingModule initialTab="payments" />;
                     case 'documents': return <DocumentsModule />;
                     case 'compliance': return <ComplianceVaultModule />;
                     case 'admissions': return <AdmissionsModule />;

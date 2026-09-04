@@ -751,8 +751,8 @@
         // ==========================================
         // BILLING MODULE
         // ==========================================
-        const BillingModule = () => {
-            const [activeTab, setActiveTab] = useState('invoices');
+        const BillingModule = ({ initialTab = 'invoices' }) => {
+            const [activeTab, setActiveTab] = useState(initialTab);
             const [selectedInvoice, setSelectedInvoice] = useState(null);
             const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -762,6 +762,10 @@
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+
+            useEffect(() => {
+                setActiveTab(initialTab);
+            }, [initialTab]);
 
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
