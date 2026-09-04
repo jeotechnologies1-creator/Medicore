@@ -243,6 +243,30 @@
         }));
     };
 
+    const uploadPatientDocument = async (patientId, file, documentType = 'Clinical Note') => {
+        const client = getClient();
+        if (!client || !patientId || !file) return { data: null, error: new Error('Supabase, patient, and file are required.') };
+        const safeName = String(file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const objectPath = `${patientId}/${crypto.randomUUID()}-${safeName}`;
+        const { error: uploadError } = await client.storage.from('patient-documents').upload(objectPath, file, { upsert: false, contentType: file.type || undefined });
+        if (uploadError) return { data: null, error: uploadError };
+        const { data, error } = await client.from('patient_documents').insert({
+            patient_id: patientId, file_name: file.name, document_type: documentType, file_url: objectPath,
+            size: `${Math.ceil(file.size / 1024)} KB`
+        }).select().single();
+        if (error) {
+            await client.storage.from('patient-documents').remove([objectPath]);
+            return { data: null, error };
+        }
+        return { data, error: null };
+    };
+
+    const createDocumentUrl = async (objectPath) => {
+        const client = getClient();
+        if (!client || !objectPath) return { data: null, error: new Error('Document is unavailable.') };
+        return client.storage.from('patient-documents').createSignedUrl(objectPath, 60);
+    };
+
     const loginProfile = async (email, password) => {
         const normalizedEmail = String(email || '').trim();
         const normalizedPassword = String(password || '');
@@ -284,6 +308,8 @@
         loadDepartments,
         recordComplianceExport,
         loadComplianceExports,
+        uploadPatientDocument,
+        createDocumentUrl,
         loginProfile,
         logout,
         getStore,

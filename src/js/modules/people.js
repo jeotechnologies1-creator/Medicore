@@ -12,22 +12,14 @@
                 { label: 'Clinics', value: staff.filter((person) => person.department === 'Clinic').length },
                 { label: 'Support', value: staff.filter((person) => ['receptionist', 'accountant', 'pharmacist'].includes(person.role)).length }
             ];
-            const attendanceSummary = [
-                { department: 'Emergency', rate: 94, staff: 19 },
-                { department: 'Ward', rate: 91, staff: 32 },
-                { department: 'Diagnostics', rate: 89, staff: 15 },
-                { department: 'Admin', rate: 97, staff: 12 }
-            ];
-            const payrollSummary = [
-                { employee: 'Dr. Sarah Smith', department: 'Medicine', gross: 128000, net: 111000, status: 'Approved' },
-                { employee: 'Grace Okafor', department: 'Nursing', gross: 68000, net: 59600, status: 'Pending' },
-                { employee: 'Daniel Mensah', department: 'Accounts', gross: 74000, net: 64880, status: 'Approved' }
-            ];
-            const recruitmentPipeline = [
-                { role: 'ICU Nurse', candidates: 12, stage: 'Interview', priority: 'High' },
-                { role: 'Radiographer', candidates: 5, stage: 'Offer', priority: 'Medium' },
-                { role: 'Medical Records Officer', candidates: 8, stage: 'Screening', priority: 'High' }
-            ];
+            const attendanceSummary = departments.map((department) => ({
+                department,
+                rate: staff.filter(person => person.department === department && person.status === 'active').length
+                    ? 100 : 0,
+                staff: staff.filter(person => person.department === department).length
+            }));
+            const payrollSummary = [];
+            const recruitmentPipeline = [];
             const tabs = [
                 { id: 'overview', label: 'Overview' },
                 { id: 'attendance', label: 'Attendance' },
@@ -313,45 +305,14 @@
                 setStaffMessage('');
                 try {
                     const client = window.MedicoreSupabase?.getClient?.();
-                    const sanitized = {
-                        id: `staff-${Date.now()}`,
-                        full_name: staffForm.fullName,
-                        name: staffForm.fullName,
-                        email: staffForm.email.trim(),
-                        password: staffForm.password,
-                        role: staffForm.role,
-                        department: staffForm.department || 'General',
-                        status: 'active',
-                        created_at: new Date().toISOString()
-                    };
-
-                    if (client) {
-                        try {
-                            const { data, error } = await client.functions.invoke('create-staff', { body: { ...staffForm, fullName: staffForm.fullName, email: staffForm.email.trim() } });
-                            if (error) throw error;
-                            if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
-                            const created = normalizeUsers([data.staff])[0];
-                            seedData.users = [...(seedData.users || []), created];
-                            persistSeedTable('users', seedData.users);
-                            setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-                            setStaffMessage(`${created.fullName} can now sign in.`);
-                            return;
-                        } catch (remoteError) {
-                            console.warn('Supabase staff creation unavailable, falling back to local mode:', remoteError);
-                        }
-                    }
-
-                    const existing = JSON.parse(localStorage.getItem('medicore_staff_users') || '[]');
-                    const nextStaffUsers = [...existing, sanitized];
-                    localStorage.setItem('medicore_staff_users', JSON.stringify(nextStaffUsers));
-
-                    const created = normalizeUsers([sanitized])[0];
-                    const nextUsers = [...(seedData.users || []), created];
-                    seedData.users = nextUsers;
-                    persistSeedTable('users', nextUsers);
-
+                    if (!client) throw new Error('Supabase client is not available.');
+                    const { data, error } = await client.functions.invoke('create-staff', { body: { ...staffForm, fullName: staffForm.fullName, email: staffForm.email.trim() } });
+                    if (error) throw error;
+                    if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
+                    const created = normalizeUsers([data.staff])[0];
+                    seedData.users = [...(seedData.users || []), created];
                     setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-                    setStaffMessage(`${created.fullName} can now sign in with email ${created.email} and the password you set.`);
+                    setStaffMessage(`${created.fullName} can now sign in.`);
                 } catch (error) {
                     console.error(error);
                     setStaffMessage(error.message || 'Unable to create the staff account.');

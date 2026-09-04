@@ -1,26 +1,21 @@
         const ConsultationsModule = () => {
             const [consultations, setConsultations] = useState(hydrateSeedData().consultations || []);
-            const [form, setForm] = useState({ patientId: '', doctorId: 'u2', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '2026-09-10' });
+            const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
 
-            const handleSaveConsultation = () => {
+            const handleSaveConsultation = async () => {
                 if (!form.patientId || !form.chiefComplaint) return;
-                const payload = {
-                    id: 'cons_' + Date.now(),
-                    patientId: form.patientId,
-                    doctorId: form.doctorId,
-                    chiefComplaint: form.chiefComplaint,
-                    diagnosis: form.diagnosis,
-                    assessment: form.assessment,
-                    plan: form.plan,
-                    followUpDate: form.followUpDate,
-                    status: 'completed',
-                    createdAt: new Date().toISOString()
-                };
-
-                const next = [payload, ...consultations];
-                persistSeedTable('consultations', next);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return;
+                const { data, error } = await client.from('consultations').insert({
+                    patient_id: form.patientId, doctor_id: form.doctorId || null, chief_complaint: form.chiefComplaint,
+                    diagnosis: form.diagnosis || null, assessment: form.assessment || null, plan: form.plan || null,
+                    follow_up_date: form.followUpDate || null, status: 'completed'
+                }).select();
+                if (error || !data?.[0]) return;
+                const next = [normalizeConsultations(data)[0], ...consultations];
+                seedData.consultations = next;
                 setConsultations(next);
-                setForm({ patientId: '', doctorId: 'u2', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '2026-09-10' });
+                setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
             };
 
             return (
@@ -37,7 +32,7 @@
                         <Card title="New Consultation" className="lg:col-span-2">
                             <div className="space-y-4">
                                 <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: 'u2', label: 'Dr. Sarah Smith' }, { value: 'u3', label: 'Dr. Michael Jones' }]} />
+                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(hydrateSeedData().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
                                 <Input label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
@@ -51,7 +46,7 @@
                             <div className="space-y-3 text-sm text-slate-600">
                                 <div className="flex justify-between"><span>Today</span><span className="font-medium text-slate-900">{consultations.length}</span></div>
                                 <div className="flex justify-between"><span>Follow-ups</span><span className="font-medium text-slate-900">{consultations.filter(c => c.followUpDate).length}</span></div>
-                                <div className="flex justify-between"><span>In review</span><span className="font-medium text-slate-900">{Math.max(1, Math.ceil(consultations.length * 0.25))}</span></div>
+                                <div className="flex justify-between"><span>In review</span><span className="font-medium text-slate-900">{consultations.filter(c => c.status !== 'completed').length}</span></div>
                             </div>
                         </Card>
                     </div>
@@ -79,23 +74,20 @@
             const [vitals, setVitals] = useState(hydrateSeedData().vitals || []);
             const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
 
-            const handleSaveVitals = () => {
+            const handleSaveVitals = async () => {
                 if (!form.patientId) return;
-                const next = [{
-                    id: 'vit_' + Date.now(),
-                    patientId: form.patientId,
-                    recordedBy: 'u4',
-                    timestamp: new Date().toISOString(),
-                    temperature: form.temperature || '36.8',
-                    heartRate: Number(form.heartRate || 72),
-                    bloodPressureSystolic: Number(form.bloodPressureSystolic || 120),
-                    bloodPressureDiastolic: Number(form.bloodPressureDiastolic || 80),
-                    oxygenSaturation: Number(form.oxygenSaturation || 98),
-                    respiratoryRate: Number(form.respiratoryRate || 18),
-                    painScore: Number(form.painScore || 0),
-                    consciousness: 'Alert'
-                }, ...vitals];
-                persistSeedTable('vitals', next);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return;
+                const numericOrNull = (value) => value === '' ? null : Number(value);
+                const { data, error } = await client.from('vital_signs').insert({
+                    patient_id: form.patientId, temperature: numericOrNull(form.temperature), heart_rate: numericOrNull(form.heartRate),
+                    blood_pressure_systolic: numericOrNull(form.bloodPressureSystolic), blood_pressure_diastolic: numericOrNull(form.bloodPressureDiastolic),
+                    oxygen_saturation: numericOrNull(form.oxygenSaturation), respiratory_rate: numericOrNull(form.respiratoryRate),
+                    pain_score: numericOrNull(form.painScore), consciousness: 'Alert'
+                }).select();
+                if (error || !data?.[0]) return;
+                const next = [normalizeVitals(data)[0], ...vitals];
+                seedData.vitals = next;
                 setVitals(next);
                 setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
             };
@@ -128,9 +120,8 @@
 
                         <Card title="Clinical Alerts">
                             <div className="space-y-3 text-sm">
-                                <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-700">Hypotension risk: 2 patients</div>
-                                <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 text-amber-700">Oxygen saturation review: 3 patients</div>
-                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700">Stable trend: 14 patients</div>
+                                <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-700">Critical alerts are generated automatically for unsafe vital signs.</div>
+                                <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 text-amber-700">Review low oxygen saturation and blood pressure readings promptly.</div>
                             </div>
                         </Card>
                     </div>
@@ -166,15 +157,14 @@
 
             const save = async (table, payload, setter, appTable, mapper) => {
                 const client = window.MedicoreSupabase?.getClient?.();
-                let record = mapper([{ ...payload, id: `local-${Date.now()}` }])[0];
-                if (client) {
-                    const { data, error } = await client.from(table).insert([payload]).select();
-                    if (!error && data?.[0]) record = mapper([data[0]])[0];
-                    if (error) console.error(`Unable to save ${table}`, error);
-                }
+                if (!client) return false;
+                const { data, error } = await client.from(table).insert([payload]).select();
+                if (error || !data?.[0]) { console.error(`Unable to save ${table}`, error); return false; }
+                const record = mapper([data[0]])[0];
                 const next = [record, ...(appTable === 'allergies' ? allergies : appTable === 'conditions' ? conditions : carePlans)];
-                persistSeedTable(appTable, next);
+                seedData[appTable] = next;
                 setter(next);
+                return true;
             };
 
             const latestVitals = (seedData.vitals || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
@@ -188,27 +178,27 @@
 
             const addAllergy = async () => {
                 if (!allergyForm.patientId || !allergyForm.substance) return;
-                await save('patient_allergies', {
+                const saved = await save('patient_allergies', {
                     patient_id: allergyForm.patientId, substance: allergyForm.substance, reaction: allergyForm.reaction,
                     severity: allergyForm.severity, criticality: allergyForm.criticality, category: 'medication', clinical_status: 'active'
                 }, setAllergies, 'allergies', normalizeAllergies);
-                setAllergyForm({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
+                if (saved) setAllergyForm({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
             };
             const addCondition = async () => {
                 if (!conditionForm.patientId || !conditionForm.conditionName) return;
-                await save('patient_conditions', {
+                const saved = await save('patient_conditions', {
                     patient_id: conditionForm.patientId, condition_name: conditionForm.conditionName,
                     onset_date: conditionForm.onsetDate || null, clinical_status: 'active', verification_status: 'provisional'
                 }, setConditions, 'conditions', normalizeConditions);
-                setConditionForm({ patientId: '', conditionName: '', onsetDate: '' });
+                if (saved) setConditionForm({ patientId: '', conditionName: '', onsetDate: '' });
             };
             const addCarePlan = async () => {
                 if (!carePlanForm.patientId || !carePlanForm.title) return;
-                await save('care_plans', {
+                const saved = await save('care_plans', {
                     patient_id: carePlanForm.patientId, title: carePlanForm.title, description: carePlanForm.description,
                     target_date: carePlanForm.targetDate || null, status: 'active'
                 }, setCarePlans, 'carePlans', normalizeCarePlans);
-                setCarePlanForm({ patientId: '', title: '', description: '', targetDate: '' });
+                if (saved) setCarePlanForm({ patientId: '', title: '', description: '', targetDate: '' });
             };
 
             return (
@@ -317,25 +307,27 @@
         };
 
         const DocumentsModule = () => {
-            const [documents, setDocuments] = useState([
-                { id: 'doc_1', patientId: 'p1', fileName: 'Admission Summary.pdf', documentType: 'Clinical Note', uploadedBy: 'Dr. Sarah Smith', uploadedAt: '2026-09-01T09:00:00.000Z', size: '1.2 MB' },
-                { id: 'doc_2', patientId: 'p2', fileName: 'Imaging Report.pdf', documentType: 'Radiology', uploadedBy: 'Dr. Lisa Wang', uploadedAt: '2026-09-01T08:30:00.000Z', size: '890 KB' }
-            ]);
+            const [documents, setDocuments] = useState(hydrateSeedData().documents || []);
+            const [patientId, setPatientId] = useState('');
+            const [documentType, setDocumentType] = useState('Clinical Note');
+            const [uploadError, setUploadError] = useState('');
 
-            const handleUpload = (event) => {
+            const handleUpload = async (event) => {
                 const file = event.target.files && event.target.files[0];
-                if (!file) return;
-                const next = {
-                    id: 'doc_' + Date.now(),
-                    patientId: 'p1',
-                    fileName: file.name,
-                    documentType: 'Uploaded File',
-                    uploadedBy: 'System',
-                    uploadedAt: new Date().toISOString(),
-                    size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                };
-                setDocuments(prev => [next, ...prev]);
+                if (!file || !patientId) { setUploadError('Select a patient before uploading a document.'); return; }
+                setUploadError('');
+                const { data, error } = await window.MedicoreSupabase.uploadPatientDocument(patientId, file, documentType);
+                if (error || !data) { setUploadError(error?.message || 'Upload failed.'); return; }
+                const next = [normalizeDocuments([data])[0], ...documents];
+                seedData.documents = next;
+                setDocuments(next);
                 event.target.value = '';
+            };
+
+            const openDocument = async (document) => {
+                const { data, error } = await window.MedicoreSupabase.createDocumentUrl(document.fileUrl);
+                if (error || !data?.signedUrl) { setUploadError(error?.message || 'Unable to open the document.'); return; }
+                window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
             };
 
             return (
@@ -354,6 +346,14 @@
                     </div>
 
                     <Card>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Document type" value={documentType} onChange={(e) => setDocumentType(e.target.value)} options={['Clinical Note', 'Consent', 'Laboratory', 'Radiology', 'Discharge Summary', 'Referral'].map(value => ({ value, label: value }))} />
+                            {uploadError && <p className="self-end text-sm text-red-600">{uploadError}</p>}
+                        </div>
+                    </Card>
+
+                    <Card>
                         <DataTable
                             columns={[
                                 { key: 'fileName', title: 'File Name' },
@@ -363,8 +363,8 @@
                                 { key: 'uploadedAt', title: 'Uploaded', render: (row) => formatDateTime(row.uploadedAt) }
                             ]}
                             data={documents}
-                            actions={() => (
-                                <Button variant="ghost" size="sm" icon={Icons.Eye}>Open</Button>
+                            actions={(row) => (
+                                <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => openDocument(row)}>Open</Button>
                             )}
                         />
                     </Card>
