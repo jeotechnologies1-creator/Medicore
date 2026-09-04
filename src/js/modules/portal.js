@@ -3,32 +3,19 @@
         const PatientPortalModule = () => {
             const { user } = useAuth();
             const patientLookupId = user?.patientId || user?.id || null;
-            const patient = seedData.patients.find(p => p.id === patientLookupId || p.patientNumber === patientLookupId) || seedData.patients[0];
+            const patient = seedData.patients.find(p => p.id === patientLookupId || p.patientNumber === patientLookupId);
             const [activeTab, setActiveTab] = useState('overview');
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
                 department: 'General Medicine',
-                doctorId: 'user-doctor-1',
+                doctorId: '',
                 date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                 time: '10:30',
                 reason: '',
                 visitType: 'Follow-up'
             });
-            const [refillDraft, setRefillDraft] = useState({ medication: 'Atorvastatin 20mg', quantity: '30', notes: '' });
-            const messageKey = `medicore_portal_messages_${patient?.id || 'anonymous'}`;
-            const [portalMessages, setPortalMessages] = useState(() => {
-                try {
-                    const raw = localStorage.getItem(messageKey);
-                    if (raw) {
-                        const parsed = JSON.parse(raw);
-                        if (Array.isArray(parsed) && parsed.length) return parsed;
-                    }
-                } catch (e) {}
-                return [
-                    { id: 'msg-1', sender: 'Dr. Sarah Smith', direction: 'incoming', text: 'Your lab results are ready. Please schedule a follow-up appointment to discuss the findings.', sentAt: '2026-09-03T10:15:00Z' },
-                    { id: 'msg-2', sender: 'You', direction: 'outgoing', text: 'Thank you. I will book a follow-up next week.', sentAt: '2026-09-03T10:20:00Z' }
-                ];
-            });
+            const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
+            const [portalMessages, setPortalMessages] = useState([]);
 
             const tabs = [
                 { id: 'overview', label: 'Overview' },
@@ -40,51 +27,31 @@
             ];
 
             useEffect(() => {
-                try {
-                    localStorage.setItem(messageKey, JSON.stringify(portalMessages));
-                } catch (e) {}
-            }, [portalMessages, messageKey]);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !patient?.id) return;
+                client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at').then(({ data, error }) => {
+                    if (!error) setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at })));
+                });
+            }, [patient?.id]);
 
-            const handleSendMessage = () => {
+            const handleSendMessage = async () => {
                 if (!messageDraft.trim()) return;
-                const next = [
-                    ...portalMessages,
-                    { id: 'msg-' + Date.now(), sender: 'You', direction: 'outgoing', text: messageDraft.trim(), sentAt: new Date().toISOString() }
-                ];
-                setPortalMessages(next);
-                try {
-                    localStorage.setItem(messageKey, JSON.stringify(next));
-                } catch (e) {}
-                persistSeedTable('auditLogs', [
-                    ...((seedData.auditLogs || [])),
-                    { id: 'audit-' + Date.now(), userId: patient.id, action: 'Portal message sent', entityType: 'patient_message', entityId: patient.id, timestamp: new Date().toISOString(), severity: 'info' }
-                ]);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !patient?.id) return;
+                const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
+                if (error || !data?.[0]) return;
+                setPortalMessages((current) => [...current, { id: data[0].id, sender: data[0].sender_name, direction: data[0].direction, text: data[0].message, sentAt: data[0].sent_at }]);
                 setMessageDraft('');
             };
 
-            const handleBookAppointment = () => {
-                const nextBooking = {
-                    id: 'apt_' + Date.now(),
-                    patientId: patient.id,
-                    doctorId: appointmentDraft.doctorId,
-                    date: appointmentDraft.date,
-                    time: appointmentDraft.time,
-                    type: appointmentDraft.visitType || 'portal_request',
-                    department: appointmentDraft.department,
-                    status: 'scheduled',
-                    notes: appointmentDraft.reason || 'Requested through patient portal',
-                    createdAt: new Date().toISOString()
-                };
-                const next = [nextBooking, ...(seedData.appointments || [])];
-                persistSeedTable('appointments', next);
-                seedData.appointments = next;
-                persistSeedTable('auditLogs', [
-                    ...((seedData.auditLogs || [])),
-                    { id: 'audit-' + Date.now(), userId: patient.id, action: 'Portal appointment requested', entityType: 'appointment', entityId: nextBooking.id, timestamp: new Date().toISOString(), severity: 'info' }
-                ]);
+            const handleBookAppointment = async () => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !patient?.id || !appointmentDraft.date) return;
+                const { error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: appointmentDraft.doctorId || null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null });
+                if (error) return;
                 setAppointmentDraft({
                     department: 'General Medicine',
-                    doctorId: 'user-doctor-1',
+                    doctorId: '',
                     date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     time: '10:30',
                     reason: '',
@@ -93,26 +60,18 @@
                 setActiveTab('appointments');
             };
 
-            const handleRequestRefill = () => {
+            const handleRequestRefill = async () => {
                 if (!refillDraft.medication.trim()) return;
-                const refillEntry = {
-                    id: 'refill_' + Date.now(),
-                    patientId: patient.id,
-                    medication: refillDraft.medication,
-                    quantity: refillDraft.quantity || '30',
-                    notes: refillDraft.notes || 'Requested via patient portal',
-                    status: 'pending_review',
-                    createdAt: new Date().toISOString()
-                };
-                const next = [refillEntry, ...((seedData.prescriptions || []).filter((item) => item.patientId !== patient.id || !item._portalRefill))];
-                persistSeedTable('prescriptions', next);
-                seedData.prescriptions = next;
-                persistSeedTable('auditLogs', [
-                    ...((seedData.auditLogs || [])),
-                    { id: 'audit-' + Date.now(), userId: patient.id, action: 'Medication refill requested', entityType: 'prescription', entityId: refillEntry.id, timestamp: new Date().toISOString(), severity: 'info' }
-                ]);
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !patient?.id) return;
+                const { error } = await client.from('medication_refill_requests').insert({ patient_id: patient.id, medication_name: refillDraft.medication.trim(), quantity: Number(refillDraft.quantity || 0), notes: refillDraft.notes || null });
+                if (error) return;
                 setRefillDraft({ medication: refillDraft.medication, quantity: refillDraft.quantity, notes: '' });
             };
+
+            if (!patient) {
+                return <div className="p-6"><Card title="Patient portal unavailable"><p className="text-slate-600">This account is not linked to a patient record. Ask your care team to link your profile.</p></Card></div>;
+            }
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -161,11 +120,11 @@
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Last visit</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((seedData.appointments || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date || new Date().toISOString())}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((seedData.appointments || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date)}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Active meds</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(seedData.medicationOrders || []).filter(m => m.patientId === patient.id && m.status === 'active').length || 1}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(seedData.medicationOrders || []).filter(m => m.patientId === patient.id && m.status === 'active').length}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Open bills</p>
@@ -173,7 +132,7 @@
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Next review</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate(patient.registrationDate)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((seedData.appointments || []).filter(a => a.patientId === patient.id && a.date >= new Date().toISOString().slice(0, 10)).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
                                         </div>
                                     </div>
                                 </Card>

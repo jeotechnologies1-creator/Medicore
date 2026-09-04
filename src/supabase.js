@@ -246,26 +246,15 @@
     const loginProfile = async (email, password) => {
         const normalizedEmail = String(email || '').trim();
         const normalizedPassword = String(password || '');
-        if (normalizedEmail.toLowerCase() === 'admin' && normalizedPassword === 'admin') {
-            return {
-                id: 'local-admin',
-                name: 'System Administrator',
-                full_name: 'System Administrator',
-                email: 'admin',
-                role: 'super_admin'
-            };
-        }
-
         try {
             const client = getClient();
             if (!client) {
                 return null;
             }
-            const transformedEmail = normalizedEmail.toLowerCase() === 'admin' ? 'admin@medicore.local' : normalizedEmail;
-            const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: transformedEmail, password: normalizedPassword });
+            const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
             if (authError || !authData.user) return null;
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
-            if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'super_admin' };
+            if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null };
             await client.auth.signOut();
             return null;
         } catch (error) {

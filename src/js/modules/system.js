@@ -283,7 +283,7 @@
                 timezone: 'UTC',
                 locale: 'en-US',
                 currency: 'USD',
-                contactEmail: 'admin@medicore.local',
+                contactEmail: '',
                 phone: '+1 (800) 555-0147',
                 serviceLine: 'General Hospital & Outpatient Clinics',
                 sessionTimeoutMinutes: 30,
@@ -1148,9 +1148,7 @@
                                         <span className="text-xs text-slate-500">Latest 10</span>
                                     </div>
                                     <div className="space-y-2">
-                                        {(exportHistory.length ? exportHistory : [
-                                            { id: 'demo-1', exportType: 'audit_csv', fileName: 'medicore-audit-export.csv', recordCount: seedData.auditLogs.length || 0, exportedAt: new Date().toISOString() }
-                                        ]).map((entry) => (
+                                        {exportHistory.map((entry) => (
                                             <div key={entry.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
                                                 <div>
                                                     <p className="font-medium text-slate-700">{entry.fileName}</p>
@@ -1159,6 +1157,7 @@
                                                 <span className="text-slate-500">{formatDateTime(entry.exportedAt)}</span>
                                             </div>
                                         ))}
+                                        {!exportHistory.length && <p className="text-xs text-slate-500">No compliance exports have been recorded.</p>}
                                     </div>
                                 </div>
                             </div>

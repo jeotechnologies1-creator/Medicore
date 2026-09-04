@@ -2,37 +2,6 @@
         // AUTH CONTEXT
         // ==========================================
         const AuthContext = React.createContext(null);
-        const LOCAL_STAFF_STORE_KEY = 'medicore_staff_users';
-        const DEFAULT_LOCAL_STAFF_USERS = [
-            { id: 'staff-doctor-1', name: 'Dr. Sarah Smith', full_name: 'Dr. Sarah Smith', email: 'doctor@medicore.local', password: 'doctor123', role: 'doctor', department: 'General Medicine', status: 'active' },
-            { id: 'staff-nurse-1', name: 'Grace Okafor', full_name: 'Grace Okafor', email: 'nurse@medicore.local', password: 'nurse123', role: 'nurse', department: 'Emergency', status: 'active' },
-            { id: 'staff-reception-1', name: 'Musa Bello', full_name: 'Musa Bello', email: 'reception@medicore.local', password: 'reception123', role: 'receptionist', department: 'Front Desk', status: 'active' }
-        ];
-
-        const getStoredStaffUsers = () => {
-            try {
-                const raw = localStorage.getItem(LOCAL_STAFF_STORE_KEY);
-                if (!raw) {
-                    localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(DEFAULT_LOCAL_STAFF_USERS));
-                    return DEFAULT_LOCAL_STAFF_USERS;
-                }
-                const parsed = JSON.parse(raw);
-                if (!Array.isArray(parsed) || !parsed.length) {
-                    localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(DEFAULT_LOCAL_STAFF_USERS));
-                    return DEFAULT_LOCAL_STAFF_USERS;
-                }
-                return parsed;
-            } catch (e) {
-                return DEFAULT_LOCAL_STAFF_USERS;
-            }
-        };
-
-        const saveStoredStaffUsers = (staffUsers) => {
-            try {
-                localStorage.setItem(LOCAL_STAFF_STORE_KEY, JSON.stringify(staffUsers));
-            } catch (e) {}
-        };
-
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
@@ -250,14 +219,7 @@
         ];
 
         const AuthProvider = ({ children }) => {
-            const [user, setUser] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('medicore_user');
-                    return saved ? JSON.parse(saved) : null;
-                } catch (e) {
-                    return null;
-                }
-            });
+            const [user, setUser] = useState(null);
             const [roleMatrix, setRoleMatrix] = useState(() => {
                 try {
                     const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
@@ -267,6 +229,22 @@
                 }
             });
             const [loading, setLoading] = useState(false);
+
+            useEffect(() => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return undefined;
+                let active = true;
+                const applySession = async (session) => {
+                    if (!session?.user || !active) return;
+                    const { data } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
+                    if (active && data) {
+                        setUser({ ...data, name: data.full_name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null });
+                    }
+                };
+                client.auth.getSession().then(({ data }) => applySession(data.session));
+                const { data: subscription } = client.auth.onAuthStateChange((_event, session) => applySession(session));
+                return () => { active = false; subscription.subscription.unsubscribe(); };
+            }, []);
 
             useEffect(() => {
                 const hydrateRoleMatrix = async () => {
@@ -310,14 +288,6 @@
                     let found = null;
                     const normalizedEmail = String(email || '').trim();
                     const normalizedPassword = String(password || '');
-                    const isLocalAdmin = normalizedEmail.toLowerCase() === 'admin' && normalizedPassword === 'admin';
-                    const localStaffUsers = getStoredStaffUsers();
-                    const matchingStaff = localStaffUsers.find((person) => {
-                        const storedEmail = String(person.email || '').trim().toLowerCase();
-                        const storedPassword = String(person.password || '');
-                        return storedEmail === normalizedEmail.toLowerCase() && storedPassword === normalizedPassword;
-                    });
-
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
                         try {
                             found = await window.MedicoreSupabase.loginProfile(email, password);
@@ -327,41 +297,17 @@
                         }
                     }
 
-                    if (!found && matchingStaff) {
-                        found = {
-                            id: matchingStaff.id || `staff-${Date.now()}`,
-                            name: matchingStaff.name || matchingStaff.full_name || matchingStaff.email,
-                            full_name: matchingStaff.full_name || matchingStaff.name || matchingStaff.email,
-                            email: matchingStaff.email,
-                            role: matchingStaff.role || 'doctor',
-                            department: matchingStaff.department || ''
-                        };
-                    }
-
-                    if (!found && isLocalAdmin) {
-                        found = {
-                            id: 'local-admin',
-                            name: 'System Administrator',
-                            full_name: 'System Administrator',
-                            email: 'admin',
-                            role: 'super_admin'
-                        };
-                    }
-
                     if (found) {
                         const safeUser = {
                             ...found,
-                            id: found.id || 'local-admin',
-                            name: found.name || found.full_name || found.email || 'System Administrator',
-                            role: found.role || 'super_admin',
-                            email: found.email || 'admin',
+                            id: found.id,
+                            name: found.name || found.full_name || found.email,
+                            role: found.role || 'receptionist',
+                            email: found.email,
                             patientId: found.patientId || null
                         };
                         delete safeUser.password;
                         setUser(safeUser);
-                        try {
-                            localStorage.setItem('medicore_user', JSON.stringify(safeUser));
-                        } catch (e) {}
                         return safeUser;
                     }
                     throw new Error('Invalid credentials');
@@ -373,9 +319,6 @@
             const logout = useCallback(() => {
                 setUser(null);
                 window.MedicoreSupabase?.logout?.();
-                try {
-                    localStorage.removeItem('medicore_user');
-                } catch (e) {}
             }, []);
 
             const normalizeRoleKey = (role) => {
@@ -502,14 +445,14 @@
                                     </div>
                                 )}
                                 <Input
-                                    label="Email or username"
-                                    placeholder="Enter your email or username"
+                                    label="Email"
+                                    placeholder="Enter your email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     icon={Icons.Mail}
                                     required
                                 />
-                                <div className="-mt-2 text-xs text-slate-500">Default admin: admin / admin · Staff accounts created by admin also work here.</div>
+                                <div className="-mt-2 text-xs text-slate-500">Use the email and password for your Supabase Auth account.</div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
                                     <div className="relative">

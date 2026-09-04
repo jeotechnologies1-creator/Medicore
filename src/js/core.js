@@ -365,223 +365,23 @@
             createdAt: row.created_at || row.createdAt
         }));
 
-        const buildDefaultSeedData = () => {
-            const today = new Date();
-            const isoDate = (offsetDays = 0) => {
-                const d = new Date(today);
-                d.setDate(d.getDate() + offsetDays);
-                return d.toISOString().slice(0, 10);
-            };
+        const createEmptyStore = () => ({
+            users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [],
+            pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [],
+            vitals: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
+            medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [],
+            insuranceClaims: [], offices: [], officeStaff: []
+        });
 
-            const users = [
-                { id: 'user-admin', email: 'admin', role: 'super_admin', name: 'System Administrator', fullName: 'System Administrator', department: 'Administration', status: 'active', createdAt: new Date().toISOString() },
-                { id: 'user-doctor-1', email: 'dr.smith@medicore.local', role: 'doctor', name: 'Dr. Ada Smith', fullName: 'Dr. Ada Smith', department: 'Cardiology', status: 'active', createdAt: new Date().toISOString() },
-                { id: 'user-nurse-1', email: 'nurse.joy@medicore.local', role: 'nurse', name: 'Joy Okafor', fullName: 'Joy Okafor', department: 'Ward 2', status: 'active', createdAt: new Date().toISOString() },
-                { id: 'user-pharmacist-1', email: 'pharm.rose@medicore.local', role: 'pharmacist', name: 'Rose Ibeh', fullName: 'Rose Ibeh', department: 'Pharmacy', status: 'active', createdAt: new Date().toISOString() },
-                { id: 'user-receptionist-1', email: 'reception@medicore.local', role: 'receptionist', name: 'Grace Nwosu', fullName: 'Grace Nwosu', department: 'Front Desk', status: 'active', createdAt: new Date().toISOString() }
-            ];
-
-            const patients = [
-                { id: 'pat-1001', patientNumber: 'MC-1001', firstName: 'Daniel', lastName: 'Adebayo', dateOfBirth: '1988-03-18', gender: 'Male', phone: '+2348001001001', email: 'daniel.adebayo@example.com', address: 'Lekki Phase 1, Lagos', bloodGroup: 'O+', emergencyContact: { name: 'Ruth Adebayo', phone: '+2348001111001' }, insurance: { provider: 'AXA Health', policyNumber: 'AXA-7732' }, registrationDate: isoDate(-120), status: 'active', allergies: 'Penicillin', chronicConditions: 'Hypertension' },
-                { id: 'pat-1002', patientNumber: 'MC-1002', firstName: 'Amaka', lastName: 'Eze', dateOfBirth: '1994-11-07', gender: 'Female', phone: '+2348001001002', email: 'amaka.eze@example.com', address: 'Gwarinpa, Abuja', bloodGroup: 'A+', emergencyContact: { name: 'Chinedu Eze', phone: '+2348001111002' }, insurance: { provider: 'Leadway', policyNumber: 'LW-2301' }, registrationDate: isoDate(-80), status: 'active', allergies: 'None', chronicConditions: 'Asthma' },
-                { id: 'pat-1003', patientNumber: 'MC-1003', firstName: 'Nneka', lastName: 'Okafor', dateOfBirth: '1976-01-15', gender: 'Female', phone: '+2348001001003', email: 'nneka.okafor@example.com', address: 'Wuse, Abuja', bloodGroup: 'AB-', emergencyContact: { name: 'Ifeanyi Okafor', phone: '+2348001111003' }, insurance: { provider: 'Premium Health', policyNumber: 'PH-4459' }, registrationDate: isoDate(-200), status: 'active', allergies: 'Latex', chronicConditions: 'Diabetes' },
-                { id: 'pat-1004', patientNumber: 'MC-1004', firstName: 'Tunde', lastName: 'Balogun', dateOfBirth: '1969-08-22', gender: 'Male', phone: '+2348001001004', email: 'tunde.balogun@example.com', address: 'Surulere, Lagos', bloodGroup: 'B+', emergencyContact: { name: 'Titi Balogun', phone: '+2348001111004' }, insurance: { provider: 'AIICO', policyNumber: 'AI-4421' }, registrationDate: isoDate(-35), status: 'active', allergies: 'None', chronicConditions: 'Chronic Kidney Disease' }
-            ];
-
-            const appointments = [
-                { id: 'apt-2001', patientId: 'pat-1001', doctorId: 'user-doctor-1', date: isoDate(0), time: '09:00', type: 'consultation', department: 'Cardiology', status: 'scheduled', notes: 'Follow-up check for blood pressure review.' },
-                { id: 'apt-2002', patientId: 'pat-1002', doctorId: 'user-doctor-1', date: isoDate(1), time: '11:30', type: 'consultation', department: 'Pulmonology', status: 'scheduled', notes: 'Asthma review.' },
-                { id: 'apt-2003', patientId: 'pat-1003', doctorId: 'user-doctor-1', date: isoDate(-1), time: '14:00', type: 'review', department: 'Endocrinology', status: 'completed', notes: 'Reviewed glucose control.' }
-            ];
-
-            const labOrders = [
-                { id: 'lab-3001', patientId: 'pat-1001', doctorId: 'user-doctor-1', testType: 'Lipid Panel', category: 'Chemistry', priority: 'routine', status: 'pending', orderedDate: isoDate(-2), resultDate: null, results: null, technicianId: null },
-                { id: 'lab-3002', patientId: 'pat-1003', doctorId: 'user-doctor-1', testType: 'HBA1C', category: 'Endocrinology', priority: 'urgent', status: 'processing', orderedDate: isoDate(-1), resultDate: null, results: null, technicianId: null },
-                { id: 'lab-3003', patientId: 'pat-1002', doctorId: 'user-doctor-1', testType: 'CBC', category: 'Hematology', priority: 'routine', status: 'completed', orderedDate: isoDate(-3), resultDate: isoDate(-2), results: { hemoglobin: '12.4 g/dL' }, technicianId: null }
-            ];
-
-            const radiologyOrders = [
-                { id: 'rad-4001', patientId: 'pat-1001', doctorId: 'user-doctor-1', studyType: 'Echocardiogram', modality: 'Cardiac Sonography', status: 'requested', priority: 'urgent', orderedDate: isoDate(-2), scheduledDate: isoDate(2), report: '', radiologistId: null },
-                { id: 'rad-4002', patientId: 'pat-1004', doctorId: 'user-doctor-1', studyType: 'Chest X-Ray', modality: 'X-ray', status: 'reported', priority: 'routine', orderedDate: isoDate(-5), scheduledDate: isoDate(-4), report: 'No acute pulmonary findings.', radiologistId: null }
-            ];
-
-            const prescriptions = [
-                { id: 'rx-5001', patientId: 'pat-1001', doctorId: 'user-doctor-1', diagnosis: 'Hypertension', medications: [{ name: 'Amlodipine', dose: '5mg', frequency: 'OD' }], status: 'active', prescriptionDate: isoDate(-1), notes: 'Continue monitoring blood pressure.' },
-                { id: 'rx-5002', patientId: 'pat-1002', doctorId: 'user-doctor-1', diagnosis: 'Asthma', medications: [{ name: 'Albuterol Inhaler', dose: '2 puffs', frequency: 'PRN' }], status: 'active', prescriptionDate: isoDate(-2), notes: 'Use as needed.' }
-            ];
-
-            const pharmacyInventory = [
-                { id: 'inv-6001', name: 'Amlodipine', genericName: 'Amlodipine', category: 'Cardiology', stockQuantity: 120, reorderLevel: 25, unitPrice: 18.5, expiryDate: '2028-05-31', batchNumber: 'AML-101', supplier: 'Medline', location: 'Shelf A1', status: 'active' },
-                { id: 'inv-6002', name: 'Salbutamol Inhaler', genericName: 'Albuterol', category: 'Respiratory', stockQuantity: 34, reorderLevel: 20, unitPrice: 14.25, expiryDate: '2027-12-20', batchNumber: 'SAL-204', supplier: 'HealthPlus', location: 'Shelf C3', status: 'active' },
-                { id: 'inv-6003', name: 'Insulin Glargine', genericName: 'Insulin', category: 'Diabetes', stockQuantity: 8, reorderLevel: 15, unitPrice: 32.0, expiryDate: '2026-11-15', batchNumber: 'INS-118', supplier: 'NovaCare', location: 'Cold Room', status: 'low_stock' }
-            ];
-
-            const billing = [
-                { id: 'bill-7001', patientId: 'pat-1001', invoiceNumber: 'INV-76001', date: isoDate(-1), subtotal: 340, discount: 20, tax: 21, total: 341, paid: 341, balance: 0, paymentMethod: 'Card', status: 'paid' },
-                { id: 'bill-7002', patientId: 'pat-1002', invoiceNumber: 'INV-76002', date: isoDate(-3), subtotal: 220, discount: 0, tax: 18, total: 238, paid: 150, balance: 88, paymentMethod: 'Insurance', status: 'partial' },
-                { id: 'bill-7003', patientId: 'pat-1003', invoiceNumber: 'INV-76003', date: isoDate(-5), subtotal: 480, discount: 10, tax: 35, total: 505, paid: 505, balance: 0, paymentMethod: 'Transfer', status: 'paid' }
-            ];
-
-            const admissions = [
-                { id: 'adm-8001', patientId: 'pat-1003', ward: 'General Ward', bedNumber: 'G-12', admissionDate: isoDate(-10), dischargeDate: isoDate(-2), doctorId: 'user-doctor-1', diagnosis: 'Diabetes management', status: 'discharged', acuity: 'moderate' },
-                { id: 'adm-8002', patientId: 'pat-1004', ward: 'Cardiac Ward', bedNumber: 'C-02', admissionDate: isoDate(-1), dischargeDate: null, doctorId: 'user-doctor-1', diagnosis: 'Cardiac observation', status: 'active', acuity: 'critical' }
-            ];
-
-            const surgeries = [
-                { id: 'surg-9001', patientId: 'pat-1004', surgeonId: 'user-doctor-1', procedure: 'Coronary angiography review', scheduledDate: isoDate(4), scheduledTime: '13:00', duration: '60 min', status: 'scheduled', otRoom: 'OR-2', anesthesia: 'Local', priority: 'urgent' }
-            ];
-
-            const notifications = [
-                { id: 'note-1001', userId: 'user-admin', type: 'system', title: 'Inventory alert', message: 'Insulin glargine stock is below reorder threshold.', read: false, priority: 'high' },
-                { id: 'note-1002', userId: 'user-admin', type: 'patient', title: 'Follow-up due', message: 'Patient Daniel Adebayo has a follow-up due today.', read: false, priority: 'medium' }
-            ];
-
-            const auditLogs = [
-                { id: 'audit-1101', userId: 'user-admin', action: 'Login', entityType: 'auth', entityId: 'user-admin', timestamp: new Date().toISOString(), severity: 'info' },
-                { id: 'audit-1102', userId: 'user-doctor-1', action: 'Medication issued', entityType: 'prescription', entityId: 'rx-5001', timestamp: new Date().toISOString(), severity: 'info' }
-            ];
-
-            const vitals = [
-                { id: 'vital-1201', patientId: 'pat-1001', recordedBy: 'user-nurse-1', timestamp: new Date().toISOString(), temperature: 36.8, heartRate: 74, bloodPressureSystolic: 128, bloodPressureDiastolic: 82, respiratoryRate: 18, oxygenSaturation: 98, painScore: 2, weight: 72.5, height: 176, bmi: 23.4, consciousness: 'Alert' },
-                { id: 'vital-1202', patientId: 'pat-1002', recordedBy: 'user-nurse-1', timestamp: new Date().toISOString(), temperature: 37.1, heartRate: 88, bloodPressureSystolic: 122, bloodPressureDiastolic: 76, respiratoryRate: 20, oxygenSaturation: 97, painScore: 1, weight: 64, height: 165, bmi: 23.5, consciousness: 'Alert' }
-            ];
-
-            const consultations = [
-                { id: 'consult-1301', patientId: 'pat-1001', doctorId: 'user-doctor-1', chiefComplaint: 'Headache and dizziness', diagnosis: 'Hypertension follow-up', assessment: 'Stable blood pressure trend', plan: 'Continue current medication and repeat review in 2 weeks.', followUpDate: isoDate(14), status: 'completed', createdAt: new Date().toISOString() },
-                { id: 'consult-1302', patientId: 'pat-1002', doctorId: 'user-doctor-1', chiefComplaint: 'Chest tightness', diagnosis: 'Asthma flare', assessment: 'Controlled with inhaler', plan: 'Monitor trigger avoidance and continue inhaler use.', followUpDate: isoDate(10), status: 'completed', createdAt: new Date().toISOString() }
-            ];
-
-            const documents = [
-                { id: 'doc-1401', patientId: 'pat-1001', fileName: 'BP-Review.pdf', documentType: 'Progress Note', fileUrl: '', uploadedBy: 'System Administrator', uploadedAt: new Date().toISOString(), size: '420 KB' },
-                { id: 'doc-1402', patientId: 'pat-1002', fileName: 'Asthma-Plan.pdf', documentType: 'Care Plan', fileUrl: '', uploadedBy: 'Dr. Ada Smith', uploadedAt: new Date().toISOString(), size: '310 KB' }
-            ];
-
-            const immunizations = [
-                { id: 'imm-1501', patientId: 'pat-1002', vaccine: 'Influenza', status: 'administered', administeredDate: isoDate(-20), nextDueDate: null, notes: 'Annual vaccine completed.' },
-                { id: 'imm-1502', patientId: 'pat-1004', vaccine: 'COVID-19 Booster', status: 'scheduled', administeredDate: null, nextDueDate: isoDate(7), notes: 'Schedule booster.' }
-            ];
-
-            const allergies = [
-                { id: 'allergy-1601', patientId: 'pat-1001', substance: 'Penicillin', category: 'Medication', reaction: 'Rash', severity: 'moderate', criticality: 'medium', clinicalStatus: 'active' },
-                { id: 'allergy-1602', patientId: 'pat-1003', substance: 'Latex', category: 'Material', reaction: 'Skin irritation', severity: 'mild', criticality: 'low', clinicalStatus: 'active' }
-            ];
-
-            const conditions = [
-                { id: 'cond-1701', patientId: 'pat-1001', conditionName: 'Hypertension', clinicalStatus: 'active', verificationStatus: 'confirmed', onsetDate: '2020-02-01', notes: 'Managed with lifestyle adjustments and medication.' },
-                { id: 'cond-1702', patientId: 'pat-1002', conditionName: 'Asthma', clinicalStatus: 'active', verificationStatus: 'confirmed', onsetDate: '2017-04-12', notes: 'Triggered by dust and seasonal changes.' },
-                { id: 'cond-1703', patientId: 'pat-1003', conditionName: 'Diabetes mellitus', clinicalStatus: 'active', verificationStatus: 'confirmed', onsetDate: '2018-06-05', notes: 'Monitoring glucose regularly.' }
-            ];
-
-            const medicationOrders = [
-                { id: 'med-1801', patientId: 'pat-1001', medicationName: 'Amlodipine', dose: '5', doseUnit: 'mg', route: 'Oral', frequency: 'OD', status: 'active', indication: 'Blood pressure control' },
-                { id: 'med-1802', patientId: 'pat-1002', medicationName: 'Albuterol Inhaler', dose: '2', doseUnit: 'puffs', route: 'Inhaled', frequency: 'PRN', status: 'active', indication: 'Asthma relief' }
-            ];
-
-            const carePlans = [
-                { id: 'care-1901', patientId: 'pat-1001', title: 'Hypertension care plan', description: 'Review BP trend and medication adherence weekly.', status: 'active', targetDate: isoDate(30), reviewDate: isoDate(14) },
-                { id: 'care-1902', patientId: 'pat-1002', title: 'Asthma monitoring plan', description: 'Track inhaler use and trigger management.', status: 'active', targetDate: isoDate(21), reviewDate: isoDate(7) }
-            ];
-
-            const clinicalTasks = [
-                { id: 'task-2001', patientId: 'pat-1001', title: 'Repeat blood pressure check', taskType: 'Observation', dueAt: new Date().toISOString(), priority: 'routine', status: 'open' },
-                { id: 'task-2002', patientId: 'pat-1002', title: 'Review trigger diary', taskType: 'Education', dueAt: new Date().toISOString(), priority: 'routine', status: 'in_progress' }
-            ];
-
-            const clinicalAlerts = [
-                { id: 'alert-2101', patientId: 'pat-1004', alertType: 'Cardiac', severity: 'critical', message: 'High-risk cardiac admission under observation.', status: 'open' },
-                { id: 'alert-2102', patientId: 'pat-1003', alertType: 'Medication', severity: 'warning', message: 'Low insulin stock detected.', status: 'acknowledged' }
-            ];
-
-            const wards = [
-                { id: 'ward-2201', name: 'General Ward', specialty: 'Internal Medicine', capacity: 16, occupied: 9, status: 'active' },
-                { id: 'ward-2202', name: 'Cardiac Ward', specialty: 'Cardiology', capacity: 10, occupied: 4, status: 'active' },
-                { id: 'ward-2203', name: 'Maternity', specialty: 'Obstetrics', capacity: 12, occupied: 7, status: 'active' }
-            ];
-
-            const beds = [
-                { id: 'bed-2301', wardId: 'ward-2201', bedNumber: 'G-01', status: 'occupied' },
-                { id: 'bed-2302', wardId: 'ward-2201', bedNumber: 'G-02', status: 'available' },
-                { id: 'bed-2303', wardId: 'ward-2202', bedNumber: 'C-02', status: 'occupied' },
-                { id: 'bed-2304', wardId: 'ward-2202', bedNumber: 'C-05', status: 'available' }
-            ];
-
-            const insuranceClaims = [
-                { id: 'claim-2401', patientId: 'pat-1002', claimNumber: 'CLM-1209', provider: 'Leadway', amountClaimed: 2850, amountApproved: 2100, status: 'pending' },
-                { id: 'claim-2402', patientId: 'pat-1004', claimNumber: 'CLM-1218', provider: 'AXA Health', amountClaimed: 5300, amountApproved: 4800, status: 'approved' }
-            ];
-
-            const offices = [
-                { id: 'office-2501', name: 'Cardiology Clinic', officeType: 'Clinic', specialty: 'Cardiology', location: 'Block A', phone: '+2348003003001', email: 'cardio@medicore.local', status: 'active', headDoctorId: 'user-doctor-1', createdBy: 'user-admin', createdAt: new Date().toISOString() },
-                { id: 'office-2502', name: 'Outpatient Wing', officeType: 'Clinic', specialty: 'General Medicine', location: 'Block B', phone: '+2348003003002', email: 'outpatient@medicore.local', status: 'active', headDoctorId: null, createdBy: 'user-admin', createdAt: new Date().toISOString() }
-            ];
-
-            const officeStaff = [
-                { id: 'office-staff-2601', officeId: 'office-2501', profileId: 'user-doctor-1', role: 'specialist', isLead: true },
-                { id: 'office-staff-2602', officeId: 'office-2502', profileId: 'user-receptionist-1', role: 'front_desk', isLead: false }
-            ];
-
-            return {
-                users,
-                patients,
-                appointments,
-                labOrders,
-                radiologyOrders,
-                prescriptions,
-                pharmacyInventory,
-                billing,
-                admissions,
-                surgeries,
-                notifications,
-                auditLogs,
-                vitals,
-                consultations,
-                documents,
-                immunizations,
-                allergies,
-                conditions,
-                medicationOrders,
-                carePlans,
-                clinicalTasks,
-                clinicalAlerts,
-                wards,
-                beds,
-                insuranceClaims,
-                offices,
-                officeStaff
-            };
-        };
 
         const initializeLocalSeedData = () => {
-            try {
-                const stored = localStorage.getItem('medicore_store');
-                if (stored) {
-                    const parsed = JSON.parse(stored);
-                    if (parsed && typeof parsed === 'object') {
-                        Object.keys(seedData).forEach((key) => {
-                            const value = Array.isArray(parsed[key]) ? parsed[key] : (Array.isArray(seedData[key]) ? seedData[key] : []);
-                            seedData[key] = value;
-                        });
-                        return seedData;
-                    }
-                }
-            } catch (e) {
-                console.warn('Unable to load stored local data; bootstrapping defaults.', e);
-            }
-
-            const generated = buildDefaultSeedData();
-            Object.keys(seedData).forEach((key) => {
-                seedData[key] = Array.isArray(generated[key]) ? generated[key] : [];
-            });
-            try {
-                localStorage.setItem('medicore_store', JSON.stringify(generated));
-            } catch (e) {}
+            Object.assign(seedData, createEmptyStore());
             return seedData;
         };
 
         const hydrateSeedData = () => {
             const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'offices', 'officeStaff'];
             const next = {};
-            initializeLocalSeedData();
             tables.forEach((table) => {
                 next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
             });
@@ -591,11 +391,6 @@
         const persistSeedTable = (table, rows) => {
             const nextRows = Array.isArray(rows) ? rows : [];
             if (seedData) seedData[table] = nextRows;
-            try {
-                const existing = JSON.parse(localStorage.getItem('medicore_store') || '{}');
-                existing[table] = nextRows;
-                localStorage.setItem('medicore_store', JSON.stringify(existing));
-            } catch (e) {}
             return nextRows;
         };
 
@@ -669,12 +464,6 @@
                     continue;
                 }
                 nextStore[entry.appTable] = entry.mapper(data || []);
-            }
-
-            const hasRemoteRows = Object.values(nextStore).some((value) => Array.isArray(value) && value.length > 0);
-            if (!hasRemoteRows) {
-                initializeLocalSeedData();
-                return seedData;
             }
 
             Object.keys(seedData).forEach((key) => delete seedData[key]);

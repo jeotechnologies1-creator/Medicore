@@ -40,13 +40,13 @@
 
             const handleRegisterPatient = async () => {
                 const payload = {
-                    patient_number: `P-${new Date().getFullYear()}-${String((patients?.length || 0) + 1).padStart(4, '0')}`,
+                    patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
                     first_name: form.firstName,
                     last_name: form.lastName,
                     date_of_birth: form.dateOfBirth,
                     gender: form.gender,
                     phone: form.phone,
-                    email: form.email || `${form.firstName.toLowerCase()}.${form.lastName.toLowerCase()}@medicore.local`,
+                    email: form.email || null,
                     address: form.address,
                     blood_group: form.bloodGroup,
                     emergency_contact_name: form.emergencyContactName,
@@ -62,17 +62,10 @@
                 }
 
                 const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                let created = null;
-                if (client) {
-                    const { data, error } = await client.from('patients').insert([payload]).select();
-                    if (!error && data && data[0]) created = data[0];
-                }
-                if (!created) {
-                    const id = 'p' + Date.now();
-                    created = { ...payload, id, patientNumber: payload.patient_number, firstName: payload.first_name, lastName: payload.last_name, dateOfBirth: payload.date_of_birth, bloodGroup: payload.blood_group, emergencyContact: { name: payload.emergency_contact_name, phone: payload.emergency_contact_phone }, insurance: { provider: 'Not Provided', policyNumber: 'N/A' }, createdAt: new Date().toISOString() };
-                    persistSeedTable('patients', [...patients, created]);
-                    setPatients([...patients, created]);
-                } else {
+                if (!client) return;
+                const { data, error } = await client.from('patients').insert([payload]).select();
+                const created = data?.[0];
+                if (!error && created) {
                     const mapped = {
                         ...created,
                         id: created.id,
@@ -86,7 +79,7 @@
                         registrationDate: created.registration_date || created.registrationDate || new Date().toISOString().split('T')[0]
                     };
                     const nextPatients = [...patients, mapped];
-                    persistSeedTable('patients', nextPatients);
+                    seedData.patients = nextPatients;
                     setPatients(nextPatients);
                 }
                 setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
@@ -194,83 +187,63 @@
                     })
                     : null;
 
-                const handleSaveMedicationOrder = () => {
+                const insertClinicalRecord = async (table, payload) => {
+                    const client = window.MedicoreSupabase?.getClient?.();
+                    if (!client) return null;
+                    const { data, error } = await client.from(table).insert(payload).select();
+                    if (error) {
+                        console.error(`Unable to save ${table}:`, error.message);
+                        return null;
+                    }
+                    return data?.[0] || null;
+                };
+
+                const handleSaveMedicationOrder = async () => {
                     if (!medicationForm.medicationName.trim()) return;
-
-                    const nextOrder = {
-                        id: 'med_order_' + Date.now(),
-                        patientId: patient.id,
-                        medicationName: medicationForm.medicationName.trim(),
-                        dose: medicationForm.dose || '1',
-                        doseUnit: medicationForm.doseUnit,
-                        route: medicationForm.route,
-                        frequency: medicationForm.frequency,
-                        indication: medicationForm.indication || 'Clinical review required',
-                        status: 'active'
-                    };
-
-                    const next = [nextOrder, ...(seedData.medicationOrders || [])];
-                    persistSeedTable('medicationOrders', next);
+                    const saved = await insertClinicalRecord('medication_orders', {
+                        patient_id: patient.id, medication_name: medicationForm.medicationName.trim(), dose: medicationForm.dose || '1',
+                        dose_unit: medicationForm.doseUnit, route: medicationForm.route, frequency: medicationForm.frequency,
+                        indication: medicationForm.indication || null, status: 'active'
+                    });
+                    if (!saved) return;
+                    const next = [normalizeMedicationOrders([saved])[0], ...(seedData.medicationOrders || [])];
                     seedData.medicationOrders = next;
                     setMedicationForm({ medicationName: '', dose: '', doseUnit: 'mg', route: 'oral', frequency: 'Daily', indication: '' });
                 };
 
-                const handleSaveEncounterNote = () => {
+                const handleSaveEncounterNote = async () => {
                     if (!encounterForm.chiefComplaint.trim()) return;
-
-                    const nextEncounter = {
-                        id: 'enc_' + Date.now(),
-                        patientId: patient.id,
-                        doctorId: 'u2',
-                        chiefComplaint: encounterForm.chiefComplaint.trim(),
-                        diagnosis: encounterForm.diagnosis.trim() || 'Assessment pending',
-                        assessment: encounterForm.assessment.trim() || 'Clinical assessment recorded',
-                        plan: encounterForm.plan.trim() || 'Continue monitoring',
-                        followUpDate: encounterForm.followUpDate || null,
-                        status: 'completed',
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const next = [nextEncounter, ...(seedData.consultations || [])];
-                    persistSeedTable('consultations', next);
+                    const saved = await insertClinicalRecord('consultations', {
+                        patient_id: patient.id, chief_complaint: encounterForm.chiefComplaint.trim(), diagnosis: encounterForm.diagnosis.trim() || null,
+                        assessment: encounterForm.assessment.trim() || null, plan: encounterForm.plan.trim() || null,
+                        follow_up_date: encounterForm.followUpDate || null, status: 'completed'
+                    });
+                    if (!saved) return;
+                    const next = [normalizeConsultations([saved])[0], ...(seedData.consultations || [])];
                     seedData.consultations = next;
                     setEncounterForm({ chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
                 };
 
-                const handleSaveCarePlan = () => {
+                const handleSaveCarePlan = async () => {
                     if (!carePlanForm.title.trim()) return;
-
-                    const nextCarePlan = {
-                        id: 'care_' + Date.now(),
-                        patientId: patient.id,
-                        title: carePlanForm.title.trim(),
-                        description: carePlanForm.description.trim() || 'Follow-up care plan',
-                        targetDate: carePlanForm.targetDate || null,
-                        status: 'active',
-                        reviewDate: carePlanForm.targetDate || null
-                    };
-
-                    const next = [nextCarePlan, ...(seedData.carePlans || [])];
-                    persistSeedTable('carePlans', next);
+                    const saved = await insertClinicalRecord('care_plans', {
+                        patient_id: patient.id, title: carePlanForm.title.trim(), description: carePlanForm.description.trim() || null,
+                        target_date: carePlanForm.targetDate || null, review_date: carePlanForm.targetDate || null, status: 'active'
+                    });
+                    if (!saved) return;
+                    const next = [normalizeCarePlans([saved])[0], ...(seedData.carePlans || [])];
                     seedData.carePlans = next;
                     setCarePlanForm({ title: '', description: '', targetDate: '' });
                 };
 
-                const handleAddProblem = () => {
+                const handleAddProblem = async () => {
                     if (!problemForm.conditionName.trim()) return;
-
-                    const nextProblem = {
-                        id: 'cond_' + Date.now(),
-                        patientId: patient.id,
-                        conditionName: problemForm.conditionName.trim(),
-                        clinicalStatus: problemForm.status,
-                        verificationStatus: 'provisional',
-                        onsetDate: problemForm.onsetDate || new Date().toISOString().split('T')[0],
-                        notes: 'Added from patient chart'
-                    };
-
-                    const next = [nextProblem, ...(seedData.conditions || [])];
-                    persistSeedTable('conditions', next);
+                    const saved = await insertClinicalRecord('patient_conditions', {
+                        patient_id: patient.id, condition_name: problemForm.conditionName.trim(), clinical_status: problemForm.status,
+                        verification_status: 'provisional', onset_date: problemForm.onsetDate || null
+                    });
+                    if (!saved) return;
+                    const next = [normalizeConditions([saved])[0], ...(seedData.conditions || [])];
                     seedData.conditions = next;
                     setProblemForm({ conditionName: '', status: 'active', onsetDate: '' });
                 };
