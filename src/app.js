@@ -24,7 +24,7 @@
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-            const [notifications, setNotifications] = useState(seedData.notifications || []);
+            const [notifications, setNotifications] = useState(appData.notifications || []);
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
             const [theme, setTheme] = useState(() => {
@@ -77,7 +77,7 @@
                 const syncLiveData = async () => {
                     const synced = await loadSupabaseTables();
                     if (!cancelled && synced) {
-                        setNotifications((seedData.notifications || []).slice(0));
+                        setNotifications((appData.notifications || []).slice(0));
                         setDataVersion((value) => value + 1);
                     }
                 };
@@ -145,10 +145,7 @@
                     report: 'reports',
                     audit_logs: 'audit',
                     system_settings: 'settings',
-                    portal: 'portal',
-                    messages: 'portal',
-                    prescriptions: 'portal',
-                    lab_results: 'portal'
+                    portal: 'portal'
                 };
 
                 const safeId = String(moduleId || '').trim();
@@ -158,11 +155,12 @@
             const moduleMap = {
                 dashboard: () => <DashboardModule />,
                 patients: () => <PatientsModule />,
-                appointments: () => <AppointmentsModule />,
+                appointments: () => user?.role === 'patient' ? <PatientPortalModule initialTab="appointments" /> : <AppointmentsModule />,
                 doctors: () => <DoctorsModule />,
                 consultations: () => <ConsultationsModule />,
                 laboratory: () => <LaboratoryModule />,
                 radiology: () => <RadiologyModule />,
+                clinical_workflows: () => <ClinicalWorkflowsModule />,
                 clinical_decision_support: () => <ClinicalDecisionSupportModule />,
                 operations: () => <OperationsModule />,
                 procurement: () => <ProcurementModule />,
@@ -170,7 +168,7 @@
                 workforce: () => <WorkforceModule />,
                 pharmacy: () => <PharmacyModule />,
                 inventory: () => <InventoryModule />,
-                billing: () => <BillingModule initialTab="invoices" />,
+                billing: () => user?.role === 'patient' ? <PatientPortalModule initialTab="billing" /> : <BillingModule initialTab="invoices" />,
                 insurance: () => <BillingModule initialTab="insurance" />,
                 payments: () => <BillingModule initialTab="payments" />,
                 documents: () => <DocumentsModule />,
@@ -187,11 +185,11 @@
                 ward: () => <AdmissionsModule />,
                 vitals: () => <VitalsModule />,
                 upload: () => <DocumentsModule />,
-                medications: () => <PharmacyModule />,
-                results: () => <LaboratoryModule />,
-                messages: () => <PatientPortalModule />,
-                prescriptions: () => <PatientPortalModule />,
-                lab_results: () => <PatientPortalModule />
+                medications: () => <PharmacyModule initialTab="prescriptions" />,
+                results: () => <LaboratoryModule initialTab="results" />,
+                messages: () => <PatientPortalModule initialTab="messages" />,
+                prescriptions: () => user?.role === 'patient' ? <PatientPortalModule initialTab="prescriptions" /> : <PharmacyModule initialTab="prescriptions" />,
+                lab_results: () => <PatientPortalModule initialTab="lab_results" />
             };
 
             const renderModule = () => {

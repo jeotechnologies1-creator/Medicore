@@ -54,32 +54,6 @@
         });
     };
 
-    const getStore = () => ({
-        users: [],
-        patients: [],
-        appointments: [],
-        labOrders: [],
-        radiologyOrders: [],
-        prescriptions: [],
-        pharmacyInventory: [],
-        billing: [],
-        admissions: [],
-        surgeries: [],
-        notifications: [],
-        auditLogs: [],
-        vitals: [],
-        wards: [],
-        offices: [],
-        officeStaff: []
-    });
-
-    const saveStore = (data) => {
-        if (!data) return;
-        try {
-            localStorage.setItem('medicore_store', JSON.stringify(data));
-        } catch (e) {}
-    };
-
     const readRows = async (table) => {
         const client = getClient();
         if (!client) {
@@ -311,8 +285,6 @@
         uploadPatientDocument,
         createDocumentUrl,
         loginProfile,
-        logout,
-        getStore,
-        saveStore
+        logout
     };
 })();

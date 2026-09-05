@@ -3,7 +3,7 @@
         // ==========================================
         const AuthContext = React.createContext(null);
         const canonicalModuleKeys = [
-            'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology',
+            'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
             'hr', 'offices', 'reports', 'audit', 'settings'
         ];
@@ -13,6 +13,7 @@
             doctors: ['doctor'],
             laboratory: ['labs', 'lab', 'lab_orders'],
             radiology: ['imaging'],
+            clinical_workflows: ['encounters', 'immunizations', 'medication_administrations', 'mar'],
             clinical_decision_support: ['cds', 'clinical_decision', 'decision_support'],
             operations: ['ops', 'operations_center', 'command_center'],
             procurement: ['supply_chain', 'procurement_and_supply'],
@@ -35,6 +36,20 @@
             settings: ['system_settings']
         };
 
+        // Role-menu shortcuts route into a tab or workflow owned by these modules.
+        // Their authorization must be checked against that owning module.
+        const routeModulePermissions = {
+            consultations: ['patients', 'clinical_decision_support'],
+            ward: ['admissions', 'operations'],
+            vitals: ['clinical_decision_support', 'patients'],
+            medications: ['pharmacy', 'admissions'],
+            prescriptions: ['pharmacy', 'clinical_decision_support'],
+            results: ['laboratory'],
+            upload: ['radiology'],
+            lab_results: ['portal'],
+            messages: ['portal']
+        };
+
         const normalizeRoleMatrix = (matrix) => {
             const safeMatrix = Array.isArray(matrix) ? matrix : [];
             if (!safeMatrix.length) return defaultRoleMatrix;
@@ -49,7 +64,14 @@
                     }
                 });
 
-                if (String(row?.role || '').trim().toLowerCase() === 'super_admin') {
+                // Saved role matrices may predate this clinical module. Apply the
+                // clinician default only when an administrator has not set it.
+                const roleKey = String(row?.role || '').trim().toLowerCase().replace(/\s+/g, '_');
+                if (permissions.clinical_workflows === undefined && ['super_admin', 'doctor', 'nurse'].includes(roleKey)) {
+                    permissions.clinical_workflows = true;
+                }
+
+                if (roleKey === 'super_admin') {
                     canonicalModuleKeys.forEach((key) => {
                         permissions[key] = true;
                     });
@@ -72,6 +94,7 @@
                     doctors: true,
                     laboratory: true,
                     radiology: true,
+                    clinical_workflows: true,
                     clinical_decision_support: true,
                     operations: true,
                     procurement: true,
@@ -103,6 +126,7 @@
                     doctors: true,
                     laboratory: true,
                     radiology: true,
+                    clinical_workflows: true,
                     clinical_decision_support: true,
                     operations: true,
                     procurement: false,
@@ -134,6 +158,7 @@
                     doctors: false,
                     laboratory: false,
                     radiology: false,
+                    clinical_workflows: true,
                     clinical_decision_support: true,
                     operations: true,
                     procurement: false,
@@ -165,6 +190,7 @@
                     doctors: false,
                     laboratory: false,
                     radiology: false,
+                    clinical_workflows: false,
                     operations: false,
                     procurement: true,
                     referrals: false,
@@ -371,14 +397,14 @@
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
                 if (match && match.permissions) {
                     const permissions = match.permissions || {};
-                    const permissionKeys = [moduleId, ...(legacyPermissionAliases[moduleId] || [])];
+                    const permissionKeys = [moduleId, ...(legacyPermissionAliases[moduleId] || []), ...(routeModulePermissions[moduleId] || [])];
                     return permissionKeys.some((key) => permissions[key] === true);
                 }
 
                 const fallback = {
-                    super_admin: ['dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
-                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'prescriptions', 'clinical_safety'],
-                    nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_safety'],
+                    super_admin: ['dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
+                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
+                    nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments', 'billing'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],

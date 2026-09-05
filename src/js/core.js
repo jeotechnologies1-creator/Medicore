@@ -2,9 +2,9 @@
         const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
         // ==========================================
-        // DATABASE & SEED DATA
+        // LIVE DATA STORE
         // ==========================================
-        const seedData = new Proxy({
+        const appData = new Proxy({
             users: [],
             patients: [],
             appointments: [],
@@ -15,9 +15,11 @@
             billing: [],
             admissions: [],
             surgeries: [],
+            encounters: [],
             notifications: [],
             auditLogs: [],
             vitals: [],
+            medicationAdministrations: [],
             consultations: [],
             documents: [],
             immunizations: [],
@@ -185,6 +187,20 @@
             acuity: row.acuity || 'stable'
         }));
 
+        const normalizeEncounters = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            clinicianId: row.attending_clinician_id || row.clinicianId,
+            appointmentId: row.appointment_id || row.appointmentId,
+            encounterType: row.encounter_type || row.encounterType || 'outpatient',
+            status: row.status || 'in_progress',
+            startedAt: row.started_at || row.startedAt,
+            endedAt: row.ended_at || row.endedAt || null,
+            location: row.location || '',
+            reasonForVisit: row.reason_for_visit || row.reasonForVisit || ''
+        }));
+
         const normalizeSurgeries = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -239,6 +255,18 @@
             height: row.height,
             bmi: row.bmi,
             consciousness: row.consciousness || 'Alert'
+        }));
+
+        const normalizeMedicationAdministrations = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            prescriptionId: row.prescription_id || row.prescriptionId || null,
+            medicationName: row.medication_name || row.medicationName,
+            dosage: row.dosage || '',
+            administeredBy: row.administered_by || row.administeredBy || null,
+            administeredAt: row.administered_at || row.administeredAt,
+            notes: row.notes || ''
         }));
 
         const normalizeConsultations = (rows = []) => rows.map((row) => ({
@@ -367,30 +395,32 @@
 
         const createEmptyStore = () => ({
             users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [],
-            pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [],
-            vitals: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
+            pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [],
+            vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
             medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [],
             insuranceClaims: [], offices: [], officeStaff: []
         });
 
 
-        const initializeLocalSeedData = () => {
-            Object.assign(seedData, createEmptyStore());
-            return seedData;
+        const initializeEmptyStore = () => {
+            Object.assign(appData, createEmptyStore());
+            return appData;
         };
 
-        const hydrateSeedData = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'notifications', 'auditLogs', 'vitals', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'offices', 'officeStaff'];
+        // The browser store only mirrors rows read from Supabase. It starts empty
+        // so a missing connection can never produce demonstration records.
+        const getLiveStore = () => {
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'offices', 'officeStaff'];
             const next = {};
             tables.forEach((table) => {
-                next[table] = Array.isArray(seedData[table]) ? seedData[table] : [];
+                next[table] = Array.isArray(appData[table]) ? appData[table] : [];
             });
             return next;
         };
 
-        const persistSeedTable = (table, rows) => {
+        const persistStoreTable = (table, rows) => {
             const nextRows = Array.isArray(rows) ? rows : [];
-            if (seedData) seedData[table] = nextRows;
+            if (appData) appData[table] = nextRows;
             return nextRows;
         };
 
@@ -413,30 +443,11 @@
                 ? window.MedicoreSupabase.getClient()
                 : null;
             if (!client) {
-                initializeLocalSeedData();
-                return seedData;
+                initializeEmptyStore();
+                return appData;
             }
 
-            const lookups = [
-                { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
-                { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
-                { dbTable: 'appointments', appTable: 'appointments', mapper: normalizeAppointments },
-                { dbTable: 'lab_orders', appTable: 'labOrders', mapper: normalizeLabOrders },
-                { dbTable: 'radiology_orders', appTable: 'radiologyOrders', mapper: normalizeRadiologyOrders },
-                { dbTable: 'prescriptions', appTable: 'prescriptions', mapper: normalizePrescriptions },
-                { dbTable: 'pharmacy_inventory', appTable: 'pharmacyInventory', mapper: normalizeInventory },
-                { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
-                { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
-                { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
-                { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
-                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
-                { dbTable: 'vital_signs', appTable: 'vitals', mapper: normalizeVitals },
-                { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
-                { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
-                { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations }
-            ];
-
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], notifications: [], auditLogs: [], vitals: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -448,9 +459,11 @@
                 { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
                 { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
                 { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
+                { dbTable: 'encounters', appTable: 'encounters', mapper: normalizeEncounters },
                 { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
                 { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
                 { dbTable: 'vital_signs', appTable: 'vitals', mapper: normalizeVitals },
+                { dbTable: 'medication_administrations', appTable: 'medicationAdministrations', mapper: normalizeMedicationAdministrations },
                 { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
                 { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
                 { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations },
@@ -476,8 +489,8 @@
                 nextStore[entry.appTable] = entry.mapper(data || []);
             }
 
-            Object.keys(seedData).forEach((key) => delete seedData[key]);
-            Object.assign(seedData, nextStore);
+            Object.keys(appData).forEach((key) => delete appData[key]);
+            Object.assign(appData, nextStore);
             return nextStore;
         };
 

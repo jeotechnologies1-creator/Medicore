@@ -27,6 +27,8 @@ Run the SQL files in this order in the Supabase SQL editor:
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
+MediCore has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
+
 The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
 
 ## Required production setup

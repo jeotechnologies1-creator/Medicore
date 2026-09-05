@@ -1,5 +1,5 @@
         const ConsultationsModule = () => {
-            const [consultations, setConsultations] = useState(hydrateSeedData().consultations || []);
+            const [consultations, setConsultations] = useState(getLiveStore().consultations || []);
             const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
 
             const handleSaveConsultation = async () => {
@@ -13,7 +13,7 @@
                 }).select();
                 if (error || !data?.[0]) return;
                 const next = [normalizeConsultations(data)[0], ...consultations];
-                seedData.consultations = next;
+                appData.consultations = next;
                 setConsultations(next);
                 setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
             };
@@ -31,8 +31,8 @@
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="New Consultation" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(hydrateSeedData().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getLiveStore().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
                                 <Input label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
@@ -56,7 +56,7 @@
                             columns={[
                                 { key: 'createdAt', title: 'Date', render: (row) => formatDateTime(row.createdAt) },
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    const patient = appData.patients.find(p => p.id === row.patientId);
                                     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
                                 }},
                                 { key: 'chiefComplaint', title: 'Complaint' },
@@ -71,7 +71,7 @@
         };
 
         const VitalsModule = () => {
-            const [vitals, setVitals] = useState(hydrateSeedData().vitals || []);
+            const [vitals, setVitals] = useState(getLiveStore().vitals || []);
             const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
 
             const handleSaveVitals = async () => {
@@ -87,7 +87,7 @@
                 }).select();
                 if (error || !data?.[0]) return;
                 const next = [normalizeVitals(data)[0], ...vitals];
-                seedData.vitals = next;
+                appData.vitals = next;
                 setVitals(next);
                 setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', painScore: '0' });
             };
@@ -104,7 +104,7 @@
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="Record Vitals" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                                 <div className="grid grid-cols-2 gap-4">
                                     <Input label="Temperature (°C)" value={form.temperature} onChange={(e) => setForm(prev => ({ ...prev, temperature: e.target.value }))} />
                                     <Input label="Heart Rate" value={form.heartRate} onChange={(e) => setForm(prev => ({ ...prev, heartRate: e.target.value }))} />
@@ -131,7 +131,7 @@
                             columns={[
                                 { key: 'timestamp', title: 'Recorded', render: (row) => formatDateTime(row.timestamp) },
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    const patient = appData.patients.find(p => p.id === row.patientId);
                                     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
                                 }},
                                 { key: 'heartRate', title: 'HR' },
@@ -146,14 +146,14 @@
         };
 
         const ClinicalSafetyModule = () => {
-            const [allergies, setAllergies] = useState(hydrateSeedData().allergies || []);
-            const [conditions, setConditions] = useState(hydrateSeedData().conditions || []);
-            const [carePlans, setCarePlans] = useState(hydrateSeedData().carePlans || []);
-            const [alerts, setAlerts] = useState(hydrateSeedData().clinicalAlerts || []);
+            const [allergies, setAllergies] = useState(getLiveStore().allergies || []);
+            const [conditions, setConditions] = useState(getLiveStore().conditions || []);
+            const [carePlans, setCarePlans] = useState(getLiveStore().carePlans || []);
+            const [alerts, setAlerts] = useState(getLiveStore().clinicalAlerts || []);
             const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
             const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', onsetDate: '' });
             const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
-            const patients = hydrateSeedData().patients || [];
+            const patients = getLiveStore().patients || [];
 
             const save = async (table, payload, setter, appTable, mapper) => {
                 const client = window.MedicoreSupabase?.getClient?.();
@@ -162,12 +162,12 @@
                 if (error || !data?.[0]) { console.error(`Unable to save ${table}`, error); return false; }
                 const record = mapper([data[0]])[0];
                 const next = [record, ...(appTable === 'allergies' ? allergies : appTable === 'conditions' ? conditions : carePlans)];
-                seedData[appTable] = next;
+                appData[appTable] = next;
                 setter(next);
                 return true;
             };
 
-            const latestVitals = (seedData.vitals || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
+            const latestVitals = (appData.vitals || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
             const activeAlerts = [...alerts, ...latestVitals.map(v => ({ id: `vital-${v.id}`, patientId: v.patientId, severity: 'critical', alertType: 'vital', message: `Abnormal vital signs recorded ${formatDateTime(v.timestamp)}`, status: 'open' }))]
                 .filter(alert => alert.status === 'open');
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))];
@@ -259,7 +259,7 @@
         };
 
         const InventoryModule = () => {
-            const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
+            const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
             const [search, setSearch] = useState('');
 
             const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
@@ -278,7 +278,8 @@
                         <StatCard title="Total SKUs" value={inventory.length} icon={Icons.Package} color="medical" />
                         <StatCard title="Low Stock" value={inventory.filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Expiring" value={inventory.filter(item => {
-                            const expiry = new Date(item.expiryDate || '2027-01-01');
+                            if (!item.expiryDate) return false;
+                            const expiry = new Date(item.expiryDate);
                             const now = new Date();
                             return expiry > now && (expiry - now) / (1000 * 60 * 60 * 24) <= 90;
                         }).length} icon={Icons.Clock} color="red" />
@@ -306,8 +307,71 @@
             );
         };
 
+        const ClinicalWorkflowsModule = () => {
+            const { user } = useAuth();
+            const [tab, setTab] = useState('encounters');
+            const [encounters, setEncounters] = useState(getLiveStore().encounters || []);
+            const [immunizations, setImmunizations] = useState(getLiveStore().immunizations || []);
+            const [administrations, setAdministrations] = useState(getLiveStore().medicationAdministrations || []);
+            const [encounterForm, setEncounterForm] = useState({ patientId: '', encounterType: 'outpatient', location: '', reason: '' });
+            const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: new Date().toISOString().slice(0, 10), nextDueDate: '', notes: '' });
+            const [administrationForm, setAdministrationForm] = useState({ patientId: '', medicationName: '', dosage: '', notes: '' });
+            const patients = getLiveStore().patients || [];
+            const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))];
+            const patientName = (id) => {
+                const patient = patients.find((item) => item.id === id);
+                return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
+            };
+
+            const saveEncounter = async () => {
+                if (!encounterForm.patientId || !encounterForm.reason.trim()) return;
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('start encounter');
+                const { data, error } = await client.from('encounters').insert({ patient_id: encounterForm.patientId, attending_clinician_id: user?.id || null, encounter_type: encounterForm.encounterType, location: encounterForm.location || null, reason_for_visit: encounterForm.reason.trim(), status: 'in_progress' }).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('start encounter', error);
+                const next = [normalizeEncounters(data)[0], ...encounters];
+                persistStoreTable('encounters', next); setEncounters(next);
+                setEncounterForm({ patientId: '', encounterType: 'outpatient', location: '', reason: '' });
+            };
+            const saveImmunization = async () => {
+                if (!immunizationForm.patientId || !immunizationForm.vaccine.trim()) return;
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('record immunization');
+                const { data, error } = await client.from('immunizations').insert({ patient_id: immunizationForm.patientId, vaccine: immunizationForm.vaccine.trim(), status: 'administered', administered_date: immunizationForm.administeredDate || null, next_due_date: immunizationForm.nextDueDate || null, notes: immunizationForm.notes || null }).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('record immunization', error);
+                const next = [normalizeImmunizations(data)[0], ...immunizations];
+                persistStoreTable('immunizations', next); setImmunizations(next);
+                setImmunizationForm({ patientId: '', vaccine: '', administeredDate: new Date().toISOString().slice(0, 10), nextDueDate: '', notes: '' });
+            };
+            const saveAdministration = async () => {
+                if (!administrationForm.patientId || !administrationForm.medicationName.trim()) return;
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('record medication administration');
+                const { data, error } = await client.from('medication_administrations').insert({ patient_id: administrationForm.patientId, medication_name: administrationForm.medicationName.trim(), dosage: administrationForm.dosage || null, administered_by: user?.id || null, notes: administrationForm.notes || null }).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('record medication administration', error);
+                const next = [normalizeMedicationAdministrations(data)[0], ...administrations];
+                persistStoreTable('medicationAdministrations', next); setAdministrations(next);
+                setAdministrationForm({ patientId: '', medicationName: '', dosage: '', notes: '' });
+            };
+            const completeEncounter = async (encounter) => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('complete encounter');
+                const { data, error } = await client.from('encounters').update({ status: 'completed', ended_at: new Date().toISOString() }).eq('id', encounter.id).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('complete encounter', error);
+                const updated = normalizeEncounters(data)[0]; const next = encounters.map((item) => item.id === updated.id ? updated : item);
+                persistStoreTable('encounters', next); setEncounters(next);
+            };
+            return <div className="p-6 space-y-6 animate-fade-in">
+                <div><h2 className="text-2xl font-bold text-slate-900">Clinical Workflows</h2><p className="text-slate-500 mt-1">Live encounter, immunization, and medication-administration records.</p></div>
+                <Tabs tabs={[{ id: 'encounters', label: 'Encounters' }, { id: 'immunizations', label: 'Immunizations' }, { id: 'mar', label: 'Medication Administration' }]} activeTab={tab} onChange={setTab} />
+                {tab === 'encounters' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Start encounter"><div className="space-y-3"><Select label="Patient" value={encounterForm.patientId} onChange={(event) => setEncounterForm({ ...encounterForm, patientId: event.target.value })} options={patientOptions} /><Select label="Type" value={encounterForm.encounterType} onChange={(event) => setEncounterForm({ ...encounterForm, encounterType: event.target.value })} options={['outpatient','emergency','inpatient','telehealth','home_visit'].map((value) => ({ value, label: value.replace('_', ' ') }))} /><Input label="Location" value={encounterForm.location} onChange={(event) => setEncounterForm({ ...encounterForm, location: event.target.value })} /><TextArea label="Reason for visit" value={encounterForm.reason} onChange={(event) => setEncounterForm({ ...encounterForm, reason: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveEncounter}>Start encounter</Button></div></Card><Card title="Active and recent encounters" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'encounterType', title: 'Type' }, { key: 'reasonForVisit', title: 'Reason' }, { key: 'startedAt', title: 'Started', render: (row) => formatDateTime(row.startedAt) }, { key: 'status', title: 'Status' }]} data={encounters} actions={(row) => row.status === 'in_progress' ? <Button size="sm" onClick={() => completeEncounter(row)}>Complete</Button> : null} /></Card></div>}
+                {tab === 'immunizations' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record immunization"><div className="space-y-3"><Select label="Patient" value={immunizationForm.patientId} onChange={(event) => setImmunizationForm({ ...immunizationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Vaccine" value={immunizationForm.vaccine} onChange={(event) => setImmunizationForm({ ...immunizationForm, vaccine: event.target.value })} /><Input label="Administered date" type="date" value={immunizationForm.administeredDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, administeredDate: event.target.value })} /><Input label="Next due date" type="date" value={immunizationForm.nextDueDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, nextDueDate: event.target.value })} /><TextArea label="Notes" value={immunizationForm.notes} onChange={(event) => setImmunizationForm({ ...immunizationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveImmunization}>Record immunization</Button></div></Card><Card title="Immunization history" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'vaccine', title: 'Vaccine' }, { key: 'administeredDate', title: 'Administered', render: (row) => formatDate(row.administeredDate) }, { key: 'nextDueDate', title: 'Next due', render: (row) => formatDate(row.nextDueDate) }, { key: 'status', title: 'Status' }]} data={immunizations} /></Card></div>}
+                {tab === 'mar' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record administration"><div className="space-y-3"><Select label="Patient" value={administrationForm.patientId} onChange={(event) => setAdministrationForm({ ...administrationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Medication" value={administrationForm.medicationName} onChange={(event) => setAdministrationForm({ ...administrationForm, medicationName: event.target.value })} /><Input label="Dose administered" value={administrationForm.dosage} onChange={(event) => setAdministrationForm({ ...administrationForm, dosage: event.target.value })} /><TextArea label="Notes" value={administrationForm.notes} onChange={(event) => setAdministrationForm({ ...administrationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveAdministration}>Record administration</Button></div></Card><Card title="Medication administration record" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'medicationName', title: 'Medication' }, { key: 'dosage', title: 'Dose' }, { key: 'administeredAt', title: 'Administered', render: (row) => formatDateTime(row.administeredAt) }]} data={administrations} /></Card></div>}
+            </div>;
+        };
+
         const DocumentsModule = () => {
-            const [documents, setDocuments] = useState(hydrateSeedData().documents || []);
+            const [documents, setDocuments] = useState(getLiveStore().documents || []);
             const [patientId, setPatientId] = useState('');
             const [documentType, setDocumentType] = useState('Clinical Note');
             const [uploadError, setUploadError] = useState('');
@@ -319,7 +383,7 @@
                 const { data, error } = await window.MedicoreSupabase.uploadPatientDocument(patientId, file, documentType);
                 if (error || !data) { setUploadError(error?.message || 'Upload failed.'); return; }
                 const next = [normalizeDocuments([data])[0], ...documents];
-                seedData.documents = next;
+                appData.documents = next;
                 setDocuments(next);
                 event.target.value = '';
             };
@@ -347,7 +411,7 @@
 
                     <Card>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Document type" value={documentType} onChange={(e) => setDocumentType(e.target.value)} options={['Clinical Note', 'Consent', 'Laboratory', 'Radiology', 'Discharge Summary', 'Referral'].map(value => ({ value, label: value }))} />
                             {uploadError && <p className="self-end text-sm text-red-600">{uploadError}</p>}
                         </div>

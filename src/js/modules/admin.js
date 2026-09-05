@@ -22,43 +22,43 @@
                 const date = toDate(value);
                 return date && !Number.isNaN(date.valueOf()) && date >= threshold;
             };
-            const patientAges = seedData.patients.map(patient => calculateAge(patient.dateOfBirth)).filter(age => Number.isFinite(age) && age >= 0);
+            const patientAges = appData.patients.map(patient => calculateAge(patient.dateOfBirth)).filter(age => Number.isFinite(age) && age >= 0);
             const patientAgeGroups = [
                 { label: '0-18', min: 0, max: 18 }, { label: '19-35', min: 19, max: 35 }, { label: '36-50', min: 36, max: 50 },
                 { label: '51-65', min: 51, max: 65 }, { label: '65+', min: 66, max: Infinity }
             ].map(group => ({ ...group, value: patientAges.filter(age => age >= group.min && age <= group.max).length }));
-            const totalRevenue = seedData.billing.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
-            const outstandingRevenue = seedData.billing.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
-            const insuranceClaimTotal = seedData.insuranceClaims.reduce((sum, claim) => sum + Number(claim.amountApproved || claim.amountClaimed || 0), 0);
+            const totalRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
+            const outstandingRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
+            const insuranceClaimTotal = appData.insuranceClaims.reduce((sum, claim) => sum + Number(claim.amountApproved || claim.amountClaimed || 0), 0);
             const revenueTrend = Array.from({ length: 6 }, (_, index) => {
                 const month = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
                 return {
                     label: month.toLocaleDateString(undefined, { month: 'short' }),
-                    value: seedData.billing.filter(invoice => {
+                    value: appData.billing.filter(invoice => {
                         const date = toDate(invoice.date);
                         return date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
                     }).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0)
                 };
             });
-            const expiringSoon = seedData.pharmacyInventory.filter(item => {
+            const expiringSoon = appData.pharmacyInventory.filter(item => {
                 const expiry = toDate(item.expiryDate);
                 const limit = new Date(now);
                 limit.setDate(limit.getDate() + 90);
                 return expiry && expiry >= now && expiry <= limit;
             }).length;
-            const monthlyLabOrders = seedData.labOrders.filter(order => isOnOrAfter(order.orderedDate, startOfMonth));
-            const labTurnaroundHours = seedData.labOrders.map(order => {
+            const monthlyLabOrders = appData.labOrders.filter(order => isOnOrAfter(order.orderedDate, startOfMonth));
+            const labTurnaroundHours = appData.labOrders.map(order => {
                 const ordered = toDate(order.orderedDate);
                 const completed = toDate(order.resultDate);
                 return ordered && completed && completed >= ordered ? (completed - ordered) / 3600000 : null;
             }).filter(hours => hours !== null);
-            const labTypeData = Object.entries(seedData.labOrders.reduce((counts, order) => {
+            const labTypeData = Object.entries(appData.labOrders.reduce((counts, order) => {
                 const type = order.testType || 'Unspecified';
                 counts[type] = (counts[type] || 0) + 1;
                 return counts;
             }, {})).map(([label, value]) => ({ label, value })).slice(0, 6);
-            const dischargedThisWeek = seedData.admissions.filter(admission => admission.status === 'discharged' && isOnOrAfter(admission.dischargeDate, startOfWeek)).length;
-            const stayLengths = seedData.admissions.map(admission => {
+            const dischargedThisWeek = appData.admissions.filter(admission => admission.status === 'discharged' && isOnOrAfter(admission.dischargeDate, startOfWeek)).length;
+            const stayLengths = appData.admissions.map(admission => {
                 const start = toDate(admission.admissionDate);
                 const end = toDate(admission.dischargeDate);
                 return start && end && end >= start ? (end - start) / 86400000 : null;
@@ -67,16 +67,16 @@
                 const date = new Date(now);
                 date.setDate(date.getDate() - (6 - index));
                 const label = date.toLocaleDateString(undefined, { weekday: 'short' });
-                const admissions = seedData.admissions.filter((entry) => entry.admissionDate === date.toISOString().slice(0, 10)).length;
-                const discharges = seedData.admissions.filter((entry) => entry.dischargeDate === date.toISOString().slice(0, 10)).length;
+                const admissions = appData.admissions.filter((entry) => entry.admissionDate === date.toISOString().slice(0, 10)).length;
+                const discharges = appData.admissions.filter((entry) => entry.dischargeDate === date.toISOString().slice(0, 10)).length;
                 return { label, admissions, discharges };
             });
-            const caseMix = Object.entries(seedData.patients.reduce((counts, patient) => {
+            const caseMix = Object.entries(appData.patients.reduce((counts, patient) => {
                 const bucket = calculateAge(patient.dateOfBirth) >= 65 ? 'Older adults' : calculateAge(patient.dateOfBirth) >= 18 ? 'Adults' : 'Children';
                 counts[bucket] = (counts[bucket] || 0) + 1;
                 return counts;
             }, {})).map(([label, value]) => ({ label, value }));
-            const facilityUtilization = (seedData.wards || []).map((ward) => ({
+            const facilityUtilization = (appData.wards || []).map((ward) => ({
                 name: ward.name,
                 occupancy: Math.round((Number(ward.occupied || 0) / Math.max(1, Number(ward.capacity || 0))) * 100),
                 capacity: ward.capacity || 0,
@@ -85,11 +85,11 @@
 
             const handleExport = () => {
                 const typeData = {
-                    patients: seedData.patients,
-                    revenue: seedData.billing,
-                    pharmacy: seedData.pharmacyInventory,
-                    lab: seedData.labOrders,
-                    admissions: seedData.admissions
+                    patients: appData.patients,
+                    revenue: appData.billing,
+                    pharmacy: appData.pharmacyInventory,
+                    lab: appData.labOrders,
+                    admissions: appData.admissions
                 }[reportType] || [];
 
                 if (!typeData.length) return;
@@ -138,11 +138,11 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Total Patients</p>
-                                        <p className="text-2xl font-bold text-slate-900">{seedData.patients.length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{appData.patients.length}</p>
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">New This Month</p>
-                                        <p className="text-2xl font-bold text-slate-900">{seedData.patients.filter(patient => isOnOrAfter(patient.registrationDate, startOfMonth)).length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{appData.patients.filter(patient => isOnOrAfter(patient.registrationDate, startOfMonth)).length}</p>
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Average Age</p>
@@ -188,7 +188,7 @@
                                                         <span className="text-slate-700">{group.label}</span>
                                                         <span className="font-semibold text-slate-900">{group.value}</span>
                                                     </div>
-                                                    <ProgressBar value={Math.min(100, Math.round((group.value / Math.max(1, seedData.patients.length)) * 100))} max={100} color={group.label === 'Older adults' ? 'amber' : group.label === 'Adults' ? 'medical' : 'emerald'} size="sm" />
+                                                    <ProgressBar value={Math.min(100, Math.round((group.value / Math.max(1, appData.patients.length)) * 100))} max={100} color={group.label === 'Older adults' ? 'amber' : group.label === 'Adults' ? 'medical' : 'emerald'} size="sm" />
                                                 </div>
                                             ))}
                                         </div>
@@ -227,11 +227,11 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Items in Stock</p>
-                                        <p className="text-2xl font-bold text-slate-900">{seedData.pharmacyInventory.length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{appData.pharmacyInventory.length}</p>
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Low Stock Items</p>
-                                        <p className="text-2xl font-bold text-red-900">{seedData.pharmacyInventory.filter(d => d.status === 'low_stock').length}</p>
+                                        <p className="text-2xl font-bold text-red-900">{appData.pharmacyInventory.filter(d => d.status === 'low_stock').length}</p>
                                     </div>
                                     <div className="p-4 bg-amber-50 rounded-xl">
                                         <p className="text-xs text-amber-600 uppercase">Expiring Soon</p>
@@ -241,10 +241,10 @@
                                 <DataTable
                                     columns={[
                                         { key: 'category', title: 'Category' },
-                                        { key: 'count', title: 'Items', render: (row) => seedData.pharmacyInventory.filter(item => item.category === row.category).length },
-                                        { key: 'value', title: 'Stock Value', render: (row) => formatCurrency(seedData.pharmacyInventory.filter(item => item.category === row.category).reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0)) }
+                                        { key: 'count', title: 'Items', render: (row) => appData.pharmacyInventory.filter(item => item.category === row.category).length },
+                                        { key: 'value', title: 'Stock Value', render: (row) => formatCurrency(appData.pharmacyInventory.filter(item => item.category === row.category).reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0)) }
                                     ]}
-                                    data={Array.from(new Set(seedData.pharmacyInventory.map(item => item.category).filter(Boolean))).map(category => ({ category }))}
+                                    data={Array.from(new Set(appData.pharmacyInventory.map(item => item.category).filter(Boolean))).map(category => ({ category }))}
                                 />
                             </div>
                         )}
@@ -262,7 +262,7 @@
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Critical Results</p>
-                                        <p className="text-2xl font-bold text-red-900">{seedData.labOrders.filter(l => l.status === 'critical').length}</p>
+                                        <p className="text-2xl font-bold text-red-900">{appData.labOrders.filter(l => l.status === 'critical').length}</p>
                                     </div>
                                 </div>
                                 <BarChart 
@@ -279,7 +279,7 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Current Admissions</p>
-                                        <p className="text-2xl font-bold text-slate-900">{seedData.admissions.filter(a => a.status === 'active').length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{appData.admissions.filter(a => a.status === 'active').length}</p>
                                     </div>
                                     <div className="p-4 bg-emerald-50 rounded-xl">
                                         <p className="text-xs text-emerald-600 uppercase">Discharged This Week</p>

@@ -4,7 +4,7 @@
             const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
             const [showNewAppointment, setShowNewAppointment] = useState(false);
             const [saveError, setSaveError] = useState('');
-            const [appointments, setAppointments] = useState(hydrateSeedData().appointments || []);
+            const [appointments, setAppointments] = useState(getLiveStore().appointments || []);
             const [appointmentForm, setAppointmentForm] = useState({
                 patientId: '',
                 doctorId: '',
@@ -48,7 +48,7 @@
                             notes: data[0].notes || payload.notes
                         };
                         const next = [...appointments, mapped];
-                        persistSeedTable('appointments', next);
+                        persistStoreTable('appointments', next);
                         setAppointments(next);
                         setShowNewAppointment(false);
                         return;
@@ -65,7 +65,7 @@
                 const { error } = await client.from('appointments').update({ status: 'checked_in' }).eq('id', appointment.id);
                 if (error) { setSaveError(error.message); return; }
                 const next = appointments.map(item => item.id === appointment.id ? { ...item, status: 'checked_in' } : item);
-                persistSeedTable('appointments', next);
+                persistStoreTable('appointments', next);
                 setAppointments(next);
             };
 
@@ -110,7 +110,7 @@
                                 columns={[
                                     { key: 'time', title: 'Time' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return (
                                             <div className="flex items-center gap-2">
                                                 <Avatar name={patient?.firstName + ' ' + patient?.lastName} size="sm" />
@@ -121,7 +121,7 @@
                                     { key: 'type', title: 'Type' },
                                     { key: 'department', title: 'Department' },
                                     { key: 'doctor', title: 'Doctor', render: (row) => {
-                                        const doctor = seedData.users.find(u => u.id === row.doctorId);
+                                        const doctor = appData.users.find(u => u.id === row.doctorId);
                                         return doctor?.name || 'Unassigned';
                                     }},
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : row.status === 'cancelled' ? 'danger' : 'default'}>{row.status}</Badge> }
@@ -148,7 +148,7 @@
                                                     const dayAppointments = appointments.filter(appointment => appointment.date === date.toISOString().slice(0, 10) && appointment.time === time);
                                                     return <div key={i} className="border border-slate-100 rounded p-1 min-h-[40px] hover:bg-slate-50 transition-colors">
                                                         {dayAppointments.map(appointment => {
-                                                            const patient = seedData.patients.find(p => p.id === appointment.patientId);
+                                                            const patient = appData.patients.find(p => p.id === appointment.patientId);
                                                             return <div key={appointment.id} className="bg-medical-100 text-medical-700 text-xs rounded px-1.5 py-0.5 truncate">{patient ? `${patient.firstName} ${patient.lastName}` : 'Appointment'}</div>;
                                                         })}
                                                     </div>;
@@ -175,9 +175,9 @@
                     >
                         <div className="space-y-4">
                             {saveError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>}
-                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Department" value={appointmentForm.department} onChange={(e) => setAppointmentForm(prev => ({ ...prev, department: e.target.value }))} options={[{ value: '', label: 'Select department...' }, { value: 'medical', label: 'Medical' }, { value: 'surgical', label: 'Surgical' }, { value: 'obstetrics', label: 'Obstetrics' }, { value: 'specialist', label: 'Specialist' }]} />
-                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(seedData.users || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
+                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(appData.users || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={appointmentForm.date} onChange={(e) => setAppointmentForm(prev => ({ ...prev, date: e.target.value }))} />
                                 <Input label="Time" type="time" value={appointmentForm.time} onChange={(e) => setAppointmentForm(prev => ({ ...prev, time: e.target.value }))} />
@@ -193,20 +193,38 @@
         // ==========================================
         // LABORATORY MODULE
         // ==========================================
-        const LaboratoryModule = () => {
-            const [activeTab, setActiveTab] = useState('orders');
+        const LaboratoryModule = ({ initialTab = 'orders' }) => {
+            const [activeTab, setActiveTab] = useState(initialTab);
             const [selectedOrder, setSelectedOrder] = useState(null);
             const [showResultEntry, setShowResultEntry] = useState(false);
             const [showNewOrder, setShowNewOrder] = useState(false);
-            const [labOrders, setLabOrders] = useState(hydrateSeedData().labOrders || []);
+            const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
             const [resultForm, setResultForm] = useState({ comments: '', values: {} });
+
+            useEffect(() => {
+                setActiveTab(initialTab);
+            }, [initialTab]);
 
             const tabs = [
                 { id: 'orders', label: 'Lab Orders' },
                 { id: 'results', label: 'Results' },
                 { id: 'statistics', label: 'Statistics' },
             ];
+
+            const categoryData = Object.entries(labOrders.reduce((counts, order) => {
+                const category = order.category || 'Uncategorized';
+                counts[category] = (counts[category] || 0) + 1;
+                return counts;
+            }, {})).map(([label, value]) => ({ label, value }));
+            const turnaroundData = labOrders
+                .filter((order) => order.status === 'completed' && order.orderedDate && order.resultDate)
+                .sort((a, b) => String(a.resultDate).localeCompare(String(b.resultDate)))
+                .slice(-8)
+                .map((order) => ({
+                    label: formatDate(order.resultDate),
+                    value: Math.max(0, Math.round((new Date(order.resultDate) - new Date(order.orderedDate)) / 3600000 * 10) / 10)
+                }));
 
             const handleCreateLabOrder = async () => {
                 if (!newOrderForm.patientId) return;
@@ -229,7 +247,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('create laboratory order', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, testType: data[0].test_type || payload.testType, orderedDate: data[0].ordered_date || payload.orderedDate };
                 const next = [...labOrders, mapped];
-                persistSeedTable('labOrders', next);
+                persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowNewOrder(false);
             };
@@ -247,7 +265,7 @@
                 const { error } = await client.from('lab_orders').update({ status: 'completed', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
-                persistSeedTable('labOrders', next);
+                persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowResultEntry(false);
             };
@@ -264,10 +282,10 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            { label: 'Pending', value: seedData.labOrders.filter(l => l.status === 'pending').length, color: 'amber' },
-                            { label: 'Processing', value: seedData.labOrders.filter(l => l.status === 'processing').length, color: 'medical' },
-                            { label: 'Completed', value: seedData.labOrders.filter(l => l.status === 'completed').length, color: 'emerald' },
-                            { label: 'Critical', value: seedData.labOrders.filter(l => l.status === 'critical').length, color: 'red' },
+                            { label: 'Pending', value: appData.labOrders.filter(l => l.status === 'pending').length, color: 'amber' },
+                            { label: 'Processing', value: appData.labOrders.filter(l => l.status === 'processing').length, color: 'medical' },
+                            { label: 'Completed', value: appData.labOrders.filter(l => l.status === 'completed').length, color: 'emerald' },
+                            { label: 'Critical', value: appData.labOrders.filter(l => l.status === 'critical').length, color: 'red' },
                         ].map(stat => (
                             <Card key={stat.label} className="text-center">
                                 <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
@@ -284,7 +302,7 @@
                                 columns={[
                                     { key: 'id', title: 'Order ID', className: 'font-mono text-xs' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'testType', title: 'Test' },
@@ -312,7 +330,7 @@
                                 columns={[
                                     { key: 'testType', title: 'Test' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'resultDate', title: 'Completed', render: (row) => formatDate(row.resultDate) },
@@ -330,31 +348,10 @@
                     {activeTab === 'statistics' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Tests by Category">
-                                <BarChart 
-                                    data={[
-                                        { label: 'Hema', value: 45 },
-                                        { label: 'Chem', value: 38 },
-                                        { label: 'Micro', value: 22 },
-                                        { label: 'Sero', value: 15 },
-                                        { label: 'Histo', value: 8 }
-                                    ]} 
-                                    width={500} 
-                                    height={250} 
-                                    color="#2563eb" 
-                                />
+                                {categoryData.length ? <BarChart data={categoryData} width={500} height={250} color="#2563eb" /> : <p className="py-16 text-center text-sm text-slate-500">No laboratory orders have been recorded yet.</p>}
                             </Card>
                             <Card title="Turnaround Time Trend">
-                                <LineChart 
-                                    data={[
-                                        { value: 4.2, label: 'W1' },
-                                        { value: 3.8, label: 'W2' },
-                                        { value: 3.5, label: 'W3' },
-                                        { value: 3.2, label: 'W4' }
-                                    ]} 
-                                    width={500} 
-                                    height={250} 
-                                    color="#059669" 
-                                />
+                                {turnaroundData.length ? <LineChart data={turnaroundData} width={500} height={250} color="#059669" /> : <p className="py-16 text-center text-sm text-slate-500">Turnaround time will appear after completed laboratory orders are available.</p>}
                             </Card>
                         </div>
                     )}
@@ -375,7 +372,7 @@
                             <div className="space-y-4">
                                 <div className="p-3 bg-slate-50 rounded-lg">
                                     <p className="text-sm text-slate-600">Patient: {(() => {
-                                        const p = seedData.patients.find(p => p.id === selectedOrder.patientId);
+                                        const p = appData.patients.find(p => p.id === selectedOrder.patientId);
                                         return p ? p.firstName + ' ' + p.lastName : '';
                                     })()}</p>
                                     <p className="text-sm text-slate-600">Test: {selectedOrder.testType}</p>
@@ -407,7 +404,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Input label="Test Type" value={newOrderForm.testType} onChange={(e) => setNewOrderForm(prev => ({ ...prev, testType: e.target.value }))} />
                             <Input label="Category" value={newOrderForm.category} onChange={(e) => setNewOrderForm(prev => ({ ...prev, category: e.target.value }))} />
                             <Select label="Priority" value={newOrderForm.priority} onChange={(e) => setNewOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
@@ -421,15 +418,15 @@
         // CLINICAL DECISION SUPPORT MODULE
         // ==========================================
         const ClinicalDecisionSupportModule = () => {
-            const patients = seedData.patients || [];
-            const alerts = (seedData.clinicalAlerts || []).filter(item => item.status === 'open').map((item) => {
+            const patients = appData.patients || [];
+            const alerts = (appData.clinicalAlerts || []).filter(item => item.status === 'open').map((item) => {
                 const patient = patients.find(entry => entry.id === item.patientId);
                 return { id: item.id, patient: patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record', condition: item.alertType, detail: item.message, risk: item.severity };
             });
             const guidance = [
                 { title: 'Open clinical alerts', message: 'Alerts generated from recorded clinical data that need acknowledgment.', value: alerts.length },
-                { title: 'Active medication orders', message: 'Current medication orders available for clinical review.', value: (seedData.medicationOrders || []).filter(item => item.status === 'active').length },
-                { title: 'Active allergies', message: 'Structured allergies available for medication safety checks.', value: (seedData.allergies || []).filter(item => item.clinicalStatus === 'active').length }
+                { title: 'Active medication orders', message: 'Current medication orders available for clinical review.', value: (appData.medicationOrders || []).filter(item => item.status === 'active').length },
+                { title: 'Active allergies', message: 'Structured allergies available for medication safety checks.', value: (appData.allergies || []).filter(item => item.clinicalStatus === 'active').length }
             ];
 
             return (
@@ -444,8 +441,8 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Critical alerts" value={alerts.filter(item => item.risk === 'critical').length} icon={Icons.AlertCircle} color="red" />
-                        <StatCard title="Medication orders" value={(seedData.medicationOrders || []).length} icon={Icons.Pill} color="medical" />
-                        <StatCard title="Allergies" value={(seedData.allergies || []).length} icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="Medication orders" value={(appData.medicationOrders || []).length} icon={Icons.Pill} color="medical" />
+                        <StatCard title="Allergies" value={(appData.allergies || []).length} icon={Icons.ClipboardList} color="emerald" />
                         <StatCard title="Open alerts" value={alerts.length} icon={Icons.Bell} color="amber" />
                     </div>
 
@@ -490,7 +487,7 @@
         const RadiologyModule = () => {
             const [selectedStudy, setSelectedStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
-            const [studies, setStudies] = useState(hydrateSeedData().radiologyOrders || []);
+            const [studies, setStudies] = useState(getLiveStore().radiologyOrders || []);
             const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
 
             const handleCreateStudy = async () => {
@@ -514,7 +511,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('create radiology order', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, studyType: data[0].study_type || payload.studyType, scheduledDate: data[0].scheduled_date || payload.scheduledDate, report: data[0].report || payload.report };
                 const next = [...studies, mapped];
-                persistSeedTable('radiologyOrders', next);
+                persistStoreTable('radiologyOrders', next);
                 setStudies(next);
                 setShowNewOrder(false);
                 setOrderForm({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
@@ -522,12 +519,15 @@
 
             const handleReportStudy = async (row) => {
                 const client = window.MedicoreSupabase?.getClient?.();
-                const updated = { ...row, status: 'reported', report: row.report || 'Report finalized by radiology team.' };
+                if (!String(row.report || '').trim()) {
+                    return notifyPersistenceFailure('finalize radiology report', new Error('Enter the clinical report before finalizing the study.'));
+                }
+                const updated = { ...row, status: 'reported', report: row.report };
                 if (!client) return notifyPersistenceFailure('finalize radiology report');
                 const { error } = await client.from('radiology_orders').update({ status: 'reported', report: updated.report }).eq('id', row.id);
                 if (error) return notifyPersistenceFailure('finalize radiology report', error);
                 const next = studies.map((item) => item.id === row.id ? updated : item);
-                persistSeedTable('radiologyOrders', next);
+                persistStoreTable('radiologyOrders', next);
                 setStudies(next);
             };
 
@@ -562,7 +562,7 @@
                             columns={[
                                 { key: 'id', title: 'Order ID', className: 'font-mono text-xs' },
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    const patient = appData.patients.find(p => p.id === row.patientId);
                                     return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                 }},
                                 { key: 'studyType', title: 'Study' },
@@ -594,7 +594,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Input label="Study Type" value={orderForm.studyType} onChange={(e) => setOrderForm(prev => ({ ...prev, studyType: e.target.value }))} />
                             <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
                             <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
@@ -615,8 +615,8 @@
                                     <div className="aspect-square bg-slate-900 rounded-xl flex items-center justify-center">
                                         <div className="text-center text-slate-400">
                                             <Icons.Image size={48} className="mx-auto mb-2" />
-                                            <p className="text-sm">DICOM Image Viewer</p>
-                                            <p className="text-xs">Click to interact</p>
+                                            <p className="text-sm">No imaging files are linked to this study.</p>
+                                            <p className="text-xs">Upload integration is required to view images here.</p>
                                         </div>
                                     </div>
                                     <div className="space-y-4">

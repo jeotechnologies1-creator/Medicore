@@ -2,7 +2,7 @@
         // ==========================================
         const HRStaffModule = () => {
             const [activeTab, setActiveTab] = useState('overview');
-            const staff = (seedData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'super_admin'].includes(person.role));
+            const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'super_admin'].includes(person.role));
             const activeStaff = staff.filter((person) => person.status === 'active').length;
             const attendanceRate = staff.length ? Math.round((activeStaff / staff.length) * 100) : 0;
             const departments = Array.from(new Set(staff.map((person) => person.department || 'General').filter(Boolean)));
@@ -64,17 +64,7 @@
                                 </Card>
 
                                 <Card title="Shift Coverage">
-                                    <div className="space-y-4">
-                                        {['Emergency', 'Inpatient', 'Outpatient', 'Diagnostics'].map((area, index) => (
-                                            <div key={area} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-medium text-slate-700">{area}</span>
-                                                    <Badge variant={index < 2 ? 'success' : 'warning'}>{index < 2 ? 'Covered' : 'Watch'}</Badge>
-                                                </div>
-                                                <ProgressBar value={68 + index * 10} max={100} color={index < 2 ? 'emerald' : 'amber'} />
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Shift coverage will appear when live roster assignments are available.</p>
                                 </Card>
                             </div>
 
@@ -220,8 +210,8 @@
             const [staffMessage, setStaffMessage] = useState('');
             const [creatingStaff, setCreatingStaff] = useState(false);
 
-            const offices = seedData.offices || [];
-            const experts = (seedData.users || []).filter((person) => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(person.role) || person.role.includes('doctor') || person.role.includes('nurse'));
+            const offices = appData.offices || [];
+            const experts = (appData.users || []).filter((person) => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(person.role) || person.role.includes('doctor') || person.role.includes('nurse'));
             const activeOffices = offices.filter((office) => office.status === 'active').length;
             const totalSpecialties = new Set(offices.map((office) => office.specialty).filter(Boolean)).size;
             const occupancyLoad = offices.length ? Math.round((offices.filter((office) => office.status === 'active').length / Math.max(1, offices.length)) * 100) : 0;
@@ -252,14 +242,14 @@
                         email: officeForm.email,
                         status: 'active',
                         head_doctor_id: officeForm.headDoctorId || null,
-                        created_by: (seedData.users || [])[0]?.id || null
+                        created_by: (appData.users || [])[0]?.id || null
                     };
 
                     const { data, error } = await client.from('medical_offices').insert([payload]).select();
                     if (error) throw error;
 
                     const newOffice = normalizeOffices(data || [])[0];
-                    seedData.offices = [...offices, newOffice];
+                    appData.offices = [...offices, newOffice];
 
                     if (officeForm.headDoctorId) {
                         await client.from('office_staff').insert([{
@@ -298,7 +288,7 @@
                     if (error) throw error;
                     if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
                     const created = normalizeUsers([data.staff])[0];
-                    seedData.users = [...(seedData.users || []), created];
+                    appData.users = [...(appData.users || []), created];
                     setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
                     setStaffMessage(`${created.fullName} can now sign in.`);
                 } catch (error) {
@@ -412,11 +402,11 @@
         };
 
         const DoctorsModule = () => {
-            const doctors = (seedData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
+            const doctors = (appData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
             const activeDoctors = doctors.filter(doc => doc.status === 'active');
             const specialties = new Set(activeDoctors.map(doc => doc.department || 'General')).size;
-            const consultationsCount = (seedData.consultations || []).length;
-            const avgPatientsPerDoctor = activeDoctors.length ? Math.round((seedData.patients || []).length / activeDoctors.length) : 0;
+            const consultationsCount = (appData.consultations || []).length;
+            const avgPatientsPerDoctor = activeDoctors.length ? Math.round((appData.patients || []).length / activeDoctors.length) : 0;
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">

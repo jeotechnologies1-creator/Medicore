@@ -7,7 +7,7 @@
             const [showRegistration, setShowRegistration] = useState(false);
             const [activeTab, setActiveTab] = useState('overview');
             const [filterStatus, setFilterStatus] = useState('all');
-            const [patients, setPatients] = useState((hydrateSeedData().patients || []));
+            const [patients, setPatients] = useState((getLiveStore().patients || []));
             const [form, setForm] = useState({
                 firstName: '',
                 lastName: '',
@@ -79,7 +79,7 @@
                         registrationDate: created.registration_date || created.registrationDate || new Date().toISOString().split('T')[0]
                     };
                     const nextPatients = [...patients, mapped];
-                    seedData.patients = nextPatients;
+                    appData.patients = nextPatients;
                     setPatients(nextPatients);
                 }
                 setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
@@ -92,17 +92,17 @@
             };
 
             const PatientDetailView = ({ patient }) => {
-                const patientAppointments = seedData.appointments.filter(a => a.patientId === patient.id);
-                const patientLabs = seedData.labOrders.filter(l => l.patientId === patient.id);
-                const patientPrescriptions = seedData.prescriptions.filter(p => p.patientId === patient.id);
-                const patientVitals = seedData.vitals.filter(v => v.patientId === patient.id).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                const patientBilling = seedData.billing.filter(b => b.patientId === patient.id);
-                const patientAdmissions = seedData.admissions.filter(a => a.patientId === patient.id);
-                const patientAllergies = (seedData.allergies || []).filter(a => a.patientId === patient.id);
-                const patientConditions = (seedData.conditions || []).filter(c => c.patientId === patient.id);
-                const patientMedicationOrders = (seedData.medicationOrders || []).filter(m => m.patientId === patient.id);
-                const patientCarePlans = (seedData.carePlans || []).filter(c => c.patientId === patient.id);
-                const encounterNotes = (seedData.consultations || []).filter(c => c.patientId === patient.id);
+                const patientAppointments = appData.appointments.filter(a => a.patientId === patient.id);
+                const patientLabs = appData.labOrders.filter(l => l.patientId === patient.id);
+                const patientPrescriptions = appData.prescriptions.filter(p => p.patientId === patient.id);
+                const patientVitals = appData.vitals.filter(v => v.patientId === patient.id).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                const patientBilling = appData.billing.filter(b => b.patientId === patient.id);
+                const patientAdmissions = appData.admissions.filter(a => a.patientId === patient.id);
+                const patientAllergies = (appData.allergies || []).filter(a => a.patientId === patient.id);
+                const patientConditions = (appData.conditions || []).filter(c => c.patientId === patient.id);
+                const patientMedicationOrders = (appData.medicationOrders || []).filter(m => m.patientId === patient.id);
+                const patientCarePlans = (appData.carePlans || []).filter(c => c.patientId === patient.id);
+                const encounterNotes = (appData.consultations || []).filter(c => c.patientId === patient.id);
                 const [medicationForm, setMedicationForm] = useState({
                     medicationName: '',
                     dose: '',
@@ -206,8 +206,8 @@
                         indication: medicationForm.indication || null, status: 'active'
                     });
                     if (!saved) return;
-                    const next = [normalizeMedicationOrders([saved])[0], ...(seedData.medicationOrders || [])];
-                    seedData.medicationOrders = next;
+                    const next = [normalizeMedicationOrders([saved])[0], ...(appData.medicationOrders || [])];
+                    appData.medicationOrders = next;
                     setMedicationForm({ medicationName: '', dose: '', doseUnit: 'mg', route: 'oral', frequency: 'Daily', indication: '' });
                 };
 
@@ -219,8 +219,8 @@
                         follow_up_date: encounterForm.followUpDate || null, status: 'completed'
                     });
                     if (!saved) return;
-                    const next = [normalizeConsultations([saved])[0], ...(seedData.consultations || [])];
-                    seedData.consultations = next;
+                    const next = [normalizeConsultations([saved])[0], ...(appData.consultations || [])];
+                    appData.consultations = next;
                     setEncounterForm({ chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
                 };
 
@@ -231,8 +231,8 @@
                         target_date: carePlanForm.targetDate || null, review_date: carePlanForm.targetDate || null, status: 'active'
                     });
                     if (!saved) return;
-                    const next = [normalizeCarePlans([saved])[0], ...(seedData.carePlans || [])];
-                    seedData.carePlans = next;
+                    const next = [normalizeCarePlans([saved])[0], ...(appData.carePlans || [])];
+                    appData.carePlans = next;
                     setCarePlanForm({ title: '', description: '', targetDate: '' });
                 };
 
@@ -243,8 +243,8 @@
                         verification_status: 'provisional', onset_date: problemForm.onsetDate || null
                     });
                     if (!saved) return;
-                    const next = [normalizeConditions([saved])[0], ...(seedData.conditions || [])];
-                    seedData.conditions = next;
+                    const next = [normalizeConditions([saved])[0], ...(appData.conditions || [])];
+                    appData.conditions = next;
                     setProblemForm({ conditionName: '', status: 'active', onsetDate: '' });
                 };
 
@@ -255,7 +255,7 @@
                         diagnosis: admissionForm.diagnosis || null, status: 'active', acuity: admissionForm.acuity || 'stable'
                     });
                     if (!saved) return;
-                    seedData.admissions = [normalizeAdmissions([saved])[0], ...(seedData.admissions || [])];
+                    appData.admissions = [normalizeAdmissions([saved])[0], ...(appData.admissions || [])];
                     setAdmissionForm({
                         ward: 'General Ward',
                         bedNumber: 'A-12',
@@ -267,12 +267,12 @@
 
                 const handleSaveDischargeSummary = async () => {
                     if (!dischargeForm.summary.trim() && !dischargeForm.followUp.trim() && !dischargeForm.instructions.trim()) return;
-                    const activeAdmission = (seedData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
+                    const activeAdmission = (appData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
                     const client = window.MedicoreSupabase?.getClient?.();
                     if (!activeAdmission || !client) return notifyPersistenceFailure('finalize discharge');
                     const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0], diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
                     if (error || !data?.[0]) return notifyPersistenceFailure('finalize discharge', error);
-                    seedData.admissions = (seedData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);
+                    appData.admissions = (appData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);
                     await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: 'Discharge summary', plan: [dischargeForm.summary, dischargeForm.followUp, dischargeForm.instructions].filter(Boolean).join('\n'), status: 'completed' });
 
                     setDischargeForm({
@@ -287,7 +287,7 @@
                     if (!followUpForm.reason.trim()) return;
                     const saved = await insertClinicalRecord('appointments', { patient_id: patient.id, appointment_date: followUpForm.nextVisitDate, appointment_time: '09:00', appointment_type: 'Follow-up', department: followUpForm.clinic, status: 'scheduled', notes: [followUpForm.reason, followUpForm.instructions].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    seedData.appointments = [normalizeAppointments([saved])[0], ...(seedData.appointments || [])];
+                    appData.appointments = [normalizeAppointments([saved])[0], ...(appData.appointments || [])];
 
                     setFollowUpForm({
                         clinic: '',
@@ -302,7 +302,7 @@
                     if (!referralForm.reason.trim()) return;
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Referral: ${referralForm.department}`, task_type: 'referral', due_at: referralForm.transferDate || null, priority: referralForm.urgency, notes: [referralForm.provider, referralForm.reason, referralForm.notes].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
+                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
 
                     setReferralForm({
                         department: '',
@@ -318,7 +318,7 @@
                     if (!outcomeForm.summary.trim()) return;
                     const saved = await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: `Clinical outcome: ${outcomeForm.status}`, assessment: outcomeForm.summary, plan: outcomeForm.dischargeInstructions || null, status: 'completed' });
                     if (!saved) return;
-                    seedData.consultations = [normalizeConsultations([saved])[0], ...(seedData.consultations || [])];
+                    appData.consultations = [normalizeConsultations([saved])[0], ...(appData.consultations || [])];
 
                     setOutcomeForm({
                         status: 'recovered',
@@ -331,7 +331,7 @@
                 const handleSaveQualityCheck = async () => {
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: 'Quality and safety review', task_type: 'quality_review', priority: qualityForm.riskScore.toLowerCase() === 'high' ? 'urgent' : 'routine', status: 'completed', notes: JSON.stringify(qualityForm) });
                     if (!saved) return;
-                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
+                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
 
                     setQualityForm({
                         idCheck: true,
@@ -347,7 +347,7 @@
                 const handleSaveCareCoordination = async () => {
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Care coordination: ${careCoordinationForm.readmissionRisk} readmission risk`, task_type: 'care_coordination', due_at: careCoordinationForm.plannedDischargeDate || null, priority: careCoordinationForm.readmissionRisk.toLowerCase() === 'high' ? 'urgent' : 'routine', notes: [careCoordinationForm.careCoordinator, careCoordinationForm.dischargePlan, careCoordinationForm.handoffNote].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
+                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
 
                     setCareCoordinationForm({
                         careCoordinator: 'Care Team',

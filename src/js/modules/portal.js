@@ -1,10 +1,10 @@
         // PATIENT PORTAL MODULE
         // ==========================================
-        const PatientPortalModule = () => {
+        const PatientPortalModule = ({ initialTab = 'overview' }) => {
             const { user } = useAuth();
             const patientLookupId = user?.patientId || user?.id || null;
-            const patient = seedData.patients.find(p => p.id === patientLookupId || p.patientNumber === patientLookupId);
-            const [activeTab, setActiveTab] = useState('overview');
+            const patient = appData.patients.find(p => p.id === patientLookupId || p.patientNumber === patientLookupId);
+            const [activeTab, setActiveTab] = useState(initialTab);
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
                 department: '',
@@ -25,6 +25,10 @@
                 { id: 'billing', label: 'Billing' },
                 { id: 'messages', label: 'Messages' },
             ];
+
+            useEffect(() => {
+                setActiveTab(initialTab);
+            }, [initialTab]);
 
             useEffect(() => {
                 const client = window.MedicoreSupabase?.getClient?.();
@@ -120,19 +124,19 @@
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Last visit</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((seedData.appointments || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date)}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Active meds</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(seedData.medicationOrders || []).filter(m => m.patientId === patient.id && m.status === 'active').length}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(appData.medicationOrders || []).filter(m => m.patientId === patient.id && m.status === 'active').length}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Open bills</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(seedData.billing || []).filter(b => b.patientId === patient.id && Number(b.balance || 0) > 0).length}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(appData.billing || []).filter(b => b.patientId === patient.id && Number(b.balance || 0) > 0).length}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Next review</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((seedData.appointments || []).filter(a => a.patientId === patient.id && a.date >= new Date().toISOString().slice(0, 10)).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id && a.date >= new Date().toISOString().slice(0, 10)).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
                                         </div>
                                     </div>
                                 </Card>
@@ -150,7 +154,7 @@
                                             { key: 'department', title: 'Department' },
                                             { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'info' : 'default'}>{row.status}</Badge> }
                                         ]}
-                                        data={seedData.appointments.filter(a => a.patientId === patient.id)}
+                                        data={appData.appointments.filter(a => a.patientId === patient.id)}
                                     />
                                 </Card>
                                 <Card title="Request appointment">
@@ -176,7 +180,7 @@
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : 'warning'}>{row.status}</Badge> },
                                         { key: 'results', title: 'Results', render: (row) => row.results ? <Button variant="primary" size="sm">View</Button> : 'Pending' }
                                     ]}
-                                    data={seedData.labOrders.filter(l => l.patientId === patient.id)}
+                                    data={appData.labOrders.filter(l => l.patientId === patient.id)}
                                 />
                             </Card>
                         )}
@@ -190,7 +194,7 @@
                                         { key: 'medications', title: 'Medications', render: (row) => (row.medications || []).map(m => m.name || m.medicationName).join(', ') },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
-                                    data={seedData.prescriptions.filter(p => p.patientId === patient.id)}
+                                    data={appData.prescriptions.filter(p => p.patientId === patient.id)}
                                 />
                             </Card>
                         )}
@@ -206,7 +210,7 @@
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : 'warning'}>{row.status}</Badge> },
                                         { key: 'action', title: 'Action', render: () => <span className="text-slate-500 text-sm">Portal payment available in cashier</span> }
                                     ]}
-                                    data={seedData.billing.filter(b => b.patientId === patient.id)}
+                                    data={appData.billing.filter(b => b.patientId === patient.id)}
                                 />
                             </Card>
                         )}

@@ -4,29 +4,29 @@
         const AuditModule = () => {
             const [filterSeverity, setFilterSeverity] = useState('all');
 
-            const filteredLogs = seedData.auditLogs.filter(log =>
+            const filteredLogs = appData.auditLogs.filter(log =>
                 filterSeverity === 'all' || log.severity === filterSeverity
             );
 
             const governanceSummary = {
-                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
-                pendingReviews: Math.max(0, Math.round((seedData.auditLogs.length || 0) * 0.18) + (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
+                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
+                pendingReviews: Math.max(0, Math.round((appData.auditLogs.length || 0) * 0.18) + (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
                 complianceRate: (() => {
                     const checks = [
-                        (seedData.allergies || []).length > 0 && (seedData.medicationOrders || []).length > 0,
-                        (seedData.labOrders || []).some(item => item.status === 'critical') === false,
-                        (seedData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge'))
+                        (appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0,
+                        (appData.labOrders || []).some(item => item.status === 'critical') === false,
+                        (appData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge'))
                     ].filter(Boolean).length;
                     const base = checks === 0 ? 0 : Math.round((checks / 3) * 100);
                     return Math.min(100, base || 0);
                 })(),
-                escalationQueue: (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').length
+                escalationQueue: (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length
             };
 
-            const incidentQueue = (seedData.auditLogs || []).slice(0, 4).map((log) => ({
+            const incidentQueue = (appData.auditLogs || []).slice(0, 4).map((log) => ({
                 id: log.id || 'LOG-' + Date.now(),
-                patient: (seedData.patients || []).find(patient => patient.id === log.entityId)?.firstName && (seedData.patients || []).find(patient => patient.id === log.entityId)?.lastName
-                    ? `${(seedData.patients || []).find(patient => patient.id === log.entityId).firstName} ${(seedData.patients || []).find(patient => patient.id === log.entityId).lastName}`
+                patient: (appData.patients || []).find(patient => patient.id === log.entityId)?.firstName && (appData.patients || []).find(patient => patient.id === log.entityId)?.lastName
+                    ? `${(appData.patients || []).find(patient => patient.id === log.entityId).firstName} ${(appData.patients || []).find(patient => patient.id === log.entityId).lastName}`
                     : 'Unassigned patient',
                 area: log.entityType || 'System event',
                 issue: log.action || 'Record reviewed',
@@ -38,30 +38,30 @@
             const complianceChecks = [
                 {
                     title: 'Medication allergy verification',
-                    status: ((seedData.allergies || []).length > 0 && (seedData.medicationOrders || []).length > 0) ? 'pass' : 'review',
+                    status: ((appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0) ? 'pass' : 'review',
                     owner: 'Clinical safety',
                     nextAction: 'Review active medication orders against the allergy list.',
                     sla: 'within 24h'
                 },
                 {
                     title: 'Critical lab result acknowledgment',
-                    status: (seedData.labOrders || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
+                    status: (appData.labOrders || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
                     owner: 'Laboratory',
                     nextAction: 'Confirm timely acknowledgment and escalation for any critical findings.',
                     sla: 'within 30 min'
                 },
                 {
                     title: 'Consent and discharge documentation',
-                    status: (seedData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
+                    status: (appData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
                     owner: 'Clinical records',
                     nextAction: 'Ensure discharge summaries capture patient instructions and consent milestones.',
                     sla: 'within 4h'
                 }
             ];
-            const escalationQueue = (seedData.clinicalAlerts || []).filter(alert => alert.status === 'open').slice(0, 3).map((alert) => ({
+            const escalationQueue = (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').slice(0, 3).map((alert) => ({
                 id: alert.id || 'ALERT-' + Date.now(),
-                patient: (seedData.patients || []).find(patient => patient.id === alert.patientId)
-                    ? `${(seedData.patients || []).find(patient => patient.id === alert.patientId).firstName} ${(seedData.patients || []).find(patient => patient.id === alert.patientId).lastName}`
+                patient: (appData.patients || []).find(patient => patient.id === alert.patientId)
+                    ? `${(appData.patients || []).find(patient => patient.id === alert.patientId).firstName} ${(appData.patients || []).find(patient => patient.id === alert.patientId).lastName}`
                     : 'Unassigned patient',
                 area: alert.alertType || 'Clinical alert',
                 due: alert.severity === 'critical' ? 'Immediate' : 'Review',
@@ -177,7 +177,7 @@
                             columns={[
                                 { key: 'timestamp', title: 'Timestamp', render: (row) => formatDateTime(row.timestamp), className: 'whitespace-nowrap' },
                                 { key: 'user', title: 'User', render: (row) => {
-                                    const user = seedData.users.find(u => u.id === row.userId);
+                                    const user = appData.users.find(u => u.id === row.userId);
                                     return user ? (
                                         <div className="flex items-center gap-2">
                                             <Avatar name={user.name} size="sm" />
@@ -208,9 +208,9 @@
             const files = [];
 
             const automationSummary = [
-                { label: 'High-risk events', value: (seedData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
-                { label: 'Open incidents', value: (seedData.clinicalAlerts || []).filter(item => item.status === 'open').length },
-                { label: 'Records to review', value: Math.max(0, (seedData.auditLogs || []).length) },
+                { label: 'High-risk events', value: (appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
+                { label: 'Open incidents', value: (appData.clinicalAlerts || []).filter(item => item.status === 'open').length },
+                { label: 'Records to review', value: Math.max(0, (appData.auditLogs || []).length) },
                 { label: 'Retention coverage', value: '—' }
             ];
 
@@ -473,7 +473,7 @@
                 }
             ];
 
-            const initialDepartments = (seedData.wards || []).map((ward, index) => ({
+            const initialDepartments = (appData.wards || []).map((ward, index) => ({
                 id: ward.id || `dept-${index + 1}`,
                 name: ward.name || `Ward ${index + 1}`,
                 type: ward.type || 'Ward',
@@ -710,7 +710,7 @@
 
             const handleAuditExport = async () => {
                 const headers = ['timestamp', 'userId', 'action', 'entityType', 'severity', 'ipAddress'];
-                const rows = seedData.auditLogs.map((log) => [
+                const rows = appData.auditLogs.map((log) => [
                     log.timestamp,
                     log.userId,
                     log.action,
@@ -791,10 +791,10 @@
             ];
 
             const complianceChart = [
-                { label: 'Backups', value: settings.enableAutoBackups ? 92 : 35 },
-                { label: 'Security', value: settings.requireMfa ? 95 : 60 },
-                { label: 'Retention', value: Math.min(100, Math.round((settings.auditRetentionDays / 3650) * 100)) },
-                { label: 'Interoperability', value: settings.enableFhir ? 90 : 68 }
+                { label: 'Backups', value: settings.enableAutoBackups ? 100 : 0 },
+                { label: 'Security', value: settings.requireMfa ? 100 : 0 },
+                { label: 'Retention', value: Number(settings.auditRetentionDays || 0) > 0 ? 100 : 0 },
+                { label: 'Interoperability', value: settings.enableFhir ? 100 : 0 }
             ];
 
             const ToggleRow = ({ label, description, checked, onChange }) => (

@@ -5,8 +5,8 @@
             const [activeTab, setActiveTab] = useState('flow');
             const [selectedDept, setSelectedDept] = useState('all');
 
-            const activeAdmissions = (seedData.admissions || []).filter(item => item.status === 'active');
-            const managementDepartments = (seedData.wards || []).map((ward) => ({
+            const activeAdmissions = (appData.admissions || []).filter(item => item.status === 'active');
+            const managementDepartments = (appData.wards || []).map((ward) => ({
                 name: ward.name,
                 patients: activeAdmissions.filter(item => item.ward === ward.name).length,
                 occupancy: ward.capacity ? Math.round((Number(ward.occupied || 0) / Number(ward.capacity)) * 100) : 0
@@ -20,20 +20,20 @@
             const totalPatients = filteredDepartments.reduce((sum, item) => sum + item.patients, 0);
             const today = new Date().toISOString().slice(0, 10);
             const operationsPulse = [
-                { label: 'Admissions today', value: (seedData.admissions || []).filter(item => item.admissionDate === today).length },
-                { label: 'Discharges today', value: (seedData.admissions || []).filter(item => item.dischargeDate === today).length },
-                { label: 'Emergency appointments', value: (seedData.appointments || []).filter(item => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length },
-                { label: 'Cancelled appointments', value: (seedData.appointments || []).filter(item => item.date === today && item.status === 'cancelled').length }
+                { label: 'Admissions today', value: (appData.admissions || []).filter(item => item.admissionDate === today).length },
+                { label: 'Discharges today', value: (appData.admissions || []).filter(item => item.dischargeDate === today).length },
+                { label: 'Emergency appointments', value: (appData.appointments || []).filter(item => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length },
+                { label: 'Cancelled appointments', value: (appData.appointments || []).filter(item => item.date === today && item.status === 'cancelled').length }
             ];
             const resourceLoad = [
-                { name: 'Active doctors', value: (seedData.users || []).filter(item => item.role === 'doctor' && item.status === 'active').length },
-                { name: 'Active nurses', value: (seedData.users || []).filter(item => item.role === 'nurse' && item.status === 'active').length },
-                { name: 'Pending laboratory orders', value: (seedData.labOrders || []).filter(item => item.status !== 'completed').length },
-                { name: 'Pending imaging orders', value: (seedData.radiologyOrders || []).filter(item => item.status !== 'reported').length }
+                { name: 'Active doctors', value: (appData.users || []).filter(item => item.role === 'doctor' && item.status === 'active').length },
+                { name: 'Active nurses', value: (appData.users || []).filter(item => item.role === 'nurse' && item.status === 'active').length },
+                { name: 'Pending laboratory orders', value: (appData.labOrders || []).filter(item => item.status !== 'completed').length },
+                { name: 'Pending imaging orders', value: (appData.radiologyOrders || []).filter(item => item.status !== 'reported').length }
             ];
             const logistics = [
-                { title: 'Low-stock medicines', value: (seedData.pharmacyInventory || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
-                { title: 'Expiring inventory', value: (seedData.pharmacyInventory || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
+                { title: 'Low-stock medicines', value: (appData.pharmacyInventory || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
+                { title: 'Expiring inventory', value: (appData.pharmacyInventory || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
                 { title: 'Pending refill requests', value: 0 }
             ];
 
@@ -66,7 +66,7 @@
                         <StatCard title="Active Patients" value={totalPatients} icon={Icons.Users} color="medical" />
                         <StatCard title="Active admissions" value={activeAdmissions.length} icon={Icons.Clock} color="amber" />
                         <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
-                        <StatCard title="Open appointments" value={(seedData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
+                        <StatCard title="Open appointments" value={(appData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -162,7 +162,7 @@
         const ProcurementModule = () => {
             const [activeTab, setActiveTab] = useState('orders');
             const supplierPerformance = [];
-            const monthlySpend = (seedData.billing || []).reduce((sum, bill) => sum + Number(bill.total || 0), 0);
+            const monthlySpend = (appData.billing || []).reduce((sum, bill) => sum + Number(bill.total || 0), 0);
             const openPurchaseOrders = 0;
             const pendingDeliveries = 0;
             const savings = 0;
@@ -270,6 +270,7 @@
             const [activeTab, setActiveTab] = useState('referrals');
 
             const referralQueue = [];
+            const followUpTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'follow_up' || task.taskType === 'followup');
 
             const tabs = [
                 { id: 'referrals', label: 'Referrals' },
@@ -291,7 +292,7 @@
                         <StatCard title="Open Referrals" value={referralQueue.length} icon={Icons.UserCheck} color="medical" />
                         <StatCard title="High Risk" value={referralQueue.filter((item) => item.risk === 'High').length} icon={Icons.AlertCircle} color="red" />
                         <StatCard title="Accepted" value={referralQueue.filter((item) => item.status === 'Accepted').length} icon={Icons.CheckCircle} color="emerald" />
-                        <StatCard title="Follow-ups" value={0} icon={Icons.Calendar} color="violet" />
+                        <StatCard title="Follow-ups" value={followUpTasks.length} icon={Icons.Calendar} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -322,40 +323,11 @@
                     {activeTab === 'followups' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Follow-up Schedule">
-                                <div className="space-y-3">
-                                    {[
-                                        { title: 'Cardiac rehab review', due: 'Tomorrow', owner: 'Nurse case manager' },
-                                        { title: 'Post-op wound review', due: 'In 2 days', owner: 'Surgical clinic' },
-                                        { title: 'Medication reconciliation', due: 'This week', owner: 'Pharmacy' }
-                                    ].map((item) => (
-                                        <div key={item.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="font-medium text-slate-800">{item.title}</span>
-                                                <Badge variant="info">{item.due}</Badge>
-                                            </div>
-                                            <p className="text-xs text-slate-500 mt-2">Owner: {item.owner}</p>
-                                        </div>
-                                    ))}
-                                </div>
+                                {followUpTasks.length ? <DataTable columns={[{ key: 'title', title: 'Task' }, { key: 'dueAt', title: 'Due', render: (row) => formatDateTime(row.dueAt) }, { key: 'priority', title: 'Priority' }, { key: 'status', title: 'Status' }]} data={followUpTasks} /> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No follow-up tasks have been recorded.</p>}
                             </Card>
 
                             <Card title="Care Pathway Completion">
-                                <div className="space-y-4">
-                                    {[
-                                        { label: 'Discharge plan', value: 94 },
-                                        { label: 'Medication education', value: 89 },
-                                        { label: 'Primary care handoff', value: 92 },
-                                        { label: 'Community follow-up', value: 81 }
-                                    ].map((item) => (
-                                        <div key={item.label}>
-                                            <div className="flex justify-between text-sm mb-1">
-                                                <span className="text-slate-600">{item.label}</span>
-                                                <span className="font-medium text-slate-900">{item.value}%</span>
-                                            </div>
-                                            <ProgressBar value={item.value} max={100} color="emerald" />
-                                        </div>
-                                    ))}
-                                </div>
+                                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Care-pathway completion will be calculated after pathway milestones are configured.</p>
                             </Card>
                         </div>
                     )}
@@ -384,9 +356,9 @@
         // WORKFORCE ANALYTICS MODULE
         // ==========================================
         const WorkforceModule = () => {
-            const staffingCoverage = (seedData.users || []).length
+            const staffingCoverage = (appData.users || []).length
                 ? [
-                    { unit: 'Clinical Teams', scheduled: (seedData.users || []).length, actual: (seedData.users || []).filter((user) => user.status === 'active').length, occupancy: Math.min(100, Math.round(((seedData.users || []).filter((user) => user.status === 'active').length / Math.max(1, (seedData.users || []).length)) * 100)) }
+                    { unit: 'Clinical Teams', scheduled: (appData.users || []).length, actual: (appData.users || []).filter((user) => user.status === 'active').length, occupancy: Math.min(100, Math.round(((appData.users || []).filter((user) => user.status === 'active').length / Math.max(1, (appData.users || []).length)) * 100)) }
                 ]
                 : [];
 
@@ -449,36 +421,14 @@
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <Card title="Staffing Risks">
-                            <div className="space-y-3">
-                                {[
-                                    { name: 'Nurse shortage', detail: '3 night shifts uncovered this week', tone: 'warning' },
-                                    { name: 'Provider coverage', detail: 'One consultant on leave next 3 days', tone: 'info' },
-                                    { name: 'Lab bench strain', detail: 'Peak demand likely over 48h', tone: 'amber' }
-                                ].map((risk) => (
-                                    <div key={risk.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-medium text-slate-800">{risk.name}</span>
-                                            <Badge variant={risk.tone === 'warning' ? 'warning' : 'info'}>{risk.tone === 'warning' ? 'Watch' : 'Note'}</Badge>
-                                        </div>
-                                        <p className="mt-2 text-sm text-slate-600">{risk.detail}</p>
-                                    </div>
-                                ))}
-                            </div>
+                            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No workforce risk feed is connected. Risks will appear here when roster and leave data are integrated.</p>
                         </Card>
 
                         <Card title="Roster Status">
                             <div className="space-y-3">
-                                {[
-                                    { label: 'Certified staff on shift', value: '96%' },
-                                    { label: 'Training compliance', value: '88%' },
-                                    { label: 'Overtime requested', value: '13 staff' },
-                                    { label: 'Next review date', value: '2026-09-07' }
-                                ].map((item) => (
-                                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                        <span className="text-sm text-slate-600">{item.label}</span>
-                                        <span className="text-sm font-semibold text-slate-900">{item.value}</span>
-                                    </div>
-                                ))}
+                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Active staff profiles</span><span className="text-sm font-semibold text-slate-900">{(appData.users || []).filter((user) => user.status === 'active').length}</span></div>
+                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Inactive staff profiles</span><span className="text-sm font-semibold text-slate-900">{(appData.users || []).filter((user) => user.status !== 'active').length}</span></div>
+                                <p className="text-xs text-slate-500">Shift, certification, leave, and overtime indicators require their respective live integrations.</p>
                             </div>
                         </Card>
                     </div>
@@ -489,12 +439,16 @@
         // ==========================================
         // PHARMACY MODULE
         // ==========================================
-        const PharmacyModule = () => {
-            const [activeTab, setActiveTab] = useState('dispensary');
+        const PharmacyModule = ({ initialTab = 'dispensary' }) => {
+            const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
-            const [inventory, setInventory] = useState(hydrateSeedData().pharmacyInventory || []);
+            const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
             const [showAddStock, setShowAddStock] = useState(false);
             const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', supplier: '' });
+
+            useEffect(() => {
+                setActiveTab(initialTab);
+            }, [initialTab]);
 
             const filteredDrugs = (inventory || []).filter(d => 
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -529,7 +483,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('add inventory', error);
                 const mapped = { ...payload, id: data[0].id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
                 const next = [...inventory, mapped];
-                persistSeedTable('pharmacyInventory', next);
+                persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
                 setShowAddStock(false);
                 setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '', supplier: '' });
@@ -557,10 +511,10 @@
                     return item;
                 });
 
-                persistSeedTable('pharmacyInventory', nextInventory);
+                persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
-                const nextPrescriptions = (seedData.prescriptions || []).map((item) => item.id === prescription.id ? updatedPrescription : item);
-                persistSeedTable('prescriptions', nextPrescriptions);
+                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? updatedPrescription : item);
+                persistStoreTable('prescriptions', nextPrescriptions);
             };
 
             return (
@@ -597,14 +551,14 @@
                                     columns={[
                                         { key: 'id', title: 'Rx ID', className: 'font-mono text-xs' },
                                         { key: 'patient', title: 'Patient', render: (row) => {
-                                            const patient = seedData.patients.find(p => p.id === row.patientId);
+                                            const patient = appData.patients.find(p => p.id === row.patientId);
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'diagnosis', title: 'Diagnosis' },
                                         { key: 'medications', title: 'Items', render: (row) => row.medications.length },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
-                                    data={seedData.prescriptions.filter(p => p.status === 'active')}
+                                    data={appData.prescriptions.filter(p => p.status === 'active')}
                                     actions={(row) => (
                                         <Button variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
                                     )}
@@ -678,18 +632,18 @@
                                 columns={[
                                     { key: 'id', title: 'Rx ID' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'doctor', title: 'Doctor', render: (row) => {
-                                        const doctor = seedData.users.find(u => u.id === row.doctorId);
+                                        const doctor = appData.users.find(u => u.id === row.doctorId);
                                         return doctor?.name || 'Unknown';
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
                                     { key: 'diagnosis', title: 'Diagnosis' },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : row.status === 'dispensed' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
-                                data={seedData.prescriptions}
+                                data={appData.prescriptions}
                             />
                         </Card>
                     )}
@@ -740,7 +694,7 @@
             const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
-            const [invoices, setInvoices] = useState(hydrateSeedData().billing || []);
+            const [invoices, setInvoices] = useState(getLiveStore().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
@@ -780,7 +734,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
                 const next = [...invoices, mapped];
-                persistSeedTable('billing', next);
+                persistStoreTable('billing', next);
                 setInvoices(next);
                 setShowNewInvoice(false);
                 setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
@@ -801,7 +755,7 @@
                 if (!client || !changed) return notifyPersistenceFailure('process payment');
                 const { error } = await client.from('billing').update({ paid: changed.paid, balance: changed.balance, status: changed.status, payment_method: changed.paymentMethod }).eq('id', changed.id);
                 if (error) return notifyPersistenceFailure('process payment', error);
-                persistSeedTable('billing', updated);
+                persistStoreTable('billing', updated);
                 setInvoices(updated);
                 setShowPaymentModal(false);
                 setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
@@ -809,7 +763,7 @@
 
             const handleAdvanceClaim = async (claimId) => {
                 const queue = ['pending', 'under_review', 'approved', 'paid'];
-                const nextClaims = (seedData.insuranceClaims || []).map((claim) => {
+                const nextClaims = (appData.insuranceClaims || []).map((claim) => {
                     if (claim.id !== claimId) return claim;
                     const currentIndex = queue.indexOf(claim.status || 'pending');
                     const nextStatus = queue[Math.min(queue.length - 1, currentIndex + 1)] || 'pending';
@@ -820,8 +774,8 @@
                 if (!client || !changed) return notifyPersistenceFailure('advance insurance claim');
                 const { error } = await client.from('insurance_claims').update({ status: changed.status, amount_approved: changed.amountApproved }).eq('id', claimId);
                 if (error) return notifyPersistenceFailure('advance insurance claim', error);
-                persistSeedTable('insuranceClaims', nextClaims);
-                seedData.insuranceClaims = nextClaims;
+                persistStoreTable('insuranceClaims', nextClaims);
+                appData.insuranceClaims = nextClaims;
             };
 
             const handleSubmitInsuranceClaim = async () => {
@@ -840,9 +794,9 @@
                 const { data, error } = await client.from('insurance_claims').insert({ patient_id: nextClaim.patientId, claim_number: nextClaim.claimNumber, provider: nextClaim.provider, amount_claimed: nextClaim.amountClaimed, amount_approved: nextClaim.amountApproved, status: nextClaim.status }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('submit insurance claim', error);
                 const savedClaim = normalizeInsuranceClaims(data)[0];
-                const next = [...(seedData.insuranceClaims || []), savedClaim];
-                persistSeedTable('insuranceClaims', next);
-                seedData.insuranceClaims = next;
+                const next = [...(appData.insuranceClaims || []), savedClaim];
+                persistStoreTable('insuranceClaims', next);
+                appData.insuranceClaims = next;
                 setShowInsuranceModal(false);
                 setClaimForm({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
             };
@@ -850,7 +804,7 @@
             const totalRevenue = invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0);
             const totalCollected = invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0);
             const totalOutstanding = invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0);
-            const insuranceClaims = seedData.insuranceClaims || [];
+            const insuranceClaims = appData.insuranceClaims || [];
             const pendingClaims = insuranceClaims.filter(c => c.status === 'pending' || c.status === 'under_review').length;
             const approvedClaims = insuranceClaims.filter(c => c.status === 'approved' || c.status === 'paid').length;
             const deniedClaims = insuranceClaims.filter(c => c.status === 'denied').length;
@@ -862,6 +816,11 @@
                 { label: '61-90 days', value: invoices.filter(i => Number(i.balance || 0) > 60 && Number(i.balance || 0) <= 90).length },
                 { label: '90+ days', value: invoices.filter(i => Number(i.balance || 0) > 90).length }
             ];
+            const invoiceStatusData = Object.entries(invoices.reduce((counts, invoice) => {
+                const status = invoice.status || 'unknown';
+                counts[status] = (counts[status] || 0) + Number(invoice.total || 0);
+                return counts;
+            }, {})).map(([label, value]) => ({ label, value }));
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -891,7 +850,7 @@
                                 columns={[
                                     { key: 'invoiceNumber', title: 'Invoice', className: 'font-mono text-xs' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
@@ -917,7 +876,7 @@
                                 columns={[
                                     { key: 'invoiceNumber', title: 'Invoice' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'paid', title: 'Amount', render: (row) => formatCurrency(row.paid) },
@@ -966,7 +925,7 @@
                                     columns={[
                                         { key: 'claimNumber', title: 'Claim #' },
                                         { key: 'patient', title: 'Patient', render: (row) => {
-                                            const patient = seedData.patients.find(p => p.id === row.patientId);
+                                            const patient = appData.patients.find(p => p.id === row.patientId);
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'provider', title: 'Provider' },
@@ -986,18 +945,7 @@
                     {activeTab === 'reports' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Revenue by Department">
-                                <BarChart
-                                    data={[
-                                        { label: 'Consult', value: 35000 },
-                                        { label: 'Lab', value: 28000 },
-                                        { label: 'Radio', value: 22000 },
-                                        { label: 'Pharm', value: 18000 },
-                                        { label: 'Surgery', value: 45000 }
-                                    ]}
-                                    width={500}
-                                    height={250}
-                                    color="#2563eb"
-                                />
+                                {invoiceStatusData.length ? <BarChart data={invoiceStatusData} width={500} height={250} color="#2563eb" /> : <p className="py-16 text-center text-sm text-slate-500">No invoice records are available yet.</p>}
                             </Card>
                             <Card title="Payment Summary">
                                 <div className="space-y-4">
@@ -1045,7 +993,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={invoiceForm.patientId} onChange={(e) => setInvoiceForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={invoiceForm.patientId} onChange={(e) => setInvoiceForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
                             <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
                             <Input label="Amount Paid" type="number" value={invoiceForm.paid} onChange={(e) => setInvoiceForm(prev => ({ ...prev, paid: e.target.value }))} />
@@ -1084,7 +1032,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Input label="Provider" value={claimForm.provider} onChange={(e) => setClaimForm(prev => ({ ...prev, provider: e.target.value }))} />
                             <Input label="Claim Number" value={claimForm.claimNumber} onChange={(e) => setClaimForm(prev => ({ ...prev, claimNumber: e.target.value }))} />
                             <Input label="Amount Claimed" type="number" value={claimForm.amountClaimed} onChange={(e) => setClaimForm(prev => ({ ...prev, amountClaimed: e.target.value }))} />
@@ -1162,7 +1110,7 @@
         const AdmissionsModule = () => {
             const [selectedWard, setSelectedWard] = useState(null);
             const [showNewAdmission, setShowNewAdmission] = useState(false);
-            const [admissions, setAdmissions] = useState(hydrateSeedData().admissions || []);
+            const [admissions, setAdmissions] = useState(getLiveStore().admissions || []);
             const [admissionForm, setAdmissionForm] = useState({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
 
             const handleCreateAdmission = async () => {
@@ -1186,7 +1134,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('admit patient', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
                 const next = [...admissions, mapped];
-                persistSeedTable('admissions', next);
+                persistStoreTable('admissions', next);
                 setAdmissions(next);
                 setShowNewAdmission(false);
                 setAdmissionForm({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
@@ -1203,7 +1151,7 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {(seedData.wards || []).map(ward => (
+                        {(appData.wards || []).map(ward => (
                             <Card 
                                 key={ward.id} 
                                 className="cursor-pointer hover:border-medical-300 transition-colors"
@@ -1228,7 +1176,7 @@
                         <DataTable
                             columns={[
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = seedData.patients.find(p => p.id === row.patientId);
+                                    const patient = appData.patients.find(p => p.id === row.patientId);
                                     return (
                                         <div className="flex items-center gap-2">
                                             <Avatar name={patient?.firstName + ' ' + patient?.lastName} size="sm" />
@@ -1241,7 +1189,7 @@
                                 { key: 'admissionDate', title: 'Admitted', render: (row) => formatDate(row.admissionDate) },
                                 { key: 'diagnosis', title: 'Diagnosis' },
                                 { key: 'doctor', title: 'Doctor', render: (row) => {
-                                    const doctor = seedData.users.find(u => u.id === row.doctorId);
+                                    const doctor = appData.users.find(u => u.id === row.doctorId);
                                     return doctor?.name || 'Unknown';
                                 }},
                                 { key: 'acuity', title: 'Acuity', render: (row) => <Badge variant={row.acuity === 'critical' ? 'danger' : row.acuity === 'moderate' ? 'warning' : 'success'}>{row.acuity}</Badge> }
@@ -1269,10 +1217,10 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Ward" value={admissionForm.ward} onChange={(e) => setAdmissionForm(prev => ({ ...prev, ward: e.target.value }))} options={[{ value: 'General Ward', label: 'General Ward' }, { value: 'ICU', label: 'ICU' }, { value: 'Maternity', label: 'Maternity' }, { value: 'Pediatrics', label: 'Pediatrics' }]} />
                             <Input label="Bed Number" value={admissionForm.bedNumber} onChange={(e) => setAdmissionForm(prev => ({ ...prev, bedNumber: e.target.value }))} />
-                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(seedData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
+                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Diagnosis" value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                             <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
                         </div>
@@ -1286,7 +1234,7 @@
                     >
                         {selectedWard && (
                             <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                                {(seedData.beds || []).filter(b => b.wardId === selectedWard.id).map(bed => (
+                                {(appData.beds || []).filter(b => b.wardId === selectedWard.id).map(bed => (
                                     <div 
                                         key={bed.id} 
                                         className={'p-4 rounded-xl border-2 text-center cursor-pointer transition-all ' + (bed.status === 'occupied' ? 'border-red-200 bg-red-50' : bed.status === 'available' ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-200 bg-slate-50')}
@@ -1308,7 +1256,7 @@
         // ==========================================
         const SurgeriesModule = () => {
             const [showSchedule, setShowSchedule] = useState(false);
-            const [surgeries, setSurgeries] = useState(hydrateSeedData().surgeries || []);
+            const [surgeries, setSurgeries] = useState(getLiveStore().surgeries || []);
             const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
 
             const handleScheduleSurgery = async () => {
@@ -1334,7 +1282,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('schedule surgery', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
                 const next = [...surgeries, mapped];
-                persistSeedTable('surgeries', next);
+                persistStoreTable('surgeries', next);
                 setSurgeries(next);
                 setShowSchedule(false);
                 setSurgeryForm({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
@@ -1364,11 +1312,11 @@
                                     { key: 'scheduledTime', title: 'Time' },
                                     { key: 'procedure', title: 'Procedure' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = seedData.patients.find(p => p.id === row.patientId);
+                                        const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'surgeon', title: 'Surgeon', render: (row) => {
-                                        const surgeon = seedData.users.find(u => u.id === row.surgeonId);
+                                        const surgeon = appData.users.find(u => u.id === row.surgeonId);
                                         return surgeon?.name || 'Unknown';
                                     }},
                                     { key: 'otRoom', title: 'OT Room' },
@@ -1415,8 +1363,8 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(hydrateSeedData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(seedData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
+                            <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
