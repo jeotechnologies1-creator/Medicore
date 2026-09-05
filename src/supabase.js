@@ -1,6 +1,13 @@
 (function () {
     const STORAGE_KEY = 'medicore_supabase_config';
 
+    // Earlier builds could cache a browser-only record store. Clinical records
+    // are now Supabase-only, so discard that legacy cache on every startup.
+    try {
+        localStorage.removeItem('medicore_store');
+        localStorage.removeItem('medicore_seed_data');
+    } catch (e) {}
+
     const getConfig = () => {
         const override = window.__MEDICORE_SUPABASE__ || {};
         const saved = (() => {
