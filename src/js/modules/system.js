@@ -228,10 +228,10 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Active Policies" value="42" icon={Icons.ShieldCheck} color="emerald" />
-                        <StatCard title="Pending Reviews" value="6" icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Documents" value="168" icon={Icons.FileText} color="medical" />
-                        <StatCard title="Compliance Rate" value="96%" icon={Icons.BarChart3} color="violet" />
+                        <StatCard title="Active Policies" value={0} icon={Icons.ShieldCheck} color="emerald" />
+                        <StatCard title="Pending Reviews" value={0} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Documents" value={0} icon={Icons.FileText} color="medical" />
+                        <StatCard title="Compliance Rate" value="0%" icon={Icons.BarChart3} color="violet" />
                     </div>
 
                     <Card title="Automated oversight metrics">

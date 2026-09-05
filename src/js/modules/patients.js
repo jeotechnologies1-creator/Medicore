@@ -124,8 +124,8 @@
                     targetDate: ''
                 });
                 const [admissionForm, setAdmissionForm] = useState({
-                    ward: 'General Ward',
-                    bedNumber: 'A-12',
+                    ward: '',
+                    bedNumber: '',
                     diagnosis: '',
                     admissionDate: new Date().toISOString().split('T')[0],
                     acuity: 'stable'
@@ -137,14 +137,14 @@
                     instructions: ''
                 });
                 const [followUpForm, setFollowUpForm] = useState({
-                    clinic: 'Primary Care',
+                    clinic: '',
                     provider: '',
                     nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     reason: '',
                     instructions: ''
                 });
                 const [referralForm, setReferralForm] = useState({
-                    department: 'Cardiology',
+                    department: '',
                     provider: '',
                     urgency: 'routine',
                     transferDate: new Date().toISOString().split('T')[0],
@@ -167,7 +167,7 @@
                     auditNote: ''
                 });
                 const [careCoordinationForm, setCareCoordinationForm] = useState({
-                    careCoordinator: 'Care Team',
+                    careCoordinator: '',
                     dischargePlan: '',
                     plannedDischargeDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     readmissionRisk: 'Low',
@@ -290,8 +290,8 @@
                     seedData.appointments = [normalizeAppointments([saved])[0], ...(seedData.appointments || [])];
 
                     setFollowUpForm({
-                        clinic: 'Primary Care',
-                        provider: 'Dr. Ada Nwosu',
+                        clinic: '',
+                        provider: '',
                         nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                         reason: '',
                         instructions: ''
@@ -305,8 +305,8 @@
                     seedData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(seedData.clinicalTasks || [])];
 
                     setReferralForm({
-                        department: 'Cardiology',
-                        provider: 'Dr. T. Okafor',
+                        department: '',
+                        provider: '',
                         urgency: 'routine',
                         transferDate: new Date().toISOString().split('T')[0],
                         reason: '',

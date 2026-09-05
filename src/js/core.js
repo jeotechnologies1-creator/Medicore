@@ -345,7 +345,7 @@
             id: row.id,
             name: row.name || row.office_name,
             officeType: row.office_type || row.officeType || 'Clinic',
-            specialty: row.specialty || row.department || 'General Medicine',
+            specialty: row.specialty || row.department || '',
             location: row.location || row.address || '',
             phone: row.phone || '',
             email: row.email || '',

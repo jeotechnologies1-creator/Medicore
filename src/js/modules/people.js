@@ -128,20 +128,8 @@
                             </Card>
 
                             <Card title="Late arrivals / absenteeism">
-                                <div className="space-y-3">
-                                    {[
-                                        { name: 'Nursing', count: 7, trend: '+2 from last week' },
-                                        { name: 'Emergency', count: 5, trend: '+1 from last week' },
-                                        { name: 'Support', count: 3, trend: '-1 from last week' }
-                                    ].map((item) => (
-                                        <div key={item.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="font-medium text-slate-800">{item.name}</span>
-                                                <Badge variant={item.count > 5 ? 'warning' : 'success'}>{item.count} cases</Badge>
-                                            </div>
-                                            <p className="mt-2 text-xs text-slate-500">{item.trend}</p>
-                                        </div>
-                                    ))}
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+                                    No attendance anomalies are currently recorded. This section will populate when staffing events are tracked.
                                 </div>
                             </Card>
                         </div>
@@ -220,7 +208,7 @@
             const [officeForm, setOfficeForm] = useState({
                 name: '',
                 officeType: 'Clinic',
-                specialty: 'General Medicine',
+                specialty: '',
                 location: '',
                 phone: '',
                 email: '',
@@ -282,7 +270,7 @@
                         }]).select();
                     }
 
-                    setOfficeForm({ name: '', officeType: 'Clinic', specialty: 'General Medicine', location: '', phone: '', email: '', headDoctorId: '' });
+                    setOfficeForm({ name: '', officeType: 'Clinic', specialty: '', location: '', phone: '', email: '', headDoctorId: '' });
                     setMessage('Medical office added successfully.');
                 } catch (error) {
                     console.error(error);

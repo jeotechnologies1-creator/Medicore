@@ -288,11 +288,12 @@
                     let found = null;
                     const normalizedEmail = String(email || '').trim();
                     const normalizedPassword = String(password || '');
+
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
                         try {
-                            found = await window.MedicoreSupabase.loginProfile(email, password);
+                            found = await window.MedicoreSupabase.loginProfile(normalizedEmail, normalizedPassword);
                         } catch (error) {
-                            console.warn('Supabase login fallback failed:', error);
+                            console.warn('Supabase login failed:', error);
                             found = null;
                         }
                     }

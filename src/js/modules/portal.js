@@ -7,12 +7,12 @@
             const [activeTab, setActiveTab] = useState('overview');
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
-                department: 'General Medicine',
+                department: '',
                 doctorId: '',
                 date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                time: '10:30',
+                time: '',
                 reason: '',
-                visitType: 'Follow-up'
+                visitType: ''
             });
             const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
             const [portalMessages, setPortalMessages] = useState([]);
@@ -50,12 +50,12 @@
                 const { error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: appointmentDraft.doctorId || null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null });
                 if (error) return;
                 setAppointmentDraft({
-                    department: 'General Medicine',
+                    department: '',
                     doctorId: '',
                     date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    time: '10:30',
+                    time: '',
                     reason: '',
-                    visitType: 'Follow-up'
+                    visitType: ''
                 });
                 setActiveTab('appointments');
             };
@@ -155,10 +155,10 @@
                                 </Card>
                                 <Card title="Request appointment">
                                     <div className="space-y-3">
-                                        <Select label="Department" value={appointmentDraft.department} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, department: e.target.value }))} options={[{ value: 'General Medicine', label: 'General Medicine' }, { value: 'Cardiology', label: 'Cardiology' }, { value: 'Pulmonology', label: 'Pulmonology' }, { value: 'Endocrinology', label: 'Endocrinology' }]} />
+                                        <Select label="Department" value={appointmentDraft.department} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, department: e.target.value }))} options={[{ value: '', label: 'Select department' }, { value: 'medical', label: 'Medical' }, { value: 'surgical', label: 'Surgical' }, { value: 'diagnostic', label: 'Diagnostic' }, { value: 'specialist', label: 'Specialist' }]} />
                                         <Input label="Preferred date" type="date" value={appointmentDraft.date} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, date: e.target.value }))} />
                                         <Input label="Preferred time" type="time" value={appointmentDraft.time} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, time: e.target.value }))} />
-                                        <Select label="Visit type" value={appointmentDraft.visitType} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, visitType: e.target.value }))} options={[{ value: 'Follow-up', label: 'Follow-up' }, { value: 'Consultation', label: 'Consultation' }, { value: 'Procedure review', label: 'Procedure review' }, { value: 'Medication review', label: 'Medication review' }]} />
+                                        <Select label="Visit type" value={appointmentDraft.visitType} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, visitType: e.target.value }))} options={[{ value: '', label: 'Select visit type' }, { value: 'follow_up', label: 'Follow-up' }, { value: 'consultation', label: 'Consultation' }, { value: 'review', label: 'Review' }, { value: 'procedure', label: 'Procedure' }]} />
                                         <Input label="Reason" value={appointmentDraft.reason} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, reason: e.target.value }))} />
                                         <Button variant="primary" icon={Icons.Calendar} onClick={handleBookAppointment}>Submit request</Button>
                                     </div>

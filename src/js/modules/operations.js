@@ -161,12 +161,11 @@
         // ==========================================
         const ProcurementModule = () => {
             const [activeTab, setActiveTab] = useState('orders');
-            const supplierPerformance = [
-                { name: 'MedSource Ltd', onTime: 97, spend: 182000, risk: 'Low' },
-                { name: 'CareLab Supply', onTime: 89, spend: 132000, risk: 'Medium' },
-                { name: 'Global ICU', onTime: 94, spend: 214000, risk: 'Low' },
-                { name: 'NorthStar Pharma', onTime: 76, spend: 98000, risk: 'High' }
-            ];
+            const supplierPerformance = [];
+            const monthlySpend = (seedData.billing || []).reduce((sum, bill) => sum + Number(bill.total || 0), 0);
+            const openPurchaseOrders = 0;
+            const pendingDeliveries = 0;
+            const savings = 0;
 
             const tabs = [
                 { id: 'orders', label: 'Purchase Orders' },
@@ -185,37 +184,37 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Open POs" value="32" icon={Icons.Packages} color="medical" />
-                        <StatCard title="Monthly Spend" value={formatCurrency(624000)} icon={Icons.DollarSign} color="emerald" />
-                        <StatCard title="Late Deliveries" value="6" icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Savings" value={formatCurrency(48000)} icon={Icons.CheckCircle} color="violet" />
+                        <StatCard title="Open POs" value={openPurchaseOrders} icon={Icons.Packages} color="medical" />
+                        <StatCard title="Monthly Spend" value={formatCurrency(monthlySpend)} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Late Deliveries" value={pendingDeliveries} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Savings" value={formatCurrency(savings)} icon={Icons.CheckCircle} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                     {activeTab === 'orders' && (
                         <Card>
-                            <DataTable
-                                columns={[
-                                    { key: 'poNumber', title: 'PO #', className: 'font-mono text-xs' },
-                                    { key: 'vendor', title: 'Vendor' },
-                                    { key: 'category', title: 'Category' },
-                                    { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
-                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'pending' ? 'warning' : 'danger'}>{row.status}</Badge> },
-                                    { key: 'eta', title: 'ETA', render: (row) => formatDate(row.eta) }
-                                ]}
-                                data={[
-                                    { poNumber: 'PO-1042', vendor: 'MedSource Ltd', category: 'Medical Supplies', amount: 42000, status: 'approved', eta: '2026-09-06' },
-                                    { poNumber: 'PO-1047', vendor: 'Global ICU', category: 'Critical Care', amount: 68000, status: 'in_transit', eta: '2026-09-08' },
-                                    { poNumber: 'PO-1050', vendor: 'NorthStar Pharma', category: 'Pharmacy', amount: 24000, status: 'pending', eta: '2026-09-10' }
-                                ]}
-                            />
+                            {openPurchaseOrders === 0 ? (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No purchase orders have been entered yet. Purchase activity will appear here once the purchasing workflow is live.</div>
+                            ) : (
+                                <DataTable
+                                    columns={[
+                                        { key: 'poNumber', title: 'PO #', className: 'font-mono text-xs' },
+                                        { key: 'vendor', title: 'Vendor' },
+                                        { key: 'category', title: 'Category' },
+                                        { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'pending' ? 'warning' : 'danger'}>{row.status}</Badge> },
+                                        { key: 'eta', title: 'ETA', render: (row) => formatDate(row.eta) }
+                                    ]}
+                                    data={[]}
+                                />
+                            )}
                         </Card>
                     )}
 
                     {activeTab === 'suppliers' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {supplierPerformance.map((supplier) => (
+                            {supplierPerformance.length ? supplierPerformance.map((supplier) => (
                                 <Card key={supplier.name} title={supplier.name}>
                                     <div className="space-y-4">
                                         <div className="flex justify-between text-sm">
@@ -233,7 +232,9 @@
                                         </div>
                                     </div>
                                 </Card>
-                            ))}
+                            )) : (
+                                <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No supplier records are connected yet. Supplier performance will appear automatically once the inventory workflow is live.</div>
+                            )}
                         </div>
                     )}
 
@@ -241,13 +242,7 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Monthly Spend Trend">
                                 <BarChart
-                                    data={[
-                                        { label: 'Jan', value: 510000 },
-                                        { label: 'Feb', value: 548000 },
-                                        { label: 'Mar', value: 590000 },
-                                        { label: 'Apr', value: 620000 },
-                                        { label: 'May', value: 624000 }
-                                    ]}
+                                    data={[]}
                                     width={500}
                                     height={260}
                                     color="#10b981"
@@ -255,20 +250,11 @@
                             </Card>
                             <Card title="Category Spend">
                                 <div className="space-y-4">
-                                    {[
-                                        { label: 'Medical supplies', value: 210000 },
-                                        { label: 'Pharmacy', value: 174000 },
-                                        { label: 'Diagnostics', value: 146000 },
-                                        { label: 'Critical care', value: 94000 }
-                                    ].map((item) => (
-                                        <div key={item.label}>
-                                            <div className="flex justify-between text-sm mb-1">
-                                                <span className="text-slate-600">{item.label}</span>
-                                                <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
-                                            </div>
-                                            <ProgressBar value={Math.min(100, (item.value / 210000) * 100)} max={100} color="emerald" />
-                                        </div>
-                                    ))}
+                                    {monthlySpend > 0 ? (
+                                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">Live spend data is now being calculated from the connected billing records.</div>
+                                    ) : (
+                                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">No spend data is available yet. Once billing records are created, this chart will populate automatically.</div>
+                                    )}
                                 </div>
                             </Card>
                         </div>
@@ -283,12 +269,7 @@
         const CareCoordinationModule = () => {
             const [activeTab, setActiveTab] = useState('referrals');
 
-            const referralQueue = [
-                { id: 'REF-2101', patient: 'Miriam Abiola', specialty: 'Cardiology', status: 'Pending', due: 'Today', risk: 'High' },
-                { id: 'REF-2107', patient: 'Emmanuel Udo', specialty: 'Orthopedics', status: 'In progress', due: '2 days', risk: 'Moderate' },
-                { id: 'REF-2120', patient: 'Ifeoma Bello', specialty: 'Nephrology', status: 'Accepted', due: 'Tomorrow', risk: 'High' },
-                { id: 'REF-2134', patient: 'Tunde Okon', specialty: 'Neurology', status: 'Scheduled', due: '3 days', risk: 'Low' }
-            ];
+            const referralQueue = [];
 
             const tabs = [
                 { id: 'referrals', label: 'Referrals' },
@@ -310,27 +291,31 @@
                         <StatCard title="Open Referrals" value={referralQueue.length} icon={Icons.UserCheck} color="medical" />
                         <StatCard title="High Risk" value={referralQueue.filter((item) => item.risk === 'High').length} icon={Icons.AlertCircle} color="red" />
                         <StatCard title="Accepted" value={referralQueue.filter((item) => item.status === 'Accepted').length} icon={Icons.CheckCircle} color="emerald" />
-                        <StatCard title="Follow-ups" value="19" icon={Icons.Calendar} color="violet" />
+                        <StatCard title="Follow-ups" value={0} icon={Icons.Calendar} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                     {activeTab === 'referrals' && (
                         <Card>
-                            <DataTable
-                                columns={[
-                                    { key: 'id', title: 'Referral ID', className: 'font-mono text-xs' },
-                                    { key: 'patient', title: 'Patient' },
-                                    { key: 'specialty', title: 'Specialty' },
-                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Accepted' ? 'success' : row.status === 'Pending' ? 'warning' : row.status === 'In progress' ? 'info' : 'default'}>{row.status}</Badge> },
-                                    { key: 'risk', title: 'Risk', render: (row) => <Badge variant={row.risk === 'High' ? 'danger' : row.risk === 'Moderate' ? 'warning' : 'success'}>{row.risk}</Badge> },
-                                    { key: 'due', title: 'Due' }
-                                ]}
-                                data={referralQueue}
-                                actions={(row) => (
-                                    <Button variant="primary" size="sm">Review</Button>
-                                )}
-                            />
+                            {referralQueue.length ? (
+                                <DataTable
+                                    columns={[
+                                        { key: 'id', title: 'Referral ID', className: 'font-mono text-xs' },
+                                        { key: 'patient', title: 'Patient' },
+                                        { key: 'specialty', title: 'Specialty' },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Accepted' ? 'success' : row.status === 'Pending' ? 'warning' : row.status === 'In progress' ? 'info' : 'default'}>{row.status}</Badge> },
+                                        { key: 'risk', title: 'Risk', render: (row) => <Badge variant={row.risk === 'High' ? 'danger' : row.risk === 'Moderate' ? 'warning' : 'success'}>{row.risk}</Badge> },
+                                        { key: 'due', title: 'Due' }
+                                    ]}
+                                    data={referralQueue}
+                                    actions={(row) => (
+                                        <Button variant="primary" size="sm">Review</Button>
+                                    )}
+                                />
+                            ) : (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No referrals have been created yet. Referral activity will appear here once the care coordination workflow is active.</div>
+                            )}
                         </Card>
                     )}
 
@@ -399,19 +384,13 @@
         // WORKFORCE ANALYTICS MODULE
         // ==========================================
         const WorkforceModule = () => {
-            const staffingCoverage = [
-                { unit: 'Emergency', scheduled: 24, actual: 18, occupancy: 88 },
-                { unit: 'Ward', scheduled: 42, actual: 39, occupancy: 76 },
-                { unit: 'ICU', scheduled: 18, actual: 16, occupancy: 69 },
-                { unit: 'Diagnostics', scheduled: 19, actual: 17, occupancy: 73 }
-            ];
+            const staffingCoverage = (seedData.users || []).length
+                ? [
+                    { unit: 'Clinical Teams', scheduled: (seedData.users || []).length, actual: (seedData.users || []).filter((user) => user.status === 'active').length, occupancy: Math.min(100, Math.round(((seedData.users || []).filter((user) => user.status === 'active').length / Math.max(1, (seedData.users || []).length)) * 100)) }
+                ]
+                : [];
 
-            const productivity = [
-                { label: 'Doctors', value: 92 },
-                { label: 'Nurses', value: 89 },
-                { label: 'Lab', value: 84 },
-                { label: 'Pharmacy', value: 81 }
-            ];
+            const productivity = [];
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -424,16 +403,16 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Coverage" value="91%" icon={Icons.Users} color="medical" />
-                        <StatCard title="Productivity" value="87%" icon={Icons.Activity} color="emerald" />
-                        <StatCard title="Leave Risk" value="12" icon={Icons.Calendar} color="amber" />
-                        <StatCard title="Vacancies" value="7" icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Coverage" value={(staffingCoverage[0]?.occupancy || 0) + '%'} icon={Icons.Users} color="medical" />
+                        <StatCard title="Productivity" value="0%" icon={Icons.Activity} color="emerald" />
+                        <StatCard title="Leave Risk" value={0} icon={Icons.Calendar} color="amber" />
+                        <StatCard title="Vacancies" value={0} icon={Icons.AlertCircle} color="red" />
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                         <Card title="Unit Coverage" className="xl:col-span-2">
                             <div className="space-y-5">
-                                {staffingCoverage.map((unit) => (
+                                {staffingCoverage.length ? staffingCoverage.map((unit) => (
                                     <div key={unit.unit} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <span className="font-semibold text-slate-900">{unit.unit}</span>
@@ -445,13 +424,15 @@
                                             <Badge variant={unit.actual / unit.scheduled >= 0.9 ? 'success' : 'warning'}>{unit.actual / unit.scheduled >= 0.9 ? 'Stable' : 'Watch'}</Badge>
                                         </div>
                                     </div>
-                                ))}
+                                )) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No staff records are connected yet. Workforce analytics will populate after staff profiles are created in Supabase.</div>
+                                )}
                             </div>
                         </Card>
 
                         <Card title="Productivity by Team">
                             <div className="space-y-4">
-                                {productivity.map((team) => (
+                                {productivity.length ? productivity.map((team) => (
                                     <div key={team.label}>
                                         <div className="flex items-center justify-between text-sm mb-1">
                                             <span className="text-slate-600">{team.label}</span>
@@ -459,7 +440,9 @@
                                         </div>
                                         <ProgressBar value={team.value} max={100} color={team.value >= 85 ? 'emerald' : 'amber'} />
                                     </div>
-                                ))}
+                                )) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No productivity data is available until live staff activity is recorded.</div>
+                                )}
                             </div>
                         </Card>
                     </div>

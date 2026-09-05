@@ -231,7 +231,7 @@
                                                     <p className="mt-2 text-xs text-slate-500">{entry.auditNote || entry.handoffNote || entry.dischargePlan || 'Quality event recorded'}</p>
                                                 </div>
                                             )) : (
-                                                <p className="text-sm text-slate-500">No quality risk events recorded yet.</p>
+                                                <p className="text-sm text-slate-500">No quality events are recorded yet. Safety and governance summaries will appear here when data is entered.</p>
                                             )}
                                         </div>
                                     </Card>

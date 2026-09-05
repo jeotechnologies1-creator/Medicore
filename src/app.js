@@ -98,51 +98,108 @@
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
             };
 
+            const normalizeModuleId = (moduleId) => {
+                const aliasMap = {
+                    appointment: 'appointments',
+                    appointments: 'appointments',
+                    doctor: 'doctors',
+                    doctors: 'doctors',
+                    lab: 'laboratory',
+                    labs: 'laboratory',
+                    laboratory: 'laboratory',
+                    results: 'laboratory',
+                    imaging: 'radiology',
+                    radiology: 'radiology',
+                    cds: 'clinical_decision_support',
+                    clinical_decision: 'clinical_decision_support',
+                    decision_support: 'clinical_decision_support',
+                    ops: 'operations',
+                    operations: 'operations',
+                    command_center: 'operations',
+                    procurement_and_supply: 'procurement',
+                    supply_chain: 'procurement',
+                    referral: 'referrals',
+                    referrals: 'referrals',
+                    care_coordination: 'referrals',
+                    staffing: 'workforce',
+                    workforce_analytics: 'workforce',
+                    medications: 'pharmacy',
+                    pharmacy: 'pharmacy',
+                    finance: 'billing',
+                    insurance_claims: 'insurance',
+                    claims: 'insurance',
+                    payment: 'payments',
+                    document_control: 'documents',
+                    clinical_documents: 'documents',
+                    governance: 'compliance',
+                    policy_library: 'compliance',
+                    admission: 'admissions',
+                    ward: 'admissions',
+                    surgery: 'surgeries',
+                    safety: 'clinical_safety',
+                    stock: 'inventory',
+                    staff: 'hr',
+                    human_resources: 'hr',
+                    medical_offices: 'offices',
+                    office: 'offices',
+                    report: 'reports',
+                    audit_logs: 'audit',
+                    system_settings: 'settings',
+                    portal: 'portal',
+                    messages: 'portal',
+                    prescriptions: 'portal',
+                    lab_results: 'portal'
+                };
+
+                const safeId = String(moduleId || '').trim();
+                return aliasMap[safeId] || safeId;
+            };
+
+            const moduleMap = {
+                dashboard: () => <DashboardModule />,
+                patients: () => <PatientsModule />,
+                appointments: () => <AppointmentsModule />,
+                doctors: () => <DoctorsModule />,
+                consultations: () => <ConsultationsModule />,
+                laboratory: () => <LaboratoryModule />,
+                radiology: () => <RadiologyModule />,
+                clinical_decision_support: () => <ClinicalDecisionSupportModule />,
+                operations: () => <OperationsModule />,
+                procurement: () => <ProcurementModule />,
+                referrals: () => <CareCoordinationModule />,
+                workforce: () => <WorkforceModule />,
+                pharmacy: () => <PharmacyModule />,
+                inventory: () => <InventoryModule />,
+                billing: () => <BillingModule initialTab="invoices" />,
+                insurance: () => <BillingModule initialTab="insurance" />,
+                payments: () => <BillingModule initialTab="payments" />,
+                documents: () => <DocumentsModule />,
+                compliance: () => <ComplianceVaultModule />,
+                admissions: () => <AdmissionsModule />,
+                surgeries: () => <SurgeriesModule />,
+                clinical_safety: () => <ClinicalSafetyModule />,
+                reports: () => <ReportsModule />,
+                audit: () => <AuditModule />,
+                settings: () => <SettingsModule />,
+                offices: () => <MedicalOfficesModule />,
+                hr: () => <HRStaffModule />,
+                portal: () => <PatientPortalModule />,
+                ward: () => <AdmissionsModule />,
+                vitals: () => <VitalsModule />,
+                upload: () => <DocumentsModule />,
+                medications: () => <PharmacyModule />,
+                results: () => <LaboratoryModule />,
+                messages: () => <PatientPortalModule />,
+                prescriptions: () => <PatientPortalModule />,
+                lab_results: () => <PatientPortalModule />
+            };
+
             const renderModule = () => {
-                if (user && !hasModuleAccess(activeModule)) {
+                const resolvedModule = normalizeModuleId(activeModule);
+                if (user && !hasModuleAccess(resolvedModule)) {
                     return <UnauthorizedModule />;
                 }
-
-                switch (activeModule) {
-                    case 'dashboard': return <DashboardModule />;
-                    case 'patients': return <PatientsModule />;
-                    case 'appointments': return <AppointmentsModule />;
-                    case 'doctors': return <DoctorsModule />;
-                    case 'consultations': return <ConsultationsModule />;
-                    case 'laboratory': return <LaboratoryModule />;
-                    case 'results': return <LaboratoryModule />;
-                    case 'radiology': return <RadiologyModule />;
-                    case 'clinical_decision_support': return <ClinicalDecisionSupportModule />;
-                    case 'operations': return <OperationsModule />;
-                    case 'procurement': return <ProcurementModule />;
-                    case 'referrals': return <CareCoordinationModule />;
-                    case 'workforce': return <WorkforceModule />;
-                    case 'upload': return <DocumentsModule />;
-                    case 'pharmacy': return <PharmacyModule />;
-                    case 'inventory': return <InventoryModule />;
-                    case 'billing': return <BillingModule initialTab="invoices" />;
-                    case 'insurance': return <BillingModule initialTab="insurance" />;
-                    case 'payments': return <BillingModule initialTab="payments" />;
-                    case 'documents': return <DocumentsModule />;
-                    case 'compliance': return <ComplianceVaultModule />;
-                    case 'admissions': return <AdmissionsModule />;
-                    case 'ward': return <AdmissionsModule />;
-                    case 'vitals': return <VitalsModule />;
-                    case 'clinical_safety': return <ClinicalSafetyModule />;
-                    case 'surgeries': return <SurgeriesModule />;
-                    case 'reports': return <ReportsModule />;
-                    case 'audit': return <AuditModule />;
-                    case 'settings': return <SettingsModule />;
-                    case 'offices': return <MedicalOfficesModule />;
-                    case 'hr': return <HRStaffModule />;
-                    case 'portal': return <PatientPortalModule />;
-                    case 'lab_results': return <PatientPortalModule />;
-                    case 'prescriptions': return <PatientPortalModule />;
-                    case 'messages': return <PatientPortalModule />;
-                    case 'medications': return <PharmacyModule />;
-                    case 'documents': return <DocumentsModule />;
-                    default: return <DashboardModule />;
-                }
+                return moduleMap[resolvedModule] ? moduleMap[resolvedModule]() : <DashboardModule />;
             };
 
             if (!isAuthenticated) {
