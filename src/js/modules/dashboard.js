@@ -30,6 +30,10 @@
             }, {});
             const departmentTotal = Math.max(1, appData.appointments.length);
             const departments = Object.entries(departmentCounts).slice(0, 4).map(([name, count], index) => ({ name, value: Math.round((count / departmentTotal) * 100), color: ['bg-medical-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][index] }));
+            const inventoryValue = (appData.pharmacyInventory || []).reduce(
+                (total, item) => total + Math.max(0, Number(item.stockQuantity) || 0) * Math.max(0, Number(item.unitPrice) || 0),
+                0
+            );
             const careCoordinationSummary = {
                 highRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'critical' && entry.status === 'open').length,
                 moderateRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'warning' && entry.status === 'open').length,
@@ -148,6 +152,7 @@
                                     <StatCard title="Total Patients" value={stats.totalPatients} subtitle="Registered patients" icon={Icons.Users} color="medical" />
                                     <StatCard title="Today's Appointments" value={stats.todayAppointments} subtitle="Scheduled visits" icon={Icons.Calendar} color="emerald" />
                                     <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/' + appData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
+                                    <StatCard title="Inventory Value" value={formatCurrency(inventoryValue)} subtitle="On-hand medication stock" icon={Icons.Package} color="violet" />
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

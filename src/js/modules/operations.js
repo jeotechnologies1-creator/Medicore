@@ -393,6 +393,18 @@
                 { id: 'prescriptions', label: 'Prescriptions' },
                 { id: 'purchase', label: 'Purchase Orders' },
             ];
+            const inventoryValue = inventory.reduce(
+                (total, item) => total + Math.max(0, Number(item.stockQuantity) || 0) * Math.max(0, Number(item.unitPrice) || 0),
+                0
+            );
+            const expiringSoonCount = inventory.filter((item) => {
+                if (!item.expiryDate) return false;
+                const expiry = new Date(item.expiryDate);
+                const today = new Date();
+                const threeMonths = new Date(today);
+                threeMonths.setMonth(threeMonths.getMonth() + 3);
+                return !Number.isNaN(expiry.valueOf()) && expiry >= today && expiry <= threeMonths;
+            }).length;
 
             const handleAddStock = async () => {
                 if (!stockForm.name) return;
@@ -427,29 +439,21 @@
 
             const handleDispense = async (prescription) => {
                 const client = window.MedicoreSupabase?.getClient?.();
-                const updatedPrescription = { ...prescription, status: 'dispensed' };
                 if (!client) return notifyPersistenceFailure('dispense medication');
-                const medication = prescription.medications?.[0];
-                const stockItem = medication && inventory.find((item) => item.name === medication.name);
-                if (!stockItem) return notifyPersistenceFailure('dispense medication', new Error('No matching inventory item was found.'));
-                const quantity = Number(medication.quantity || 1);
-                const remainingStock = Number(stockItem.stockQuantity || 0) - quantity;
-                if (remainingStock < 0) return notifyPersistenceFailure('dispense medication', new Error('Insufficient stock.'));
-                const { error: inventoryError } = await client.from('pharmacy_inventory').update({ stock_quantity: remainingStock }).eq('id', stockItem.id);
-                if (inventoryError) return notifyPersistenceFailure('dispense medication', inventoryError);
-                const { error } = await client.from('prescriptions').update({ status: 'dispensed' }).eq('id', prescription.id);
-                if (error) return notifyPersistenceFailure('dispense medication', error);
+                const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id });
+                if (error || !data?.items) return notifyPersistenceFailure('dispense medication', error || new Error('The dispensing transaction did not return a result.'));
 
+                const dispensedByInventoryId = new Map(data.items.map((item) => [item.inventoryId, item]));
                 const nextInventory = inventory.map((item) => {
-                    if (item.id === stockItem.id) {
-                        return { ...item, stockQuantity: remainingStock };
-                    }
-                    return item;
+                    const dispensedItem = dispensedByInventoryId.get(item.id);
+                    return dispensedItem
+                        ? { ...item, stockQuantity: dispensedItem.remainingStock, status: dispensedItem.status }
+                        : item;
                 });
 
                 persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
-                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? updatedPrescription : item);
+                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
                 persistStoreTable('prescriptions', nextPrescriptions);
             };
 
@@ -469,12 +473,8 @@
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Total Items" value={inventory.length} icon={Icons.Package} color="medical" />
                         <StatCard title="Low Stock" value={inventory.filter(d => Number(d.stockQuantity || 0) <= Number(d.reorderLevel || 0)).length} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Expiring Soon" value={inventory.filter(d => {
-                            const expiry = new Date(d.expiryDate);
-                            const threeMonths = new Date();
-                            threeMonths.setMonth(threeMonths.getMonth() + 3);
-                            return expiry <= threeMonths;
-                        }).length} icon={Icons.Clock} color="red" />
+                        <StatCard title="Expiring Soon" value={expiringSoonCount} icon={Icons.Clock} color="red" />
+                        <StatCard title="Inventory Value" value={formatCurrency(inventoryValue)} icon={Icons.DollarSign} color="emerald" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
