@@ -42,13 +42,16 @@
             }, {});
             const departmentTotal = Math.max(1, appData.appointments.length);
             const departments = Object.entries(departmentCounts).slice(0, 4).map(([name, count], index) => ({ name, value: Math.round((count / departmentTotal) * 100), color: ['bg-medical-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][index] }));
-            const qualityEntries = (appData.auditLogs || []).filter((entry) => entry.riskScore || entry.readmissionRisk);
             const careCoordinationSummary = {
-                highRiskCases: qualityEntries.filter((entry) => (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'high').length,
-                moderateRiskCases: qualityEntries.filter((entry) => (entry.riskScore || entry.readmissionRisk || '').toLowerCase() === 'moderate').length,
-                dischargePlans: (appData.auditLogs || []).filter((entry) => entry.dischargePlan || entry.handoffNote).length,
-                qualityReviews: (appData.auditLogs || []).filter((entry) => entry.auditNote || entry.idCheck !== undefined).length
+                highRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'critical' && entry.status === 'open').length,
+                moderateRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'warning' && entry.status === 'open').length,
+                dischargePlans: (appData.documents || []).filter((entry) => String(entry.documentType || '').toLowerCase().includes('discharge')).length,
+                qualityReviews: (appData.clinicalAlerts || []).filter((entry) => ['acknowledged', 'resolved'].includes(entry.status)).length
             };
+            const careItemsRequiringFollowUp = careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases;
+            const followUpReadiness = careItemsRequiringFollowUp
+                ? Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / careItemsRequiringFollowUp) * 100))
+                : 0;
 
             const getRoleDashboard = () => {
                 switch (user?.role) {
@@ -196,9 +199,9 @@
                                         <div className="mt-4 space-y-2">
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-slate-600">Follow-up readiness</span>
-                                                <span className="font-medium text-slate-900">{Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / Math.max(1, careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases + 4)) * 100))}%</span>
+                                                <span className="font-medium text-slate-900">{followUpReadiness}%</span>
                                             </div>
-                                            <ProgressBar value={Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / Math.max(1, careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases + 4)) * 100))} max={100} color="emerald" size="sm" />
+                                            <ProgressBar value={followUpReadiness} max={100} color="emerald" size="sm" />
                                         </div>
                                     </Card>
                                 </div>

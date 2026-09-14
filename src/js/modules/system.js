@@ -204,9 +204,18 @@
         // COMPLIANCE VAULT MODULE
         // ==========================================
         const ComplianceVaultModule = () => {
-            const compliancePolicies = [];
-            const files = [];
             const documents = appData.documents || [];
+            const files = documents.map((document) => ({
+                id: document.id,
+                name: document.fileName || 'Unnamed document',
+                category: document.documentType || 'Clinical document',
+                patient: (() => {
+                    const patient = (appData.patients || []).find((item) => item.id === document.patientId);
+                    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unassigned patient';
+                })(),
+                updated: document.createdAt || document.uploadedAt,
+                status: 'Stored'
+            }));
             const openAlerts = (appData.clinicalAlerts || []).filter((item) => item.status === 'open');
             const reviewRecords = (appData.auditLogs || []).filter((item) => ['warning', 'critical'].includes(item.severity));
             const complianceChecks = [
@@ -230,10 +239,6 @@
                             <h2 className="text-2xl font-bold text-slate-900">Compliance Vault</h2>
                             <p className="text-slate-500 mt-1">Document control, policy access, and governance oversight</p>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="secondary" icon={Icons.Upload}>Upload Policy</Button>
-                            <Button variant="primary" icon={Icons.FileText}>New Review</Button>
-                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -255,27 +260,7 @@
                     </Card>
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                        <Card title="Policy register">
-                            <div className="space-y-3">
-                                {compliancePolicies.length ? compliancePolicies.map((policy) => (
-                                    <div key={policy.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <p className="font-medium text-slate-900">{policy.title}</p>
-                                                <p className="text-xs text-slate-500">Owner: {policy.owner}</p>
-                                            </div>
-                                            <Badge variant={policy.status === 'Active' ? 'success' : policy.status === 'Reviewed' ? 'info' : policy.status === 'Pending review' ? 'warning' : 'default'}>{policy.status}</Badge>
-                                        </div>
-                                        <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                                            <span>Updated {policy.updated}</span>
-                                            <span>Version {policy.version}</span>
-                                        </div>
-                                    </div>
-                                )) : (
-                                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No policy records have been uploaded yet. Policies will appear here when they are added to the vault.</div>
-                                )}
-                            </div>
-                        </Card>
+                        <Card title="Clinical document register"><p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Policies are not represented by a Supabase table in the current schema. The repository lists the persisted clinical documents below.</p></Card>
 
                         <Card title="Document repository">
                             {files.length ? (
@@ -283,9 +268,9 @@
                                     columns={[
                                         { key: 'name', title: 'Document' },
                                         { key: 'category', title: 'Category' },
-                                        { key: 'owner', title: 'Owner' },
-                                        { key: 'updated', title: 'Updated' },
-                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Approved' ? 'success' : row.status === 'Reviewed' ? 'info' : 'warning'}>{row.status}</Badge> }
+                                        { key: 'patient', title: 'Patient' },
+                                        { key: 'updated', title: 'Uploaded', render: (row) => formatDateTime(row.updated) },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant="info">{row.status}</Badge> }
                                     ]}
                                     data={files}
                                     actions={() => (

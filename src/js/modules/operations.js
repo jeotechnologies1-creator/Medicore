@@ -161,11 +161,17 @@
         // ==========================================
         const ProcurementModule = () => {
             const [activeTab, setActiveTab] = useState('orders');
-            const supplierPerformance = [];
-            const monthlySpend = (appData.billing || []).reduce((sum, bill) => sum + Number(bill.total || 0), 0);
-            const openPurchaseOrders = 0;
-            const pendingDeliveries = 0;
-            const savings = 0;
+            const inventory = appData.pharmacyInventory || [];
+            const supplierInventory = Object.entries(inventory.reduce((groups, item) => {
+                const supplier = item.supplier || 'Unassigned supplier';
+                groups[supplier] = groups[supplier] || { supplier, items: 0, stockValue: 0, lowStock: 0 };
+                groups[supplier].items += 1;
+                groups[supplier].stockValue += Number(item.stockQuantity || 0) * Number(item.unitPrice || 0);
+                groups[supplier].lowStock += Number(item.stockQuantity || 0) <= Number(item.reorderLevel || 0) ? 1 : 0;
+                return groups;
+            }, {})).map(([, supplier]) => supplier);
+            const lowStockItems = inventory.filter((item) => Number(item.stockQuantity || 0) <= Number(item.reorderLevel || 0));
+            const inventoryValue = inventory.reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0);
 
             const tabs = [
                 { id: 'orders', label: 'Purchase Orders' },
@@ -180,58 +186,27 @@
                             <h2 className="text-2xl font-bold text-slate-900">Procurement</h2>
                             <p className="text-slate-500 mt-1">Supplier management, purchase orders, and cost control</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>New Purchase</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Open POs" value={openPurchaseOrders} icon={Icons.Packages} color="medical" />
-                        <StatCard title="Monthly Spend" value={formatCurrency(monthlySpend)} icon={Icons.DollarSign} color="emerald" />
-                        <StatCard title="Late Deliveries" value={pendingDeliveries} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Savings" value={formatCurrency(savings)} icon={Icons.CheckCircle} color="violet" />
+                        <StatCard title="Inventory items" value={inventory.length} icon={Icons.Packages} color="medical" />
+                        <StatCard title="Stock value" value={formatCurrency(inventoryValue)} icon={Icons.DollarSign} color="emerald" />
+                        <StatCard title="Low-stock items" value={lowStockItems.length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Suppliers" value={supplierInventory.filter((item) => item.supplier !== 'Unassigned supplier').length} icon={Icons.CheckCircle} color="violet" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                     {activeTab === 'orders' && (
                         <Card>
-                            {openPurchaseOrders === 0 ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No purchase orders have been entered yet. Purchase activity will appear here once the purchasing workflow is live.</div>
-                            ) : (
-                                <DataTable
-                                    columns={[
-                                        { key: 'poNumber', title: 'PO #', className: 'font-mono text-xs' },
-                                        { key: 'vendor', title: 'Vendor' },
-                                        { key: 'category', title: 'Category' },
-                                        { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
-                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'pending' ? 'warning' : 'danger'}>{row.status}</Badge> },
-                                        { key: 'eta', title: 'ETA', render: (row) => formatDate(row.eta) }
-                                    ]}
-                                    data={[]}
-                                />
-                            )}
+                            <DataTable columns={[{ key: 'name', title: 'Item' }, { key: 'supplier', title: 'Supplier' }, { key: 'stockQuantity', title: 'Stock' }, { key: 'reorderLevel', title: 'Reorder level' }, { key: 'unitPrice', title: 'Unit price', render: (row) => formatCurrency(row.unitPrice) }]} data={inventory} />
                         </Card>
                     )}
 
                     {activeTab === 'suppliers' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {supplierPerformance.length ? supplierPerformance.map((supplier) => (
-                                <Card key={supplier.name} title={supplier.name}>
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-600">On-time delivery</span>
-                                            <span className="font-semibold text-slate-900">{supplier.onTime}%</span>
-                                        </div>
-                                        <ProgressBar value={supplier.onTime} max={100} color={supplier.risk === 'High' ? 'red' : supplier.risk === 'Medium' ? 'amber' : 'emerald'} />
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-600">Annual spend</span>
-                                            <span className="font-semibold text-slate-900">{formatCurrency(supplier.spend)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-600">Risk</span>
-                                            <Badge variant={supplier.risk === 'High' ? 'danger' : supplier.risk === 'Medium' ? 'warning' : 'success'}>{supplier.risk}</Badge>
-                                        </div>
-                                    </div>
-                                </Card>
+                            {supplierInventory.length ? supplierInventory.map((supplier) => (
+                                <Card key={supplier.supplier} title={supplier.supplier}><div className="space-y-3 text-sm"><p>{supplier.items} stocked item{supplier.items === 1 ? '' : 's'}</p><p>Stock value: {formatCurrency(supplier.stockValue)}</p><p>Low-stock items: {supplier.lowStock}</p></div></Card>
                             )) : (
                                 <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No supplier records are connected yet. Supplier performance will appear automatically once the inventory workflow is live.</div>
                             )}
@@ -240,23 +215,8 @@
 
                     {activeTab === 'analytics' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card title="Monthly Spend Trend">
-                                <BarChart
-                                    data={[]}
-                                    width={500}
-                                    height={260}
-                                    color="#10b981"
-                                />
-                            </Card>
-                            <Card title="Category Spend">
-                                <div className="space-y-4">
-                                    {monthlySpend > 0 ? (
-                                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">Live spend data is now being calculated from the connected billing records.</div>
-                                    ) : (
-                                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">No spend data is available yet. Once billing records are created, this chart will populate automatically.</div>
-                                    )}
-                                </div>
-                            </Card>
+                            <Card title="Inventory value by category"><BarChart data={Object.entries(inventory.reduce((groups, item) => { const category = item.category || 'Uncategorized'; groups[category] = (groups[category] || 0) + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0); return groups; }, {})).map(([label, value]) => ({ label, value }))} width={500} height={260} color="#10b981" /></Card>
+                            <Card title="Low-stock inventory"><DataTable columns={[{ key: 'name', title: 'Item' }, { key: 'stockQuantity', title: 'Stock' }, { key: 'reorderLevel', title: 'Reorder level' }]} data={lowStockItems} /></Card>
                         </div>
                     )}
                 </div>
@@ -269,8 +229,8 @@
         const CareCoordinationModule = () => {
             const [activeTab, setActiveTab] = useState('referrals');
 
-            const referralQueue = [];
             const followUpTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'follow_up' || task.taskType === 'followup');
+            const handoffTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'handoff');
 
             const tabs = [
                 { id: 'referrals', label: 'Referrals' },
@@ -285,13 +245,12 @@
                             <h2 className="text-2xl font-bold text-slate-900">Referrals & Care Coordination</h2>
                             <p className="text-slate-500 mt-1">Track specialty referrals, continuity of care, and patient handoff readiness</p>
                         </div>
-                        <Button variant="primary" icon={Icons.UserPlus}>Create Referral</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Open Referrals" value={referralQueue.length} icon={Icons.UserCheck} color="medical" />
-                        <StatCard title="High Risk" value={referralQueue.filter((item) => item.risk === 'High').length} icon={Icons.AlertCircle} color="red" />
-                        <StatCard title="Accepted" value={referralQueue.filter((item) => item.status === 'Accepted').length} icon={Icons.CheckCircle} color="emerald" />
+                        <StatCard title="Open follow-ups" value={followUpTasks.filter((task) => task.status === 'open' || task.status === 'in_progress').length} icon={Icons.UserCheck} color="medical" />
+                        <StatCard title="Urgent follow-ups" value={followUpTasks.filter((task) => task.priority === 'urgent' || task.priority === 'stat').length} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Completed follow-ups" value={followUpTasks.filter((task) => task.status === 'completed').length} icon={Icons.CheckCircle} color="emerald" />
                         <StatCard title="Follow-ups" value={followUpTasks.length} icon={Icons.Calendar} color="violet" />
                     </div>
 
@@ -299,24 +258,7 @@
 
                     {activeTab === 'referrals' && (
                         <Card>
-                            {referralQueue.length ? (
-                                <DataTable
-                                    columns={[
-                                        { key: 'id', title: 'Referral ID', className: 'font-mono text-xs' },
-                                        { key: 'patient', title: 'Patient' },
-                                        { key: 'specialty', title: 'Specialty' },
-                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'Accepted' ? 'success' : row.status === 'Pending' ? 'warning' : row.status === 'In progress' ? 'info' : 'default'}>{row.status}</Badge> },
-                                        { key: 'risk', title: 'Risk', render: (row) => <Badge variant={row.risk === 'High' ? 'danger' : row.risk === 'Moderate' ? 'warning' : 'success'}>{row.risk}</Badge> },
-                                        { key: 'due', title: 'Due' }
-                                    ]}
-                                    data={referralQueue}
-                                    actions={(row) => (
-                                        <Button variant="primary" size="sm">Review</Button>
-                                    )}
-                                />
-                            ) : (
-                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No referrals have been created yet. Referral activity will appear here once the care coordination workflow is active.</div>
-                            )}
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Referral records are not configured in this Supabase schema. This screen only displays persisted follow-up and handoff tasks.</div>
                         </Card>
                     )}
 
@@ -333,20 +275,7 @@
                     )}
 
                     {activeTab === 'handoffs' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {[
-                                { title: 'Primary Care', detail: 'Clinician summary shared and signed', tone: 'success' },
-                                { title: 'Specialty Team', detail: 'Pending imaging results upload', tone: 'warning' },
-                                { title: 'Community Service', detail: 'Home care checklist awaiting confirmation', tone: 'info' }
-                            ].map((item) => (
-                                <Card key={item.title} title={item.title}>
-                                    <div className="space-y-3">
-                                        <Badge variant={item.tone === 'success' ? 'success' : item.tone === 'warning' ? 'warning' : 'info'}>{item.tone === 'success' ? 'Complete' : item.tone === 'warning' ? 'Pending' : 'Queued'}</Badge>
-                                        <p className="text-sm text-slate-600">{item.detail}</p>
-                                    </div>
-                                </Card>
-                            ))}
-                        </div>
+                        <Card title="Persisted handoffs">{handoffTasks.length ? <DataTable columns={[{ key: 'title', title: 'Task' }, { key: 'dueAt', title: 'Due', render: (row) => formatDateTime(row.dueAt) }, { key: 'status', title: 'Status' }]} data={handoffTasks} /> : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No handoff tasks have been recorded.</p>}</Card>
                     )}
                 </div>
             );

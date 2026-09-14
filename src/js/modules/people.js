@@ -14,9 +14,8 @@
             ];
             const attendanceSummary = departments.map((department) => ({
                 department,
-                rate: staff.filter(person => person.department === department && person.status === 'active').length
-                    ? 100 : 0,
-                staff: staff.filter(person => person.department === department).length
+                staff: staff.filter(person => person.department === department).length,
+                active: staff.filter(person => person.department === department && person.status === 'active').length
             }));
             const payrollSummary = [];
             const recruitmentPipeline = [];
@@ -34,7 +33,6 @@
                             <h2 className="text-2xl font-bold text-slate-900">HR & Staff</h2>
                             <p className="text-slate-500 mt-1">Workforce planning, attendance, payroll, and hiring operations</p>
                         </div>
-                        <Button variant="primary" icon={Icons.UserPlus}>Add Staff</Button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -57,7 +55,7 @@
                                                     <span className="text-slate-600">{item.label}</span>
                                                     <span className="font-semibold text-slate-900">{item.value}</span>
                                                 </div>
-                                                <ProgressBar value={Math.min(100, item.value * 12)} max={100} color={item.label.includes('Doctors') ? 'medical' : item.label.includes('Nurses') ? 'emerald' : item.label.includes('Clinics') ? 'amber' : 'violet'} />
+                                                <ProgressBar value={staff.length ? Math.round((item.value / staff.length) * 100) : 0} max={100} color={item.label.includes('Doctors') ? 'medical' : item.label.includes('Nurses') ? 'emerald' : item.label.includes('Clinics') ? 'amber' : 'violet'} />
                                             </div>
                                         ))}
                                     </div>
@@ -68,18 +66,7 @@
                                 </Card>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <Card title="Add Staff Member">
-                                    <div className="space-y-4">
-                                        <Input label="Full name" />
-                                        <Input label="Email" type="email" />
-                                        <Select label="Role" options={[{ value: 'doctor', label: 'Doctor' }, { value: 'nurse', label: 'Nurse' }, { value: 'pharmacist', label: 'Pharmacist' }, { value: 'receptionist', label: 'Receptionist' }]} />
-                                        <Input label="Department" />
-                                        <Select label="Shift Pattern" options={[{ value: 'morning', label: 'Morning' }, { value: 'afternoon', label: 'Afternoon' }, { value: 'night', label: 'Night' }]} />
-                                        <Button variant="primary" className="w-full justify-center" icon={Icons.UserPlus}>Create Staff Profile</Button>
-                                    </div>
-                                </Card>
-
+                            <div className="grid grid-cols-1 gap-6">
                                 <Card title="Department Performance">
                                     <div className="space-y-4">
                                         {departments.length ? departments.map((department) => {
@@ -90,7 +77,7 @@
                                                         <span className="font-medium text-slate-700">{department}</span>
                                                         <span className="text-slate-500">{departmentStaff} staff</span>
                                                     </div>
-                                                    <ProgressBar value={Math.min(100, departmentStaff * 18)} max={100} color="medical" />
+                                                    <ProgressBar value={staff.length ? Math.round((departmentStaff / staff.length) * 100) : 0} max={100} color="medical" />
                                                 </div>
                                             );
                                         }) : <p className="text-sm text-slate-500">No departments configured yet.</p>}
@@ -104,16 +91,18 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Department attendance">
                                 <div className="space-y-4">
-                                    {attendanceSummary.map((dept) => (
+                                    {attendanceSummary.map((dept) => {
+                                        const rate = dept.staff ? Math.round((dept.active / dept.staff) * 100) : 0;
+                                        return (
                                         <div key={dept.department}>
                                             <div className="flex items-center justify-between text-sm mb-1">
                                                 <span className="text-slate-600">{dept.department}</span>
-                                                <span className="font-medium text-slate-900">{dept.rate}%</span>
+                                                <span className="font-medium text-slate-900">{rate}%</span>
                                             </div>
-                                            <ProgressBar value={dept.rate} max={100} color={dept.rate >= 90 ? 'emerald' : 'amber'} />
+                                            <ProgressBar value={rate} max={100} color={rate >= 90 ? 'emerald' : 'amber'} />
                                             <p className="mt-2 text-xs text-slate-500">{dept.staff} staff on roster</p>
                                         </div>
-                                    ))}
+                                    ); })}
                                 </div>
                             </Card>
 
@@ -159,16 +148,7 @@
                                 </div>
                             </Card>
 
-                            <Card title="Onboarding checklist">
-                                <div className="space-y-3">
-                                    {['Offer letter issued', 'Credential verification', 'Background check', 'Mandatory training', 'System access approval'].map((step, index) => (
-                                        <div key={step} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                            <div className={'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ' + (index < 3 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600')}>{index < 3 ? '✓' : index + 1}</div>
-                                            <span className="text-sm text-slate-700">{step}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Card>
+                            <Card title="Onboarding checklist"><p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No onboarding records are available from Supabase.</p></Card>
                         </div>
                     )}
 
