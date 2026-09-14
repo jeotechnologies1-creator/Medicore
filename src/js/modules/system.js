@@ -687,9 +687,16 @@
                     setSaveMessage('Department name is required before creating a unit.');
                     return;
                 }
+                if (departments.some((department) => department.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+                    setSaveMessage('A department or ward with this name already exists.');
+                    return;
+                }
+                if (Number(departmentDraft.capacity) < 1) {
+                    setSaveMessage('Capacity must be at least 1.');
+                    return;
+                }
 
                 const newDepartment = {
-                    id: `dept-${Date.now()}`,
                     name: trimmedName,
                     type: departmentDraft.type,
                     capacity: Number(departmentDraft.capacity || 20),
@@ -697,17 +704,15 @@
                     occupied: 0
                 };
 
-                const nextDepartments = [...departments, newDepartment];
-                setDepartments(nextDepartments);
-                setDepartmentDraft({ name: '', type: 'Ward', capacity: 20, status: 'active' });
-
                 try {
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
-                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
-                    }
+                    if (!window.MedicoreSupabase?.createDepartment) throw new Error('Supabase is not configured.');
+                    const { data: savedDepartment, error } = await window.MedicoreSupabase.createDepartment(newDepartment);
+                    if (error || !savedDepartment) throw error || new Error('The department could not be saved.');
+                    setDepartments(prev => [...prev, savedDepartment].sort((a, b) => a.name.localeCompare(b.name)));
+                    setDepartmentDraft({ name: '', type: 'Ward', capacity: 20, status: 'active' });
                     setSaveMessage('Department/ward added successfully.');
                 } catch (e) {
-                    setSaveMessage('Department saved locally, but Supabase sync failed.');
+                    setSaveMessage(`Department was not added: ${e.message || 'unable to save to Supabase.'}`);
                 }
             };
 
@@ -715,14 +720,21 @@
                 const nextDepartments = departments.map(item =>
                     item.id === id ? { ...item, [field]: field === 'capacity' ? Number(value || 0) : value } : item
                 );
+                const changedDepartment = nextDepartments.find((item) => item.id === id);
+                if (field === 'capacity' && changedDepartment.capacity < 1) {
+                    setSaveMessage('Capacity must be at least 1.');
+                    return;
+                }
                 setDepartments(nextDepartments);
 
                 try {
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
-                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
-                    }
+                    if (!window.MedicoreSupabase?.updateDepartment) throw new Error('Supabase is not configured.');
+                    const { data: savedDepartment, error } = await window.MedicoreSupabase.updateDepartment(id, changedDepartment);
+                    if (error || !savedDepartment) throw error || new Error('The department could not be saved.');
+                    setDepartments(current => current.map((item) => item.id === id ? savedDepartment : item));
                 } catch (e) {
-                    console.warn('Department sync failed:', e);
+                    setDepartments(departments);
+                    setSaveMessage(`Department update was not saved: ${e.message || 'unable to save to Supabase.'}`);
                 }
             };
 
@@ -730,12 +742,13 @@
                 const nextDepartments = departments.filter(item => item.id !== id);
                 setDepartments(nextDepartments);
                 try {
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveDepartments === 'function') {
-                        await window.MedicoreSupabase.saveDepartments(nextDepartments);
-                    }
+                    if (!window.MedicoreSupabase?.deleteDepartment) throw new Error('Supabase is not configured.');
+                    const { error } = await window.MedicoreSupabase.deleteDepartment(id);
+                    if (error) throw error;
                     setSaveMessage('Department removed from the configuration.');
                 } catch (e) {
-                    setSaveMessage('Department removed locally but not persisted to Supabase.');
+                    setDepartments(departments);
+                    setSaveMessage(`Department was not removed: ${e.message || 'unable to save to Supabase.'}`);
                 }
             };
 

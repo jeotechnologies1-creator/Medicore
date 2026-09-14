@@ -171,6 +171,45 @@
         return { data: data || [], error };
     };
 
+    const toDepartmentRecord = (department) => ({
+        name: String(department?.name || '').trim(),
+        specialty: department?.type || department?.specialty || 'Ward',
+        capacity: Number(department?.capacity || 0),
+        occupied: Number(department?.occupied || 0),
+        status: department?.status || 'active'
+    });
+
+    const toDepartment = (row) => ({
+        id: row.id,
+        name: row.name,
+        type: row.specialty || 'Ward',
+        specialty: row.specialty || 'Ward',
+        capacity: Number(row.capacity || 0),
+        occupied: Number(row.occupied || 0),
+        status: row.status || 'active'
+    });
+
+    const createDepartment = async (department) => {
+        const client = getClient();
+        if (!client) return { data: null, error: new Error('Supabase client is not configured.') };
+        const { data, error } = await client.from('wards').insert(toDepartmentRecord(department)).select().single();
+        return { data: data ? toDepartment(data) : null, error };
+    };
+
+    const updateDepartment = async (id, department) => {
+        const client = getClient();
+        if (!client) return { data: null, error: new Error('Supabase client is not configured.') };
+        const { data, error } = await client.from('wards').update(toDepartmentRecord(department)).eq('id', id).select().single();
+        return { data: data ? toDepartment(data) : null, error };
+    };
+
+    const deleteDepartment = async (id) => {
+        const client = getClient();
+        if (!client) return { error: new Error('Supabase client is not configured.') };
+        const { error } = await client.from('wards').delete().eq('id', id);
+        return { error };
+    };
+
     const loadDepartments = async () => {
         const client = getClient();
         if (!client) {
@@ -182,15 +221,7 @@
             return [];
         }
 
-        return data.map((row) => ({
-            id: row.id,
-            name: row.name,
-            type: row.specialty || 'Ward',
-            specialty: row.specialty || 'Ward',
-            capacity: Number(row.capacity || 0),
-            occupied: Number(row.occupied || 0),
-            status: row.status || 'active'
-        }));
+        return data.map(toDepartment);
     };
 
     const recordComplianceExport = async (exportType, fileName, rowCount, metadata = {}) => {
@@ -294,6 +325,9 @@
         saveSystemSettings,
         loadSystemSettings,
         saveDepartments,
+        createDepartment,
+        updateDepartment,
+        deleteDepartment,
         loadDepartments,
         recordComplianceExport,
         loadComplianceExports,
