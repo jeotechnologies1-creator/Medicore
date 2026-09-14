@@ -10,7 +10,7 @@
 
             const governanceSummary = {
                 criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
-                pendingReviews: Math.max(0, Math.round((appData.auditLogs.length || 0) * 0.18) + (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length),
+                pendingReviews: (appData.auditLogs || []).filter((log) => ['warning', 'critical'].includes(log.severity)).length + (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length,
                 complianceRate: (() => {
                     const checks = [
                         (appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0,
@@ -206,6 +206,15 @@
         const ComplianceVaultModule = () => {
             const compliancePolicies = [];
             const files = [];
+            const documents = appData.documents || [];
+            const openAlerts = (appData.clinicalAlerts || []).filter((item) => item.status === 'open');
+            const reviewRecords = (appData.auditLogs || []).filter((item) => ['warning', 'critical'].includes(item.severity));
+            const complianceChecks = [
+                (appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0,
+                !(appData.labOrders || []).some((item) => item.status === 'critical'),
+                documents.some((item) => String(item.documentType || '').toLowerCase().includes('discharge'))
+            ];
+            const complianceRate = Math.round((complianceChecks.filter(Boolean).length / complianceChecks.length) * 100);
 
             const automationSummary = [
                 { label: 'High-risk events', value: (appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
@@ -228,10 +237,10 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Active Policies" value={0} icon={Icons.ShieldCheck} color="emerald" />
-                        <StatCard title="Pending Reviews" value={0} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Documents" value={0} icon={Icons.FileText} color="medical" />
-                        <StatCard title="Compliance Rate" value="0%" icon={Icons.BarChart3} color="violet" />
+                        <StatCard title="Clinical documents" value={documents.length} icon={Icons.FileText} color="emerald" />
+                        <StatCard title="Pending reviews" value={reviewRecords.length + openAlerts.length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Open incidents" value={openAlerts.length} icon={Icons.ShieldCheck} color="medical" />
+                        <StatCard title="Compliance checks" value={`${complianceRate}%`} icon={Icons.BarChart3} color="violet" />
                     </div>
 
                     <Card title="Automated oversight metrics">

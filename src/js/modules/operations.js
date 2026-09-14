@@ -34,7 +34,7 @@
             const logistics = [
                 { title: 'Low-stock medicines', value: (appData.pharmacyInventory || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
                 { title: 'Expiring inventory', value: (appData.pharmacyInventory || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
-                { title: 'Pending refill requests', value: 0 }
+                { title: 'Pending refill requests', value: (appData.refillRequests || []).filter(item => item.status === 'pending').length }
             ];
 
             const tabs = [
@@ -356,9 +356,14 @@
         // WORKFORCE ANALYTICS MODULE
         // ==========================================
         const WorkforceModule = () => {
+            const staff = appData.users || [];
+            const activeStaff = staff.filter((user) => user.status === 'active');
+            const completedTasks = (appData.clinicalTasks || []).filter((task) => task.status === 'completed').length;
+            const openTasks = (appData.clinicalTasks || []).filter((task) => task.status === 'open' || task.status === 'in_progress').length;
+            const productivityRate = activeStaff.length ? Math.round((completedTasks / activeStaff.length) * 100) : 0;
             const staffingCoverage = (appData.users || []).length
                 ? [
-                    { unit: 'Clinical Teams', scheduled: (appData.users || []).length, actual: (appData.users || []).filter((user) => user.status === 'active').length, occupancy: Math.min(100, Math.round(((appData.users || []).filter((user) => user.status === 'active').length / Math.max(1, (appData.users || []).length)) * 100)) }
+                    { unit: 'Clinical Teams', scheduled: staff.length, actual: activeStaff.length, occupancy: Math.min(100, Math.round((activeStaff.length / Math.max(1, staff.length)) * 100)) }
                 ]
                 : [];
 
@@ -376,9 +381,9 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Coverage" value={(staffingCoverage[0]?.occupancy || 0) + '%'} icon={Icons.Users} color="medical" />
-                        <StatCard title="Productivity" value="0%" icon={Icons.Activity} color="emerald" />
-                        <StatCard title="Leave Risk" value={0} icon={Icons.Calendar} color="amber" />
-                        <StatCard title="Vacancies" value={0} icon={Icons.AlertCircle} color="red" />
+                        <StatCard title="Completed tasks / staff" value={`${productivityRate}%`} icon={Icons.Activity} color="emerald" />
+                        <StatCard title="Open clinical tasks" value={openTasks} icon={Icons.Calendar} color="amber" />
+                        <StatCard title="Inactive profiles" value={staff.filter((user) => user.status !== 'active').length} icon={Icons.AlertCircle} color="red" />
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -465,7 +470,6 @@
             const handleAddStock = async () => {
                 if (!stockForm.name) return;
                 const payload = {
-                    id: 'med_' + Date.now(),
                     name: stockForm.name,
                     genericName: stockForm.genericName,
                     category: stockForm.category,
@@ -479,14 +483,19 @@
 
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('add inventory');
-                const { data, error } = await client.from('pharmacy_inventory').insert([{ ...payload, generic_name: payload.genericName, stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel, unit_price: payload.unitPrice, expiry_date: payload.expiryDate }]).select();
+                const { data, error } = await client.from('pharmacy_inventory').insert([{
+                    name: payload.name, generic_name: payload.genericName || null, category: payload.category || null,
+                    stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel,
+                    unit_price: payload.unitPrice, expiry_date: payload.expiryDate || null,
+                    supplier: payload.supplier || null, status: payload.status
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('add inventory', error);
                 const mapped = { ...payload, id: data[0].id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
                 const next = [...inventory, mapped];
                 persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
                 setShowAddStock(false);
-                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 10, reorderLevel: 5, unitPrice: 20, expiryDate: '', supplier: '' });
+                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', supplier: '' });
             };
 
             const handleDispense = async (prescription) => {
@@ -714,7 +723,6 @@
             const handleCreateInvoice = async () => {
                 if (!invoiceForm.patientId) return;
                 const payload = {
-                    id: 'inv_' + Date.now(),
                     patientId: invoiceForm.patientId,
                     invoiceNumber: invoiceForm.invoiceNumber || 'INV-' + Date.now(),
                     date: new Date().toISOString().split('T')[0],
@@ -730,7 +738,11 @@
 
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create invoice');
-                const { data, error } = await client.from('billing').insert([{ ...payload, patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date, subtotal: payload.subtotal, tax: payload.tax, total: payload.total, paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status }]).select();
+                const { data, error } = await client.from('billing').insert([{
+                    patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date,
+                    subtotal: payload.subtotal, discount: payload.discount, tax: payload.tax, total: payload.total,
+                    paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
                 const next = [...invoices, mapped];
@@ -810,11 +822,16 @@
             const deniedClaims = insuranceClaims.filter(c => c.status === 'denied').length;
             const claimApprovalRate = insuranceClaims.length ? Math.round((approvedClaims / insuranceClaims.length) * 100) : 0;
             const allowedInsurance = insuranceClaims.reduce((s, claim) => s + Number(claim.amountApproved || 0), 0);
+            const invoiceAgeInDays = (invoice) => {
+                const issued = new Date(invoice.date);
+                return Number.isNaN(issued.valueOf()) ? 0 : Math.max(0, Math.floor((Date.now() - issued.valueOf()) / 86400000));
+            };
+            const outstandingInvoices = invoices.filter((invoice) => Number(invoice.balance || 0) > 0);
             const agingSummary = [
-                { label: 'Current', value: invoices.filter(i => Number(i.balance || 0) <= 30).length },
-                { label: '31-60 days', value: invoices.filter(i => Number(i.balance || 0) > 30 && Number(i.balance || 0) <= 60).length },
-                { label: '61-90 days', value: invoices.filter(i => Number(i.balance || 0) > 60 && Number(i.balance || 0) <= 90).length },
-                { label: '90+ days', value: invoices.filter(i => Number(i.balance || 0) > 90).length }
+                { label: 'Current', value: outstandingInvoices.filter((invoice) => invoiceAgeInDays(invoice) <= 30).length },
+                { label: '31-60 days', value: outstandingInvoices.filter((invoice) => invoiceAgeInDays(invoice) > 30 && invoiceAgeInDays(invoice) <= 60).length },
+                { label: '61-90 days', value: outstandingInvoices.filter((invoice) => invoiceAgeInDays(invoice) > 60 && invoiceAgeInDays(invoice) <= 90).length },
+                { label: '90+ days', value: outstandingInvoices.filter((invoice) => invoiceAgeInDays(invoice) > 90).length }
             ];
             const invoiceStatusData = Object.entries(invoices.reduce((counts, invoice) => {
                 const status = invoice.status || 'unknown';
@@ -1116,7 +1133,6 @@
             const handleCreateAdmission = async () => {
                 if (!admissionForm.patientId) return;
                 const payload = {
-                    id: 'adm_' + Date.now(),
                     patientId: admissionForm.patientId,
                     ward: admissionForm.ward,
                     bedNumber: admissionForm.bedNumber,
@@ -1130,7 +1146,11 @@
 
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('admit patient');
-                const { data, error } = await client.from('admissions').insert([{ ...payload, patient_id: payload.patientId, ward: payload.ward, bed_number: payload.bedNumber, admission_date: payload.admissionDate, doctor_id: payload.doctorId || null, diagnosis: payload.diagnosis, status: payload.status, acuity: payload.acuity }]).select();
+                const { data, error } = await client.from('admissions').insert([{
+                    patient_id: payload.patientId, ward: payload.ward || null, bed_number: payload.bedNumber || null,
+                    admission_date: payload.admissionDate, doctor_id: payload.doctorId || null,
+                    diagnosis: payload.diagnosis || null, status: payload.status, acuity: payload.acuity
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('admit patient', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
                 const next = [...admissions, mapped];
@@ -1257,19 +1277,18 @@
         const SurgeriesModule = () => {
             const [showSchedule, setShowSchedule] = useState(false);
             const [surgeries, setSurgeries] = useState(getLiveStore().surgeries || []);
-            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
+            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
 
             const handleScheduleSurgery = async () => {
-                if (!surgeryForm.patientId || !surgeryForm.procedure) return;
+                if (!surgeryForm.patientId || !surgeryForm.procedure || !surgeryForm.scheduledDate) return;
 
                 const payload = {
-                    id: 'srg_' + Date.now(),
                     patientId: surgeryForm.patientId,
                     surgeonId: surgeryForm.surgeonId,
                     procedure: surgeryForm.procedure,
                     scheduledDate: surgeryForm.scheduledDate,
                     scheduledTime: surgeryForm.scheduledTime,
-                    duration: '90 min',
+                    duration: surgeryForm.duration || null,
                     status: 'scheduled',
                     otRoom: surgeryForm.otRoom,
                     anesthesia: surgeryForm.anesthesia,
@@ -1278,14 +1297,19 @@
 
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('schedule surgery');
-                const { data, error } = await client.from('surgeries').insert([{ ...payload, patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure, scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime, duration: payload.duration, status: payload.status, ot_room: payload.otRoom, anesthesia: payload.anesthesia, priority: payload.priority }]).select();
+                const { data, error } = await client.from('surgeries').insert([{
+                    patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure,
+                    scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime || null,
+                    duration: payload.duration, status: payload.status, ot_room: payload.otRoom || null,
+                    anesthesia: payload.anesthesia || null, priority: payload.priority
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('schedule surgery', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
                 const next = [...surgeries, mapped];
                 persistStoreTable('surgeries', next);
                 setSurgeries(next);
                 setShowSchedule(false);
-                setSurgeryForm({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', otRoom: '', anesthesia: '', priority: 'elective' });
+                setSurgeryForm({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
             };
 
             return (
@@ -1319,6 +1343,7 @@
                                         const surgeon = appData.users.find(u => u.id === row.surgeonId);
                                         return surgeon?.name || 'Unknown';
                                     }},
+                                    { key: 'duration', title: 'Duration', render: (row) => row.duration || 'Not specified' },
                                     { key: 'otRoom', title: 'OT Room' },
                                     { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'emergency' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority}</Badge> },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : 'default'}>{row.status}</Badge> }
@@ -1370,6 +1395,7 @@
                                 <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
                                 <Input label="Time" type="time" value={surgeryForm.scheduledTime} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledTime: e.target.value }))} />
                             </div>
+                            <Input label="Expected duration" placeholder="e.g. 90 min" value={surgeryForm.duration} onChange={(e) => setSurgeryForm(prev => ({ ...prev, duration: e.target.value }))} />
                             <Select label="OT Room" value={surgeryForm.otRoom} onChange={(e) => setSurgeryForm(prev => ({ ...prev, otRoom: e.target.value }))} options={[{ value: 'OT-1', label: 'OT-1' }, { value: 'OT-2', label: 'OT-2' }, { value: 'OT-3', label: 'OT-3' }, { value: 'OT-4', label: 'OT-4' }]} />
                             <Select label="Priority" value={surgeryForm.priority} onChange={(e) => setSurgeryForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'elective', label: 'Elective' }, { value: 'urgent', label: 'Urgent' }, { value: 'emergency', label: 'Emergency' }]} />
                             <Input label="Anesthesia" value={surgeryForm.anesthesia} onChange={(e) => setSurgeryForm(prev => ({ ...prev, anesthesia: e.target.value }))} />

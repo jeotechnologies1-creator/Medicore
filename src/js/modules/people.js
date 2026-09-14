@@ -215,6 +215,13 @@
             const activeOffices = offices.filter((office) => office.status === 'active').length;
             const totalSpecialties = new Set(offices.map((office) => office.specialty).filter(Boolean)).size;
             const occupancyLoad = offices.length ? Math.round((offices.filter((office) => office.status === 'active').length / Math.max(1, offices.length)) * 100) : 0;
+            const today = new Date().toISOString().slice(0, 10);
+            const serviceLoad = [
+                { label: 'Today\'s appointments', value: (appData.appointments || []).filter((item) => item.date === today).length, color: 'medical' },
+                { label: 'Emergency appointments', value: (appData.appointments || []).filter((item) => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length, color: 'red' },
+                { label: 'Pending lab orders', value: (appData.labOrders || []).filter((item) => item.status !== 'completed').length, color: 'amber' },
+                { label: 'Active admissions', value: (appData.admissions || []).filter((item) => item.status === 'active').length, color: 'emerald' }
+            ];
 
             const handleCreateOffice = async () => {
                 if (!officeForm.name || !officeForm.specialty) {
@@ -337,15 +344,15 @@
                             </div>
                         </Card>
 
-                        <Card title="Clinical Capacity">
+                        <Card title="Live Service Load">
                             <div className="space-y-4">
-                                {['Outpatient', 'Emergency', 'Diagnostics', 'Inpatient'].map((unit, index) => (
-                                    <div key={unit} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                {serviceLoad.map((service) => (
+                                    <div key={service.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="font-medium text-slate-700">{unit}</span>
-                                            <span className="text-sm text-slate-500">{72 + index * 7}%</span>
+                                            <span className="font-medium text-slate-700">{service.label}</span>
+                                            <span className="text-sm text-slate-500">{service.value}</span>
                                         </div>
-                                        <ProgressBar value={72 + index * 7} max={100} color={index % 2 === 0 ? 'medical' : 'emerald'} />
+                                        <ProgressBar value={service.value} max={Math.max(1, ...serviceLoad.map((item) => item.value))} color={service.color} />
                                     </div>
                                 ))}
                             </div>

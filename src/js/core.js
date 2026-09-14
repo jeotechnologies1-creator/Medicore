@@ -32,6 +32,7 @@
             wards: [],
             beds: [],
             insuranceClaims: [],
+            refillRequests: [],
             offices: [],
             officeStaff: []
         }, {
@@ -368,6 +369,19 @@
             status: row.status || 'pending'
         }));
 
+        const normalizeRefillRequests = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            medicationName: row.medication_name || row.medicationName,
+            quantity: row.quantity ?? 0,
+            notes: row.notes || '',
+            status: row.status || 'pending',
+            reviewedBy: row.reviewed_by || row.reviewedBy || null,
+            reviewedAt: row.reviewed_at || row.reviewedAt || null,
+            createdAt: row.created_at || row.createdAt
+        }));
+
         const normalizeOffices = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -398,7 +412,7 @@
             pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [],
             vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
             medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [],
-            insuranceClaims: [], offices: [], officeStaff: []
+            insuranceClaims: [], refillRequests: [], offices: [], officeStaff: []
         });
 
 
@@ -410,7 +424,7 @@
         // The browser store only mirrors rows read from Supabase. It starts empty
         // so a missing connection can never produce demonstration records.
         const getLiveStore = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'offices', 'officeStaff'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(appData[table]) ? appData[table] : [];
@@ -447,7 +461,7 @@
                 return appData;
             }
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], offices: [], officeStaff: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -476,18 +490,19 @@
                 { dbTable: 'wards', appTable: 'wards', mapper: normalizeWards },
                 { dbTable: 'beds', appTable: 'beds', mapper: normalizeBeds },
                 { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
+                { dbTable: 'medication_refill_requests', appTable: 'refillRequests', mapper: normalizeRefillRequests },
                 { dbTable: 'medical_offices', appTable: 'offices', mapper: normalizeOffices },
                 { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff }
             ];
-            for (const entry of officeLookups) {
+            const loadedTables = await Promise.all(officeLookups.map(async (entry) => {
                 const { data, error } = await client.from(entry.dbTable).select('*');
                 if (error) {
                     console.error(`Failed to load ${entry.dbTable}:`, error);
-                    nextStore[entry.appTable] = [];
-                    continue;
+                    return { appTable: entry.appTable, rows: [] };
                 }
-                nextStore[entry.appTable] = entry.mapper(data || []);
-            }
+                return { appTable: entry.appTable, rows: entry.mapper(data || []) };
+            }));
+            loadedTables.forEach(({ appTable, rows }) => { nextStore[appTable] = rows; });
 
             Object.keys(appData).forEach((key) => delete appData[key]);
             Object.assign(appData, nextStore);

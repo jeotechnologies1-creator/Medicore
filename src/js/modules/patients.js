@@ -257,8 +257,8 @@
                     if (!saved) return;
                     appData.admissions = [normalizeAdmissions([saved])[0], ...(appData.admissions || [])];
                     setAdmissionForm({
-                        ward: 'General Ward',
-                        bedNumber: 'A-12',
+                        ward: '',
+                        bedNumber: '',
                         diagnosis: '',
                         admissionDate: new Date().toISOString().split('T')[0],
                         acuity: 'stable'

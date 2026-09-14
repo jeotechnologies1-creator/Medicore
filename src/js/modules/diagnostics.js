@@ -21,7 +21,6 @@
                 if (!appointmentForm.patientId) return;
                 setSaveError('');
                 const payload = {
-                    id: 'apt_' + Date.now(),
                     patientId: appointmentForm.patientId,
                     doctorId: appointmentForm.doctorId,
                     date: appointmentForm.date,
@@ -34,7 +33,12 @@
                 };
                 const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
                 if (client) {
-                    const { data, error } = await client.from('appointments').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId || null, appointment_date: payload.date, appointment_time: payload.time, appointment_type: payload.type }]).select();
+                    const { data, error } = await client.from('appointments').insert([{
+                        patient_id: payload.patientId, doctor_id: payload.doctorId || null,
+                        appointment_date: payload.date, appointment_time: payload.time,
+                        appointment_type: payload.type, status: payload.status,
+                        department: payload.department, notes: payload.notes
+                    }]).select();
                     if (!error && data && data[0]) {
                         const mapped = {
                             ...payload,
@@ -229,7 +233,6 @@
             const handleCreateLabOrder = async () => {
                 if (!newOrderForm.patientId) return;
                 const payload = {
-                    id: 'lab_' + Date.now(),
                     patientId: newOrderForm.patientId,
                     doctorId: null,
                     testType: newOrderForm.testType,
@@ -243,7 +246,11 @@
                 };
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create laboratory order');
-                const { data, error } = await client.from('lab_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType, ordered_date: payload.orderedDate, technician_id: payload.technicianId, category: payload.category, priority: payload.priority, status: payload.status }]).select();
+                const { data, error } = await client.from('lab_orders').insert([{
+                    patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType,
+                    ordered_date: payload.orderedDate, technician_id: payload.technicianId,
+                    category: payload.category, priority: payload.priority, status: payload.status
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('create laboratory order', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, testType: data[0].test_type || payload.testType, orderedDate: data[0].ordered_date || payload.orderedDate };
                 const next = [...labOrders, mapped];
@@ -493,7 +500,6 @@
             const handleCreateStudy = async () => {
                 if (!orderForm.patientId || !orderForm.studyType) return;
                 const payload = {
-                    id: 'rad_' + Date.now(),
                     patientId: orderForm.patientId,
                     doctorId: null,
                     studyType: orderForm.studyType,
@@ -507,7 +513,12 @@
 
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create radiology order');
-                const { data, error } = await client.from('radiology_orders').insert([{ ...payload, patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType, modality: payload.modality, priority: payload.priority, status: payload.status, scheduled_date: payload.scheduledDate, report: payload.report, ordered_date: payload.orderedDate }]).select();
+                const { data, error } = await client.from('radiology_orders').insert([{
+                    patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType,
+                    modality: payload.modality, priority: payload.priority, status: payload.status,
+                    scheduled_date: payload.scheduledDate || null, report: payload.report || null,
+                    ordered_date: payload.orderedDate
+                }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('create radiology order', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, studyType: data[0].study_type || payload.studyType, scheduledDate: data[0].scheduled_date || payload.scheduledDate, report: data[0].report || payload.report };
                 const next = [...studies, mapped];
