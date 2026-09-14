@@ -40,6 +40,17 @@
             const followUpReadiness = careItemsRequiringFollowUp
                 ? Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / careItemsRequiringFollowUp) * 100))
                 : 0;
+            const qualityEntries = (appData.clinicalTasks || [])
+                .filter((task) => ['quality_review', 'care_coordination'].includes(task.taskType || task.task_type))
+                .map((task) => {
+                    if ((task.taskType || task.task_type) !== 'quality_review') return task;
+                    try {
+                        const qualityDetails = JSON.parse(task.notes || '{}');
+                        return { ...task, ...qualityDetails };
+                    } catch (e) {
+                        return task;
+                    }
+                });
 
             const getRoleDashboard = () => {
                 switch (user?.role) {
