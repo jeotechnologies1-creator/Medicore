@@ -197,7 +197,11 @@
                 if (user && !hasModuleAccess(resolvedModule)) {
                     return <UnauthorizedModule />;
                 }
-                return moduleMap[resolvedModule] ? moduleMap[resolvedModule]() : <DashboardModule />;
+                const moduleView = moduleMap[resolvedModule] ? moduleMap[resolvedModule]() : <DashboardModule />;
+                // Data is loaded after authentication. Recreate the active screen
+                // when that live snapshot changes so stateful modules do not retain
+                // the empty arrays from their first render.
+                return React.cloneElement(moduleView, { key: `${resolvedModule}:${dataVersion}` });
             };
 
             if (!isAuthenticated) {

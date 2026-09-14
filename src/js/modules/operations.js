@@ -696,7 +696,7 @@
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
             const [invoices, setInvoices] = useState(getLiveStore().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
-            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 250, paid: 0, status: 'pending' });
+            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
 

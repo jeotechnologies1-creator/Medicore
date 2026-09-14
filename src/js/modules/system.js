@@ -297,14 +297,14 @@
         // ==========================================
         const SettingsModule = () => {
             const defaultSettings = {
-                facilityName: 'MediCore Hospital',
-                facilityCode: 'MC-001',
+                facilityName: '',
+                facilityCode: '',
                 timezone: 'UTC',
                 locale: 'en-US',
                 currency: 'USD',
                 contactEmail: '',
-                phone: '+1 (800) 555-0147',
-                serviceLine: 'General Hospital & Outpatient Clinics',
+                phone: '',
+                serviceLine: '',
                 sessionTimeoutMinutes: 30,
                 requireMfa: true,
                 lockAfterFailedAttempts: 5,
@@ -473,18 +473,23 @@
                 }
             ];
 
-            const initialDepartments = (appData.wards || []).map((ward, index) => ({
-                id: ward.id || `dept-${index + 1}`,
-                name: ward.name || `Ward ${index + 1}`,
+            const initialDepartments = (appData.wards || []).filter((ward) => ward?.id && ward?.name).map((ward) => ({
+                id: ward.id,
+                name: ward.name,
                 type: ward.type || 'Ward',
-                capacity: ward.capacity || 20,
+                capacity: Number(ward.capacity || 0),
                 status: ward.status || 'active'
             }));
 
             const [settings, setSettings] = useState(() => {
                 try {
                     const saved = JSON.parse(localStorage.getItem('medicore_settings') || '{}');
-                    return { ...defaultSettings, ...saved };
+                    const sanitizedSaved = { ...saved };
+                    if (sanitizedSaved.facilityName === 'MediCore Hospital') sanitizedSaved.facilityName = '';
+                    if (sanitizedSaved.facilityCode === 'MC-001') sanitizedSaved.facilityCode = '';
+                    if (sanitizedSaved.phone === '+1 (800) 555-0147') sanitizedSaved.phone = '';
+                    if (sanitizedSaved.serviceLine === 'General Hospital & Outpatient Clinics') sanitizedSaved.serviceLine = '';
+                    return { ...defaultSettings, ...sanitizedSaved };
                 } catch (e) {
                     return defaultSettings;
                 }
@@ -625,9 +630,9 @@
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
                         await window.MedicoreSupabase.saveSystemSettings(defaultSettings, initialRoleMatrix);
                     }
-                    setSaveMessage('Default EMR settings restored.');
+                    setSaveMessage('Baseline EMR settings restored.');
                 } catch (e) {
-                    setSaveMessage('Default settings restored locally.');
+                    setSaveMessage('Baseline settings restored locally.');
                 }
             };
 

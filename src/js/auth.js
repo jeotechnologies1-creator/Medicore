@@ -431,9 +431,6 @@
         // ==========================================
         // LOGIN PAGE
         // ==========================================
-        // ==========================================
-        // LOGIN PAGE
-        // ==========================================
         const LoginPage = ({ onLogin }) => {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
@@ -499,12 +496,6 @@
                                             <Icons.Eye size={18} />
                                         </button>
                                     </div>
-                                </div>
-                                <div className="flex items-center justify-between text-sm">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" className="rounded border-slate-300 text-medical-600 focus:ring-medical-500" />
-                                        <span className="text-slate-600">Remember me</span>
-                                    </label>
                                 </div>
                                 <Button type="submit" variant="primary" size="lg" className="w-full justify-center" disabled={loading}>
                                     {loading ? (

@@ -1,5 +1,7 @@
 (function () {
     const STORAGE_KEY = 'medicore_supabase_config';
+    let client = null;
+    let clientSignature = '';
 
     // Earlier builds could cache a browser-only record store. Clinical records
     // are now Supabase-only, so discard that legacy cache on every startup.
@@ -36,6 +38,8 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         } catch (e) {}
         window.__MEDICORE_SUPABASE__ = normalized;
+        client = null;
+        clientSignature = '';
         return normalized;
     };
 
@@ -52,13 +56,17 @@
     const getClient = () => {
         const { url, anonKey } = getConfig();
         if (!url || !anonKey || !window.supabase) return null;
-        return window.supabase.createClient(url, anonKey, {
+        const signature = `${url}:${anonKey}`;
+        if (client && clientSignature === signature) return client;
+        client = window.supabase.createClient(url, anonKey, {
             auth: {
                 persistSession: true,
                 autoRefreshToken: true,
                 detectSessionInUrl: true
             }
         });
+        clientSignature = signature;
+        return client;
     };
 
     const readRows = async (table) => {
