@@ -2,7 +2,7 @@
         // SIDEBAR NAVIGATION
         // ==========================================
         const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout, theme }) => {
-            const { user } = useAuth();
+            const { user, hasModuleAccess } = useAuth();
             
             const getMenuItems = () => {
                 const common = [
@@ -91,7 +91,9 @@
 
                 const role = user?.role || 'patient';
                 const allowed = new Set((roleMenus[role] || []).map((item) => item.id));
-                return [...common, ...(roleMenus[role] || [])].filter((item) => role === 'super_admin' || allowed.has(item.id));
+                return [...common, ...(roleMenus[role] || [])].filter((item) =>
+                    (item.id === 'dashboard' || allowed.has(item.id)) && hasModuleAccess(item.id)
+                );
             };
 
             const menuItems = getMenuItems();

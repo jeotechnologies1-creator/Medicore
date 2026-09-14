@@ -171,7 +171,6 @@
                 return groups;
             }, {})).map(([, supplier]) => supplier);
             const lowStockItems = inventory.filter((item) => Number(item.stockQuantity || 0) <= Number(item.reorderLevel || 0));
-            const inventoryValue = inventory.reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0);
 
             const tabs = [
                 { id: 'orders', label: 'Purchase Orders' },
@@ -190,7 +189,6 @@
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Inventory items" value={inventory.length} icon={Icons.Packages} color="medical" />
-                        <StatCard title="Stock value" value={formatCurrency(inventoryValue)} icon={Icons.DollarSign} color="emerald" />
                         <StatCard title="Low-stock items" value={lowStockItems.length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Suppliers" value={supplierInventory.filter((item) => item.supplier !== 'Unassigned supplier').length} icon={Icons.CheckCircle} color="violet" />
                     </div>
@@ -206,7 +204,7 @@
                     {activeTab === 'suppliers' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {supplierInventory.length ? supplierInventory.map((supplier) => (
-                                <Card key={supplier.supplier} title={supplier.supplier}><div className="space-y-3 text-sm"><p>{supplier.items} stocked item{supplier.items === 1 ? '' : 's'}</p><p>Stock value: {formatCurrency(supplier.stockValue)}</p><p>Low-stock items: {supplier.lowStock}</p></div></Card>
+                                <Card key={supplier.supplier} title={supplier.supplier}><div className="space-y-3 text-sm"><p>{supplier.items} stocked item{supplier.items === 1 ? '' : 's'}</p><p>Low-stock items: {supplier.lowStock}</p></div></Card>
                             )) : (
                                 <div className="col-span-full rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">No supplier records are connected yet. Supplier performance will appear automatically once the inventory workflow is live.</div>
                             )}
@@ -215,7 +213,7 @@
 
                     {activeTab === 'analytics' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card title="Inventory value by category"><BarChart data={Object.entries(inventory.reduce((groups, item) => { const category = item.category || 'Uncategorized'; groups[category] = (groups[category] || 0) + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0); return groups; }, {})).map(([label, value]) => ({ label, value }))} width={500} height={260} color="#10b981" /></Card>
+                            <Card title="Inventory items by category"><BarChart data={Object.entries(inventory.reduce((groups, item) => { const category = item.category || 'Uncategorized'; groups[category] = (groups[category] || 0) + 1; return groups; }, {})).map(([label, value]) => ({ label, value }))} width={500} height={260} color="#10b981" /></Card>
                             <Card title="Low-stock inventory"><DataTable columns={[{ key: 'name', title: 'Item' }, { key: 'stockQuantity', title: 'Stock' }, { key: 'reorderLevel', title: 'Reorder level' }]} data={lowStockItems} /></Card>
                         </div>
                     )}
@@ -477,7 +475,6 @@
                             threeMonths.setMonth(threeMonths.getMonth() + 3);
                             return expiry <= threeMonths;
                         }).length} icon={Icons.Clock} color="red" />
-                        <StatCard title="Inventory Value" value={formatCurrency(inventory.reduce((sum, item) => sum + (Number(item.unitPrice || 0) * Number(item.stockQuantity || 0)), 0))} icon={Icons.DollarSign} color="emerald" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -628,7 +625,6 @@
         // ==========================================
         const BillingModule = ({ initialTab = 'invoices' }) => {
             const [activeTab, setActiveTab] = useState(initialTab);
-            const [selectedInvoice, setSelectedInvoice] = useState(null);
             const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
@@ -645,8 +641,7 @@
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
                 { id: 'payments', label: 'Payments' },
-                { id: 'insurance', label: 'Insurance Claims' },
-                { id: 'reports', label: 'Financial Reports' },
+                { id: 'insurance', label: 'Insurance Claims' }
             ];
 
             const handleCreateInvoice = async () => {
@@ -782,9 +777,6 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={Icons.DollarSign} color="emerald" />
-                        <StatCard title="Outstanding" value={formatCurrency(totalOutstanding)} icon={Icons.AlertCircle} color="amber" />
-                        <StatCard title="Collected" value={formatCurrency(totalCollected)} icon={Icons.CheckCircle} color="medical" />
                         <StatCard title="Pending Claims" value={pendingClaims} icon={Icons.Shield} color="violet" />
                     </div>
 
@@ -800,15 +792,11 @@
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
-                                    { key: 'total', title: 'Total', render: (row) => formatCurrency(row.total) },
-                                    { key: 'paid', title: 'Paid', render: (row) => formatCurrency(row.paid) },
-                                    { key: 'balance', title: 'Balance', render: (row) => <span className={parseFloat(row.balance) > 0 ? 'text-red-600 font-medium' : 'text-emerald-600'}>{formatCurrency(row.balance)}</span> },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : row.status === 'partial' ? 'warning' : row.status === 'overdue' ? 'danger' : 'default'}>{row.status}</Badge> }
                                 ]}
                                 data={invoices}
                                 actions={(row) => (
                                     <>
-                                        <Button variant="primary" size="sm" onClick={() => setSelectedInvoice(row)}>View</Button>
                                         <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '' }); setShowPaymentModal(true); }}>Post Payment</Button>
                                     </>
                                 )}
@@ -825,7 +813,6 @@
                                         const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
-                                    { key: 'paid', title: 'Amount', render: (row) => formatCurrency(row.paid) },
                                     { key: 'paymentMethod', title: 'Method' },
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) }
                                 ]}
@@ -875,8 +862,6 @@
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'provider', title: 'Provider' },
-                                        { key: 'amountClaimed', title: 'Claimed', render: (row) => formatCurrency(row.amountClaimed) },
-                                        { key: 'amountApproved', title: 'Approved', render: (row) => formatCurrency(row.amountApproved) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' || row.status === 'paid' ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
                                     ]}
                                     data={(insuranceClaims || []).filter((claim) => insuranceFilter === 'all' || claim.status === insuranceFilter)}
@@ -986,66 +971,6 @@
                         </div>
                     </Modal>
 
-                    <Modal
-                        isOpen={!!selectedInvoice}
-                        onClose={() => setSelectedInvoice(null)}
-                        title={'Invoice ' + (selectedInvoice?.invoiceNumber || '')}
-                        size="md"
-                        footer={
-                            <div className="flex justify-end gap-3">
-                                <Button variant="secondary" icon={Icons.Printer}>Print</Button>
-                                <Button variant="primary" icon={Icons.Download}>Download PDF</Button>
-                            </div>
-                        }
-                    >
-                        {selectedInvoice && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-500">Date:</span>
-                                    <span className="font-medium">{formatDate(selectedInvoice.date)}</span>
-                                </div>
-                                <div className="border-t border-slate-100 pt-4">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="text-left text-slate-500 border-b border-slate-100">
-                                                <th className="pb-2">Item</th>
-                                                <th className="pb-2 text-right">Qty</th>
-                                                <th className="pb-2 text-right">Price</th>
-                                                <th className="pb-2 text-right">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {selectedInvoice.items ? selectedInvoice.items.map((item, i) => (
-                                                <tr key={i} className="border-b border-slate-50">
-                                                    <td className="py-2">{item.description}</td>
-                                                    <td className="py-2 text-right">{item.quantity}</td>
-                                                    <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                                                    <td className="py-2 text-right font-medium">{formatCurrency(item.total)}</td>
-                                                </tr>
-                                            )) : <tr><td className="py-2 text-slate-500" colSpan="4">No line items</td></tr>}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between"><span className="text-slate-500">Subtotal:</span><span>{formatCurrency(selectedInvoice.subtotal || 0)}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Discount:</span><span>-{formatCurrency(selectedInvoice.discount || 0)}</span></div>
-                                    <div className="flex justify-between"><span className="text-slate-500">Tax:</span><span>{formatCurrency(selectedInvoice.tax || 0)}</span></div>
-                                    <div className="flex justify-between text-base font-bold border-t border-slate-100 pt-2">
-                                        <span>Total:</span>
-                                        <span>{formatCurrency(selectedInvoice.total || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-emerald-600">
-                                        <span>Paid:</span>
-                                        <span>{formatCurrency(selectedInvoice.paid || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-red-600 font-medium">
-                                        <span>Balance:</span>
-                                        <span>{formatCurrency(selectedInvoice.balance || 0)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </Modal>
                 </div>
             );
         };

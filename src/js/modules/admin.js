@@ -6,7 +6,6 @@
 
             const reportTypes = [
                 { id: 'patients', label: 'Patient Statistics', icon: Icons.Users },
-                { id: 'revenue', label: 'Revenue Report', icon: Icons.DollarSign },
                 { id: 'pharmacy', label: 'Pharmacy Report', icon: Icons.Pill },
                 { id: 'lab', label: 'Laboratory Report', icon: Icons.FlaskConical },
                 { id: 'admissions', label: 'Admissions Report', icon: Icons.Bed },
@@ -197,31 +196,6 @@
                             </div>
                         )}
 
-                        {reportType === 'revenue' && (
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="p-4 bg-emerald-50 rounded-xl">
-                                        <p className="text-xs text-emerald-600 uppercase">Total Revenue</p>
-                                        <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalRevenue)}</p>
-                                    </div>
-                                    <div className="p-4 bg-amber-50 rounded-xl">
-                                        <p className="text-xs text-amber-600 uppercase">Outstanding</p>
-                                        <p className="text-2xl font-bold text-amber-900">{formatCurrency(outstandingRevenue)}</p>
-                                    </div>
-                                    <div className="p-4 bg-medical-50 rounded-xl">
-                                        <p className="text-xs text-medical-600 uppercase">Insurance Claims</p>
-                                        <p className="text-2xl font-bold text-medical-900">{formatCurrency(insuranceClaimTotal)}</p>
-                                    </div>
-                                </div>
-                                <LineChart 
-                                    data={revenueTrend}
-                                    width={700} 
-                                    height={250} 
-                                    color="#059669" 
-                                />
-                            </div>
-                        )}
-
                         {reportType === 'pharmacy' && (
                             <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -242,7 +216,6 @@
                                     columns={[
                                         { key: 'category', title: 'Category' },
                                         { key: 'count', title: 'Items', render: (row) => appData.pharmacyInventory.filter(item => item.category === row.category).length },
-                                        { key: 'value', title: 'Stock Value', render: (row) => formatCurrency(appData.pharmacyInventory.filter(item => item.category === row.category).reduce((sum, item) => sum + Number(item.stockQuantity || 0) * Number(item.unitPrice || 0), 0)) }
                                     ]}
                                     data={Array.from(new Set(appData.pharmacyInventory.map(item => item.category).filter(Boolean))).map(category => ({ category }))}
                                 />

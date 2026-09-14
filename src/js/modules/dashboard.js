@@ -10,7 +10,6 @@
                 todayAppointments: appData.appointments.filter(a => a.date === today).length,
                 pendingLabs: appData.labOrders.filter(l => l.status === 'pending').length,
                 occupiedBeds: appData.admissions.filter(a => a.status === 'active').length,
-                totalRevenue: appData.billing.reduce((sum, b) => sum + Number(b.paid || 0), 0),
                 criticalPatients: appData.admissions.filter(a => a.acuity === 'critical').length,
                 pendingBills: appData.billing.filter(b => b.status === 'pending' || b.status === 'partial').length,
                 staffOnline: appData.users.filter(u => u.status === 'active').length
@@ -23,17 +22,6 @@
                 date.setDate(date.getDate() - (6 - index));
                 const dateKey = date.toISOString().slice(0, 10);
                 return { label: date.toLocaleDateString(undefined, { weekday: 'short' }), value: appData.appointments.filter(appointment => appointment.date === dateKey).length };
-            });
-            const revenueData = Array.from({ length: 4 }, (_, index) => {
-                const end = new Date();
-                end.setDate(end.getDate() - ((3 - index) * 7));
-                const start = new Date(end);
-                start.setDate(start.getDate() - 6);
-                const value = appData.billing.filter(invoice => {
-                    const date = new Date(invoice.date);
-                    return !Number.isNaN(date.valueOf()) && date >= start && date <= end;
-                }).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
-                return { label: `W${index + 1}`, value };
             });
             const departmentCounts = appData.appointments.reduce((counts, appointment) => {
                 const department = appointment.department || 'Unassigned';
@@ -149,7 +137,6 @@
                                     <StatCard title="Total Patients" value={stats.totalPatients} subtitle="Registered patients" icon={Icons.Users} color="medical" />
                                     <StatCard title="Today's Appointments" value={stats.todayAppointments} subtitle="Scheduled visits" icon={Icons.Calendar} color="emerald" />
                                     <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/' + appData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
-                                    <StatCard title="Revenue" value={formatCurrency(stats.totalRevenue)} subtitle="Total collected" icon={Icons.DollarSign} color="teal" />
                                 </div>
 
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -173,10 +160,7 @@
                                     </Card>
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <Card title="Revenue Overview">
-                                        <LineChart data={revenueData} width={600} height={200} color="#059669" />
-                                    </Card>
+                                <div className="grid grid-cols-1 gap-6">
                                     <Card title="Care Coordination & Quality">
                                         <div className="grid grid-cols-2 gap-3">
                                             <div className="rounded-xl bg-red-50 p-3">

@@ -334,6 +334,54 @@
                 annualAuditCycle: 'Q4 review'
             };
 
+            const permissionDepartments = [
+                { key: 'dashboard', label: 'Dashboard' },
+                { key: 'patients', label: 'Patients' },
+                { key: 'appointments', label: 'Appointments' },
+                { key: 'doctors', label: 'Doctors' },
+                { key: 'laboratory', label: 'Laboratory' },
+                { key: 'radiology', label: 'Radiology' },
+                { key: 'clinical_workflows', label: 'Clinical Workflows' },
+                { key: 'clinical_decision_support', label: 'Clinical Support' },
+                { key: 'operations', label: 'Operations' },
+                { key: 'procurement', label: 'Procurement' },
+                { key: 'referrals', label: 'Referrals' },
+                { key: 'workforce', label: 'Workforce' },
+                { key: 'pharmacy', label: 'Pharmacy' },
+                { key: 'billing', label: 'Billing' },
+                { key: 'insurance', label: 'Insurance' },
+                { key: 'payments', label: 'Payments' },
+                { key: 'documents', label: 'Documents' },
+                { key: 'compliance', label: 'Compliance' },
+                { key: 'admissions', label: 'Admissions' },
+                { key: 'surgeries', label: 'Surgeries' },
+                { key: 'clinical_safety', label: 'Clinical Safety' },
+                { key: 'inventory', label: 'Inventory' },
+                { key: 'hr', label: 'HR & Staff' },
+                { key: 'offices', label: 'Medical Offices' },
+                { key: 'reports', label: 'Reports' },
+                { key: 'audit', label: 'Audit Logs' },
+                { key: 'settings', label: 'Settings' }
+            ];
+            const permissionAliases = {
+                appointments: 'appointment', doctors: 'doctor', laboratory: 'labs', radiology: 'imaging',
+                clinical_workflows: 'encounters', clinical_decision_support: 'cds', operations: 'ops',
+                procurement: 'supply_chain', referrals: 'care_coordination', workforce: 'staffing',
+                insurance: 'claims', payments: 'payment', documents: 'document_control', compliance: 'governance',
+                admissions: 'ward', surgeries: 'surgery', clinical_safety: 'safety', inventory: 'stock',
+                hr: 'staff', offices: 'office', reports: 'report', audit: 'audit_logs', settings: 'system_settings'
+            };
+            const normalizeMatrixRows = (matrix) => (matrix || []).map((row) => {
+                const isSuperAdmin = String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'super_admin';
+                return {
+                    ...row,
+                    permissions: permissionDepartments.reduce((permissions, department) => {
+                        const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
+                        return { ...permissions, [department.key]: value === undefined ? isSuperAdmin : Boolean(value) };
+                    }, { ...(row.permissions || {}) })
+                };
+            });
+
             const initialRoleMatrix = [
                 {
                     role: 'Super Admin',
@@ -493,36 +541,10 @@
                 try {
                     const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
                     if (Array.isArray(saved) && saved.length) {
-                        return saved.map((row) => ({
-                            ...row,
-                            permissions: {
-                                ...row.permissions,
-                                dashboard: row.permissions?.dashboard ?? true,
-                                patients: row.permissions?.patients ?? false,
-                                appointments: row.permissions?.appointments ?? row.permissions?.appointment ?? false,
-                                doctors: row.permissions?.doctors ?? row.permissions?.doctor ?? false,
-                                laboratory: row.permissions?.laboratory ?? row.permissions?.labs ?? row.permissions?.lab ?? false,
-                                radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
-                                pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
-                                billing: row.permissions?.billing ?? false,
-                                insurance: row.permissions?.insurance ?? row.permissions?.insurance_claims ?? row.permissions?.claims ?? false,
-                                payments: row.permissions?.payments ?? row.permissions?.payment ?? false,
-                                documents: row.permissions?.documents ?? row.permissions?.document_control ?? row.permissions?.clinical_documents ?? false,
-                                compliance: row.permissions?.compliance ?? row.permissions?.governance ?? row.permissions?.policy_library ?? false,
-                                admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
-                                surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
-                                clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,
-                                inventory: row.permissions?.inventory ?? row.permissions?.stock ?? false,
-                                hr: row.permissions?.hr ?? row.permissions?.staff ?? row.permissions?.human_resources ?? false,
-                                offices: row.permissions?.offices ?? row.permissions?.medical_offices ?? row.permissions?.office ?? false,
-                                reports: row.permissions?.reports ?? row.permissions?.report ?? false,
-                                audit: row.permissions?.audit ?? row.permissions?.audit_logs ?? false,
-                                settings: row.permissions?.settings ?? row.permissions?.system_settings ?? false
-                            }
-                        }));
+                        return normalizeMatrixRows(saved);
                     }
                 } catch (e) {}
-                return initialRoleMatrix;
+                return normalizeMatrixRows(initialRoleMatrix);
             });
             const [departments, setDepartments] = useState(initialDepartments);
             const [exportHistory, setExportHistory] = useState([]);
@@ -542,8 +564,9 @@
                                 const { roleMatrix: remoteRoleMatrix, ...remoteOnlySettings } = remoteSettings;
                                 setSettings(prev => ({ ...prev, ...remoteOnlySettings }));
                                 if (Array.isArray(remoteRoleMatrix) && remoteRoleMatrix.length) {
-                                    setRoleMatrix(remoteRoleMatrix);
-                                    localStorage.setItem('medicore_role_matrix', JSON.stringify(remoteRoleMatrix));
+                                    const normalizedRemote = normalizeMatrixRows(remoteRoleMatrix);
+                                    setRoleMatrix(normalizedRemote);
+                                    localStorage.setItem('medicore_role_matrix', JSON.stringify(normalizedRemote));
                                 }
                             }
                         }
@@ -571,36 +594,11 @@
 
             const saveSettings = async () => {
                 try {
-                    const cleanedMatrix = roleMatrix.map((row) => ({
-                        ...row,
-                        permissions: {
-                            ...row.permissions,
-                            dashboard: row.permissions?.dashboard ?? true,
-                            patients: row.permissions?.patients ?? false,
-                            appointments: row.permissions?.appointments ?? row.permissions?.appointment ?? false,
-                            doctors: row.permissions?.doctors ?? row.permissions?.doctor ?? false,
-                            laboratory: row.permissions?.laboratory ?? row.permissions?.labs ?? row.permissions?.lab ?? false,
-                            radiology: row.permissions?.radiology ?? row.permissions?.imaging ?? false,
-                            pharmacy: row.permissions?.pharmacy ?? row.permissions?.medications ?? false,
-                            billing: row.permissions?.billing ?? false,
-                            insurance: row.permissions?.insurance ?? row.permissions?.insurance_claims ?? row.permissions?.claims ?? false,
-                            payments: row.permissions?.payments ?? row.permissions?.payment ?? false,
-                            documents: row.permissions?.documents ?? row.permissions?.document_control ?? row.permissions?.clinical_documents ?? false,
-                            compliance: row.permissions?.compliance ?? row.permissions?.governance ?? row.permissions?.policy_library ?? false,
-                            admissions: row.permissions?.admissions ?? row.permissions?.admission ?? row.permissions?.ward ?? false,
-                            surgeries: row.permissions?.surgeries ?? row.permissions?.surgery ?? false,
-                            clinical_safety: row.permissions?.clinical_safety ?? row.permissions?.safety ?? false,
-                            inventory: row.permissions?.inventory ?? row.permissions?.stock ?? false,
-                            hr: row.permissions?.hr ?? row.permissions?.staff ?? row.permissions?.human_resources ?? false,
-                            offices: row.permissions?.offices ?? row.permissions?.medical_offices ?? row.permissions?.office ?? false,
-                            reports: row.permissions?.reports ?? row.permissions?.report ?? false,
-                            audit: row.permissions?.audit ?? row.permissions?.audit_logs ?? false,
-                            settings: row.permissions?.settings ?? row.permissions?.system_settings ?? false
-                        }
-                    }));
+                    const cleanedMatrix = normalizeMatrixRows(roleMatrix);
                     setRoleMatrix(cleanedMatrix);
                     localStorage.setItem('medicore_settings', JSON.stringify(settings));
                     localStorage.setItem('medicore_role_matrix', JSON.stringify(cleanedMatrix));
+                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
                         const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, cleanedMatrix);
                         if (error) {
@@ -616,13 +614,15 @@
 
             const resetSettings = async () => {
                 setSettings(defaultSettings);
-                setRoleMatrix(initialRoleMatrix);
+                const resetMatrix = normalizeMatrixRows(initialRoleMatrix);
+                setRoleMatrix(resetMatrix);
                 setDepartments(initialDepartments);
                 try {
                     localStorage.setItem('medicore_settings', JSON.stringify(defaultSettings));
-                    localStorage.setItem('medicore_role_matrix', JSON.stringify(initialRoleMatrix));
+                    localStorage.setItem('medicore_role_matrix', JSON.stringify(resetMatrix));
+                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings, initialRoleMatrix);
+                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings, resetMatrix);
                     }
                     setSaveMessage('Baseline EMR settings restored.');
                 } catch (e) {
@@ -631,7 +631,7 @@
             };
 
             const togglePermission = (roleName, permissionKey) => {
-                const canonicalKey = permissionAliases[permissionKey] || permissionKey;
+                const canonicalKey = permissionKey;
                 setRoleMatrix(prev => {
                     const next = prev.map(role =>
                         role.role === roleName
@@ -645,6 +645,7 @@
                             : role
                     );
                     localStorage.setItem('medicore_role_matrix', JSON.stringify(next));
+                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     return next;
                 });
             };
@@ -754,16 +755,6 @@
                 }
 
                 setSaveMessage('Audit log export downloaded successfully.');
-            };
-
-            const permissionAliases = {
-                labs: 'laboratory',
-                lab: 'laboratory',
-                pharmacy: 'pharmacy',
-                billing: 'billing',
-                settings: 'settings',
-                patients: 'patients',
-                dashboard: 'dashboard'
             };
 
             const complianceChecks = [
@@ -897,6 +888,7 @@
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <Card title="Role-Permission Matrix">
+                            <p className="mb-4 text-sm text-slate-500">Set access for every clinical, operational, financial, and administrative department. Changes take effect as soon as they are toggled; save to persist them for all users.</p>
                             <DataTable
                                 columns={[
                                     {
@@ -909,78 +901,20 @@
                                             </div>
                                         )
                                     },
-                                    {
-                                        key: 'dashboard',
-                                        title: 'Dashboard',
+                                    ...permissionDepartments.map((department) => ({
+                                        key: department.key,
+                                        title: department.label,
+                                        className: 'text-center',
                                         render: (row) => (
                                             <input
                                                 type="checkbox"
-                                                checked={row.permissions.dashboard}
-                                                onChange={() => togglePermission(row.role, 'dashboard')}
+                                                checked={Boolean(row.permissions?.[department.key])}
+                                                onChange={() => togglePermission(row.role, department.key)}
                                                 className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                                aria-label={`${row.role}: ${department.label}`}
                                             />
                                         )
-                                    },
-                                    {
-                                        key: 'patients',
-                                        title: 'Patients',
-                                        render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={row.permissions.patients}
-                                                onChange={() => togglePermission(row.role, 'patients')}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
-                                            />
-                                        )
-                                    },
-                                    {
-                                        key: 'billing',
-                                        title: 'Billing',
-                                        render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={row.permissions.billing}
-                                                onChange={() => togglePermission(row.role, 'billing')}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
-                                            />
-                                        )
-                                    },
-                                    {
-                                        key: 'pharmacy',
-                                        title: 'Pharmacy',
-                                        render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={row.permissions.pharmacy}
-                                                onChange={() => togglePermission(row.role, 'pharmacy')}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
-                                            />
-                                        )
-                                    },
-                                    {
-                                        key: 'laboratory',
-                                        title: 'Labs',
-                                        render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={row.permissions.laboratory ?? row.permissions.labs ?? false}
-                                                onChange={() => togglePermission(row.role, 'laboratory')}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
-                                            />
-                                        )
-                                    },
-                                    {
-                                        key: 'settings',
-                                        title: 'Settings',
-                                        render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={row.permissions.settings}
-                                                onChange={() => togglePermission(row.role, 'settings')}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
-                                            />
-                                        )
-                                    }
+                                    }))
                                 ]}
                                 data={roleMatrix}
                             />

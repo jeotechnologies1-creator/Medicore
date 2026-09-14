@@ -71,9 +71,12 @@
                     permissions.clinical_workflows = true;
                 }
 
+                // Older matrices did not include every department. Preserve an
+                // administrator's explicit choices, while giving legacy Super
+                // Admin rows access to newly introduced departments by default.
                 if (roleKey === 'super_admin') {
                     canonicalModuleKeys.forEach((key) => {
-                        permissions[key] = true;
+                        if (permissions[key] === undefined) permissions[key] = true;
                     });
                 }
 
@@ -308,6 +311,17 @@
                 hydrateRoleMatrix();
             }, []);
 
+            useEffect(() => {
+                const refreshAccessPolicy = () => {
+                    try {
+                        const matrix = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                        setRoleMatrix(normalizeRoleMatrix(matrix));
+                    } catch (e) {}
+                };
+                window.addEventListener('medicore:access-policy-updated', refreshAccessPolicy);
+                return () => window.removeEventListener('medicore:access-policy-updated', refreshAccessPolicy);
+            }, []);
+
             const login = useCallback(async (email, password) => {
                 setLoading(true);
                 try {
@@ -390,8 +404,13 @@
 
             const hasModuleAccess = useCallback((moduleId) => {
                 if (!user) return false;
+                // This control is deliberately evaluated here (rather than only in
+                // navigation) so direct navigation is governed by the same policy.
+                try {
+                    const savedSettings = JSON.parse(localStorage.getItem('medicore_settings') || '{}');
+                    if (savedSettings.roleBasedAccess === false) return true;
+                } catch (e) {}
                 const normalizedRole = normalizeRoleKey(user.role);
-                if (normalizedRole === 'super_admin') return true;
 
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
