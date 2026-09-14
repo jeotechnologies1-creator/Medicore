@@ -512,8 +512,39 @@
                         audit: false,
                         settings: false
                     }
+                },
+                {
+                    role: 'Laboratory Scientist',
+                    permissions: {
+                        dashboard: true,
+                        laboratory: true
+                    }
+                },
+                {
+                    role: 'Radiographer',
+                    permissions: {
+                        dashboard: true,
+                        radiology: true
+                    }
+                },
+                {
+                    role: 'Accountant',
+                    permissions: {
+                        dashboard: true,
+                        billing: true,
+                        insurance: true,
+                        payments: true,
+                        reports: true
+                    }
                 }
             ];
+
+            const completeMatrixRows = (matrix) => {
+                const savedRows = Array.isArray(matrix) ? matrix : [];
+                const savedRoles = new Set(savedRows.map((row) => String(row?.role || '').trim().toLowerCase().replace(/\s+/g, '_')));
+                const missingDefaultRoles = initialRoleMatrix.filter((row) => !savedRoles.has(String(row.role).toLowerCase().replace(/\s+/g, '_')));
+                return normalizeMatrixRows([...savedRows, ...missingDefaultRoles]);
+            };
 
             const initialDepartments = (appData.wards || []).filter((ward) => ward?.id && ward?.name).map((ward) => ({
                 id: ward.id,
@@ -541,10 +572,10 @@
                 try {
                     const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
                     if (Array.isArray(saved) && saved.length) {
-                        return normalizeMatrixRows(saved);
+                        return completeMatrixRows(saved);
                     }
                 } catch (e) {}
-                return normalizeMatrixRows(initialRoleMatrix);
+                return completeMatrixRows(initialRoleMatrix);
             });
             const [departments, setDepartments] = useState(initialDepartments);
             const [exportHistory, setExportHistory] = useState([]);
@@ -564,7 +595,7 @@
                                 const { roleMatrix: remoteRoleMatrix, ...remoteOnlySettings } = remoteSettings;
                                 setSettings(prev => ({ ...prev, ...remoteOnlySettings }));
                                 if (Array.isArray(remoteRoleMatrix) && remoteRoleMatrix.length) {
-                                    const normalizedRemote = normalizeMatrixRows(remoteRoleMatrix);
+                                    const normalizedRemote = completeMatrixRows(remoteRoleMatrix);
                                     setRoleMatrix(normalizedRemote);
                                     localStorage.setItem('medicore_role_matrix', JSON.stringify(normalizedRemote));
                                 }
@@ -594,7 +625,7 @@
 
             const saveSettings = async () => {
                 try {
-                    const cleanedMatrix = normalizeMatrixRows(roleMatrix);
+                    const cleanedMatrix = completeMatrixRows(roleMatrix);
                     setRoleMatrix(cleanedMatrix);
                     localStorage.setItem('medicore_settings', JSON.stringify(settings));
                     localStorage.setItem('medicore_role_matrix', JSON.stringify(cleanedMatrix));
@@ -614,7 +645,7 @@
 
             const resetSettings = async () => {
                 setSettings(defaultSettings);
-                const resetMatrix = normalizeMatrixRows(initialRoleMatrix);
+                const resetMatrix = completeMatrixRows(initialRoleMatrix);
                 setRoleMatrix(resetMatrix);
                 setDepartments(initialDepartments);
                 try {
