@@ -146,10 +146,12 @@
         };
 
         const ClinicalSafetyModule = () => {
+            const { user } = useAuth();
             const [allergies, setAllergies] = useState(getLiveStore().allergies || []);
             const [conditions, setConditions] = useState(getLiveStore().conditions || []);
             const [carePlans, setCarePlans] = useState(getLiveStore().carePlans || []);
             const [alerts, setAlerts] = useState(getLiveStore().clinicalAlerts || []);
+            const [resultAcknowledgements, setResultAcknowledgements] = useState(getLiveStore().resultAcknowledgements || []);
             const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
             const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', onsetDate: '' });
             const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
@@ -201,6 +203,21 @@
                 if (saved) setCarePlanForm({ patientId: '', title: '', description: '', targetDate: '' });
             };
 
+            const acknowledgeResult = async (acknowledgement) => {
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!client || !user?.id) return notifyPersistenceFailure('acknowledge result');
+                const { data, error } = await client.from('result_acknowledgements').update({
+                    status: 'acknowledged', acknowledged_at: new Date().toISOString(), acknowledged_by: user.id
+                }).eq('id', acknowledgement.id).select();
+                if (error || !data?.[0]) return notifyPersistenceFailure('acknowledge result', error);
+                const updated = normalizeResultAcknowledgements(data)[0];
+                const next = resultAcknowledgements.map((item) => item.id === updated.id ? updated : item);
+                appData.resultAcknowledgements = next;
+                setResultAcknowledgements(next);
+            };
+
+            const pendingAcknowledgements = resultAcknowledgements.filter((item) => ['unacknowledged', 'escalated'].includes(item.status));
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div>
@@ -213,6 +230,19 @@
                         <StatCard title="Active problems" value={conditions.filter(c => c.clinicalStatus === 'active').length} icon={Icons.ClipboardList} color="medical" />
                         <StatCard title="Active care plans" value={carePlans.filter(c => c.status === 'active').length} icon={Icons.CheckCircle} color="emerald" />
                     </div>
+                    <Card title="Results awaiting acknowledgement" subtitle="Final results must be reviewed by an authorized clinician.">
+                        <DataTable
+                            columns={[
+                                { key: 'patient', title: 'Patient', render: (row) => patientName(row.patientId) },
+                                { key: 'resultType', title: 'Result type' },
+                                { key: 'dueAt', title: 'Due', render: (row) => formatDateTime(row.dueAt) },
+                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'escalated' ? 'danger' : 'warning'}>{row.status}</Badge> }
+                            ]}
+                            data={pendingAcknowledgements}
+                            emptyMessage="No final results are awaiting acknowledgement."
+                            actions={(row) => <Button size="sm" variant="primary" onClick={() => acknowledgeResult(row)}>Acknowledge</Button>}
+                        />
+                    </Card>
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                         <Card title="Record allergy / intolerance">
                             <div className="space-y-3">

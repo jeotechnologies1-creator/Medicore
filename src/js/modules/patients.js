@@ -2,6 +2,7 @@
         // PATIENTS MODULE
         // ==========================================
         const PatientsModule = () => {
+            const { user } = useAuth();
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
             const [showRegistration, setShowRegistration] = useState(false);
@@ -284,6 +285,16 @@
                     const activeAdmission = (appData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
                     const client = window.MedicoreSupabase?.getClient?.();
                     if (!activeAdmission || !client) return notifyPersistenceFailure('finalize discharge');
+                    const { data: reconciliationData, error: reconciliationError } = await client.from('medication_reconciliations').insert({
+                        patient_id: patient.id,
+                        transition_type: 'discharge',
+                        status: 'completed',
+                        reconciled_by: user?.id || null,
+                        reconciled_at: new Date().toISOString(),
+                        notes: dischargeForm.instructions || dischargeForm.followUp || null
+                    }).select();
+                    if (reconciliationError || !reconciliationData?.[0]) return notifyPersistenceFailure('complete medication reconciliation before discharge', reconciliationError);
+                    appData.medicationReconciliations = [normalizeMedicationReconciliations(reconciliationData)[0], ...(appData.medicationReconciliations || [])];
                     const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0], diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
                     if (error || !data?.[0]) return notifyPersistenceFailure('finalize discharge', error);
                     appData.admissions = (appData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);

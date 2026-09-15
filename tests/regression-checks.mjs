@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, hardening, activation] = await Promise.all([
+const [app, core, hardening, activation, authorization] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('supabase/production_hardening.sql'),
-    read('supabase/app_activation.sql')
+    read('supabase/app_activation.sql'),
+    read('supabase/role_authorization.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -16,5 +17,7 @@ assert.match(hardening, /staff or patient read patients/, 'Patient data must hav
 assert.match(hardening, /admins read audit logs/, 'Audit logs must remain administrator-only.');
 assert.match(activation, /users read own notifications/, 'Notifications must be private to their recipient.');
 assert.match(activation, /staff read directory/, 'Staff workflows must be able to resolve a staff directory.');
+assert.match(authorization, /has_any_role/, 'Database authorization must be role based.');
+assert.match(authorization, /admins manage system settings/, 'System settings must be administrator-only.');
 
 console.log('Regression checks passed.');

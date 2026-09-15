@@ -34,7 +34,9 @@
             insuranceClaims: [],
             refillRequests: [],
             offices: [],
-            officeStaff: []
+            officeStaff: [],
+            resultAcknowledgements: [],
+            medicationReconciliations: []
         }, {
             get(target, prop) {
                 if (!(prop in target)) {
@@ -407,12 +409,37 @@
             createdAt: row.created_at || row.createdAt
         }));
 
+        const normalizeResultAcknowledgements = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            resultType: row.result_type || row.resultType,
+            resultId: row.result_id || row.resultId,
+            patientId: row.patient_id || row.patientId,
+            responsibleClinicianId: row.responsible_clinician_id || row.responsibleClinicianId,
+            status: row.status || 'unacknowledged',
+            dueAt: row.due_at || row.dueAt,
+            acknowledgedAt: row.acknowledged_at || row.acknowledgedAt,
+            acknowledgedBy: row.acknowledged_by || row.acknowledgedBy
+        }));
+
+        const normalizeMedicationReconciliations = (rows = []) => rows.map((row) => ({
+            ...row,
+            id: row.id,
+            patientId: row.patient_id || row.patientId,
+            encounterId: row.encounter_id || row.encounterId,
+            transitionType: row.transition_type || row.transitionType,
+            status: row.status || 'in_progress',
+            reconciledBy: row.reconciled_by || row.reconciledBy,
+            reconciledAt: row.reconciled_at || row.reconciledAt,
+            notes: row.notes || ''
+        }));
+
         const createEmptyStore = () => ({
             users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [],
             pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [],
             vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
             medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [],
-            insuranceClaims: [], refillRequests: [], offices: [], officeStaff: []
+            insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: []
         });
 
 
@@ -424,7 +451,7 @@
         // The browser store only mirrors rows read from Supabase. It starts empty
         // so a missing connection can never produce demonstration records.
         const getLiveStore = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff', 'resultAcknowledgements', 'medicationReconciliations'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(appData[table]) ? appData[table] : [];
@@ -464,7 +491,7 @@
                 };
             }
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -495,7 +522,9 @@
                 { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
                 { dbTable: 'medication_refill_requests', appTable: 'refillRequests', mapper: normalizeRefillRequests },
                 { dbTable: 'medical_offices', appTable: 'offices', mapper: normalizeOffices },
-                { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff }
+                { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff },
+                { dbTable: 'result_acknowledgements', appTable: 'resultAcknowledgements', mapper: normalizeResultAcknowledgements },
+                { dbTable: 'medication_reconciliations', appTable: 'medicationReconciliations', mapper: normalizeMedicationReconciliations }
             ];
             const loadedTables = await Promise.all(officeLookups.map(async (entry) => {
                 const { data, error } = await client.from(entry.dbTable).select('*');

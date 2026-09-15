@@ -13,6 +13,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 9. `atomic_pharmacy_dispensing.sql`
 10. `quality_safety_upgrade.sql`
 11. `app_activation.sql`
+12. `role_authorization.sql`
 
 The front-end calls the following database contracts:
 
