@@ -27,6 +27,7 @@
             const [notifications, setNotifications] = useState(appData.notifications || []);
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
+            const [dataLoad, setDataLoad] = useState({ loading: false, failures: [] });
             const [theme, setTheme] = useState(() => {
                 try {
                     return localStorage.getItem('medicore_theme') || 'dark';
@@ -74,19 +75,31 @@
                 if (!isAuthenticated) return undefined;
 
                 let cancelled = false;
-                const syncLiveData = async () => {
-                    const synced = await loadSupabaseTables();
-                    if (!cancelled && synced) {
-                        setNotifications((appData.notifications || []).slice(0));
-                        setDataVersion((value) => value + 1);
+                const loadInitialData = async () => {
+                    setDataLoad({ loading: true, failures: [] });
+                    try {
+                        const result = await loadSupabaseTables();
+                        if (!cancelled && result) {
+                            setNotifications((appData.notifications || []).slice(0));
+                            setDataLoad({ loading: false, failures: result.failures || [] });
+                            setDataVersion((value) => value + 1);
+                        }
+                    } catch (error) {
+                        if (!cancelled) {
+                            setDataLoad({
+                                loading: false,
+                                failures: [{ table: 'connection', message: error?.message || 'The authorized records could not be loaded.' }]
+                            });
+                        }
                     }
                 };
 
-                syncLiveData();
-                const refreshTimer = window.setInterval(syncLiveData, 30000);
+                // Load once after a successful sign-in. Do not poll or reload the
+                // screen in the background: subsequent remote data loads happen
+                // only when the user performs a normal browser refresh.
+                loadInitialData();
                 return () => {
                     cancelled = true;
-                    window.clearInterval(refreshTimer);
                 };
             }, [isAuthenticated]);
 
@@ -96,6 +109,22 @@
                 const id = Date.now();
                 setToasts(prev => [...prev, { id, message, type }]);
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+            };
+
+            const persistNotificationReadState = async (notificationIds, read = true) => {
+                const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
+                const client = window.MedicoreSupabase?.getClient?.();
+                if (!ids.length) return null;
+                if (!client) return notifyPersistenceFailure('update notification status');
+                const { error } = await client.from('notifications').update({ read }).in('id', ids);
+                if (error) return notifyPersistenceFailure('update notification status', error);
+                const idSet = new Set(ids);
+                const next = (appData.notifications || []).map((notification) =>
+                    idSet.has(notification.id) ? { ...notification, read } : notification
+                );
+                appData.notifications = next;
+                setNotifications(next.slice());
+                return next;
             };
 
             const normalizeModuleId = (moduleId) => {
@@ -227,15 +256,23 @@
                             <Header 
                                 notifications={notifications}
                                 onNavigate={setActiveModule}
-                                onNotificationClick={(notif) => {
-                                    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-                                }}
-                                onMarkAllNotificationsRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                                onNotificationClick={(notif) => persistNotificationReadState(notif.id)}
+                                onMarkAllNotificationsRead={() => persistNotificationReadState(notifications.filter((n) => !n.read).map((n) => n.id))}
                                 onLogout={handleLogout}
                                 theme={theme}
                                 onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
                             />
                             <main className="flex-1 overflow-y-auto app-main">
+                                {dataLoad.loading && (
+                                    <div className="mx-6 mt-4 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-sm text-medical-800" role="status">
+                                        Loading your authorized records…
+                                    </div>
+                                )}
+                                {dataLoad.failures.length > 0 && (
+                                    <div className="mx-6 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
+                                        Some records could not be loaded ({dataLoad.failures.map((failure) => failure.table).join(', ')}). Reload the browser to try again.
+                                    </div>
+                                )}
                                 {renderModule()}
                             </main>
                         </div>

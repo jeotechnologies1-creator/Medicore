@@ -8,6 +8,8 @@
             const [activeTab, setActiveTab] = useState('overview');
             const [filterStatus, setFilterStatus] = useState('all');
             const [patients, setPatients] = useState((getLiveStore().patients || []));
+            const [formErrors, setFormErrors] = useState({});
+            const [saving, setSaving] = useState(false);
             const [form, setForm] = useState({
                 firstName: '',
                 lastName: '',
@@ -39,6 +41,17 @@
             }, [patients, searchQuery, filterStatus]);
 
             const handleRegisterPatient = async () => {
+                const errors = {};
+                if (!form.firstName.trim()) errors.firstName = 'First name is required.';
+                if (!form.lastName.trim()) errors.lastName = 'Last name is required.';
+                if (!form.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.';
+                else if (new Date(form.dateOfBirth) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future.';
+                if (!form.gender) errors.gender = 'Gender is required.';
+                if (!form.phone.trim()) errors.phone = 'Phone number is required.';
+                if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address.';
+                setFormErrors(errors);
+                if (Object.keys(errors).length) return;
+
                 const payload = {
                     patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
                     first_name: form.firstName,
@@ -57,12 +70,9 @@
                     chronic_conditions: 'None'
                 };
 
-                if (!payload.first_name || !payload.last_name || !payload.date_of_birth || !payload.phone) {
-                    return;
-                }
-
                 const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
-                if (!client) return;
+                if (!client) return notifyPersistenceFailure('register patient');
+                setSaving(true);
                 const { data, error } = await client.from('patients').insert([payload]).select();
                 const created = data?.[0];
                 if (!error && created) {
@@ -81,9 +91,13 @@
                     const nextPatients = [...patients, mapped];
                     appData.patients = nextPatients;
                     setPatients(nextPatients);
+                    setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
+                    setFormErrors({});
+                    setShowRegistration(false);
+                } else {
+                    notifyPersistenceFailure('register patient', error);
                 }
-                setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
-                setShowRegistration(false);
+                setSaving(false);
             };
 
             const handlePatientClick = (patient) => {
@@ -1063,17 +1077,17 @@
                         footer={
                             <div className="flex justify-end gap-3">
                                 <Button variant="ghost" onClick={() => setShowRegistration(false)}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.Save} onClick={handleRegisterPatient}>Register Patient</Button>
+                                <Button variant="primary" icon={saving ? Icons.RefreshCw : Icons.Save} disabled={saving} onClick={handleRegisterPatient}>{saving ? 'Registering…' : 'Register Patient'}</Button>
                             </div>
                         }
                     >
                         <div className="grid grid-cols-2 gap-4">
-                            <Input label="First Name" required value={form.firstName} onChange={(e) => setForm(prev => ({ ...prev, firstName: e.target.value }))} />
-                            <Input label="Last Name" required value={form.lastName} onChange={(e) => setForm(prev => ({ ...prev, lastName: e.target.value }))} />
-                            <Input label="Date of Birth" type="date" required value={form.dateOfBirth} onChange={(e) => setForm(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
-                            <Select label="Gender" required value={form.gender} onChange={(e) => setForm(prev => ({ ...prev, gender: e.target.value }))} options={[{ value: '', label: 'Select...' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
-                            <Input label="Phone Number" required value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))} />
-                            <Input label="Email" type="email" value={form.email} onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))} />
+                            <Input label="First Name" required error={formErrors.firstName} value={form.firstName} onChange={(e) => setForm(prev => ({ ...prev, firstName: e.target.value }))} />
+                            <Input label="Last Name" required error={formErrors.lastName} value={form.lastName} onChange={(e) => setForm(prev => ({ ...prev, lastName: e.target.value }))} />
+                            <Input label="Date of Birth" type="date" required error={formErrors.dateOfBirth} value={form.dateOfBirth} onChange={(e) => setForm(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
+                            <Select label="Gender" required error={formErrors.gender} value={form.gender} onChange={(e) => setForm(prev => ({ ...prev, gender: e.target.value }))} options={[{ value: '', label: 'Select...' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
+                            <Input label="Phone Number" required error={formErrors.phone} value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))} />
+                            <Input label="Email" type="email" error={formErrors.email} value={form.email} onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))} />
                             <Input label="Address" className="col-span-2" value={form.address} onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))} />
                             <Select label="Blood Group" value={form.bloodGroup} onChange={(e) => setForm(prev => ({ ...prev, bloodGroup: e.target.value }))} options={[{ value: '', label: 'Select...' }, { value: 'A+', label: 'A+' }, { value: 'A-', label: 'A-' }, { value: 'B+', label: 'B+' }, { value: 'B-', label: 'B-' }, { value: 'AB+', label: 'AB+' }, { value: 'AB-', label: 'AB-' }, { value: 'O+', label: 'O+' }, { value: 'O-', label: 'O-' }]} />
                             <Input label="Emergency Contact Name" value={form.emergencyContactName} onChange={(e) => setForm(prev => ({ ...prev, emergencyContactName: e.target.value }))} />

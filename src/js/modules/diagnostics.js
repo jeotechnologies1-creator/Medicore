@@ -231,7 +231,7 @@
                 }));
 
             const handleCreateLabOrder = async () => {
-                if (!newOrderForm.patientId) return;
+                if (!newOrderForm.patientId) return notifyPersistenceFailure('create laboratory order', new Error('Select a patient before creating an order.'));
                 const payload = {
                     patientId: newOrderForm.patientId,
                     doctorId: null,
@@ -260,7 +260,10 @@
             };
 
             const handleSaveResults = async () => {
-                if (!selectedOrder) return;
+                if (!selectedOrder) return notifyPersistenceFailure('record laboratory results', new Error('Select an order before entering results.'));
+                if (!Object.values(resultForm.values || {}).some((value) => String(value).trim())) {
+                    return notifyPersistenceFailure('record laboratory results', new Error('Enter at least one result value before saving.'));
+                }
                 const nextOrder = {
                     ...selectedOrder,
                     status: 'completed',
@@ -269,7 +272,7 @@
                 };
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
-                const { error } = await client.from('lab_orders').update({ status: 'completed', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
+                const { error } = await client.from('lab_orders').update({ status: 'completed', result_status: 'final', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
                 persistStoreTable('labOrders', next);
@@ -498,7 +501,9 @@
             const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
 
             const handleCreateStudy = async () => {
-                if (!orderForm.patientId || !orderForm.studyType) return;
+                if (!orderForm.patientId || !orderForm.studyType.trim()) {
+                    return notifyPersistenceFailure('create radiology order', new Error('Select a patient and enter the imaging study type.'));
+                }
                 const payload = {
                     patientId: orderForm.patientId,
                     doctorId: null,
@@ -535,7 +540,7 @@
                 }
                 const updated = { ...row, status: 'reported', report: row.report };
                 if (!client) return notifyPersistenceFailure('finalize radiology report');
-                const { error } = await client.from('radiology_orders').update({ status: 'reported', report: updated.report }).eq('id', row.id);
+                const { error } = await client.from('radiology_orders').update({ status: 'reported', report_status: 'final', report: updated.report }).eq('id', row.id);
                 if (error) return notifyPersistenceFailure('finalize radiology report', error);
                 const next = studies.map((item) => item.id === row.id ? updated : item);
                 persistStoreTable('radiologyOrders', next);

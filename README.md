@@ -24,6 +24,8 @@ Run the SQL files in this order in the Supabase SQL editor:
 6. `supabase/clinical_safety.sql`
 7. `supabase/patient_portal.sql`
 8. `supabase/production_hardening.sql`
+9. `supabase/atomic_pharmacy_dispensing.sql`
+10. `supabase/quality_safety_upgrade.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -39,6 +41,12 @@ The last migration adds encounters, structured allergy/intolerance and problem l
 
 The same migration creates server-side audit triggers for clinical and operational changes. Audit records are read-only to application users and visible only to a super administrator.
 
+`quality_safety_upgrade.sql` adds result acknowledgement records, overdue-result escalation support, medication reconciliation records, and optional terminology/barcode/lot fields. Configure a server-side scheduled job to call `escalate_overdue_results()`; it is intentionally not callable from the browser.
+
 This is a clinical application, so it should also have a privacy review, a retention/backup plan, encrypted device/session management, a data-processing agreement where applicable, and clinical governance before real patient data is entered. It is not presented as a certified EHR.
+
+## Downtime and recovery
+
+Maintain an approved read-only/downtime procedure outside this repository: paper or approved offline forms, a unique downtime encounter identifier, a named recovery owner, a reconciliation queue, and a tested restoration drill. Never enter live patient data until the procedure, backups, recovery-time target, and restoration testing are approved by clinical governance.
 
 See [EMR_GO_LIVE_CHECKLIST.md](EMR_GO_LIVE_CHECKLIST.md) for the interoperability, safety, security, and operational controls required before go-live.

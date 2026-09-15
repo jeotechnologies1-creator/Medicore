@@ -458,7 +458,10 @@
                 : null;
             if (!client) {
                 initializeEmptyStore();
-                return appData;
+                return {
+                    store: appData,
+                    failures: [{ table: 'connection', message: 'Supabase is not configured or is unavailable.' }]
+                };
             }
 
             const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [] };
@@ -498,7 +501,11 @@
                 const { data, error } = await client.from(entry.dbTable).select('*');
                 if (error) {
                     console.error(`Failed to load ${entry.dbTable}:`, error);
-                    return { appTable: entry.appTable, rows: [] };
+                    return {
+                        appTable: entry.appTable,
+                        rows: [],
+                        failure: { table: entry.dbTable, message: error.message || 'The table could not be read.' }
+                    };
                 }
                 return { appTable: entry.appTable, rows: entry.mapper(data || []) };
             }));
@@ -506,7 +513,10 @@
 
             Object.keys(appData).forEach((key) => delete appData[key]);
             Object.assign(appData, nextStore);
-            return nextStore;
+            return {
+                store: nextStore,
+                failures: loadedTables.filter((entry) => entry.failure).map((entry) => entry.failure)
+            };
         };
 
 // ==========================================
