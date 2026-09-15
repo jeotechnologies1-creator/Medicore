@@ -229,7 +229,7 @@
                         email: officeForm.email,
                         status: 'active',
                         head_doctor_id: officeForm.headDoctorId || null,
-                        created_by: (appData.users || [])[0]?.id || null
+                        created_by: user?.id || null
                     };
 
                     const { data, error } = await client.from('medical_offices').insert([payload]).select();
@@ -239,12 +239,16 @@
                     appData.offices = [...offices, newOffice];
 
                     if (officeForm.headDoctorId) {
-                        await client.from('office_staff').insert([{
+                        const { error: officeStaffError } = await client.from('office_staff').insert([{
                             office_id: newOffice.id,
                             profile_id: officeForm.headDoctorId,
                             role: 'Lead Physician',
                             is_lead: true
                         }]).select();
+                        if (officeStaffError) {
+                            setMessage(`Office created, but the lead physician could not be assigned: ${officeStaffError.message}`);
+                            return;
+                        }
                     }
 
                     setOfficeForm({ name: '', officeType: 'Clinic', specialty: '', location: '', phone: '', email: '', headDoctorId: '' });

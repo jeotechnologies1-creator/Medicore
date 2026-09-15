@@ -26,6 +26,7 @@ Run the SQL files in this order in the Supabase SQL editor:
 8. `supabase/production_hardening.sql`
 9. `supabase/atomic_pharmacy_dispensing.sql`
 10. `supabase/quality_safety_upgrade.sql`
+11. `supabase/app_activation.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -42,6 +43,16 @@ The last migration adds encounters, structured allergy/intolerance and problem l
 The same migration creates server-side audit triggers for clinical and operational changes. Audit records are read-only to application users and visible only to a super administrator.
 
 `quality_safety_upgrade.sql` adds result acknowledgement records, overdue-result escalation support, medication reconciliation records, and optional terminology/barcode/lot fields. Configure a server-side scheduled job to call `escalate_overdue_results()`; it is intentionally not callable from the browser.
+
+`app_activation.sql` is the final compatibility migration. It enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
+
+Deploy the staff-provisioning Edge Function after applying the SQL migrations:
+
+```sh
+supabase functions deploy create-staff
+```
+
+The function at `supabase/functions/create-staff/index.ts` requires the project-managed `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. Do not place the service-role key in the browser or this repository.
 
 This is a clinical application, so it should also have a privacy review, a retention/backup plan, encrypted device/session management, a data-processing agreement where applicable, and clinical governance before real patient data is entered. It is not presented as a certified EHR.
 

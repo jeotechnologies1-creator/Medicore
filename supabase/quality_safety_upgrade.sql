@@ -101,9 +101,9 @@ begin
   end;
   if is_final then
     insert into public.result_acknowledgements (result_type, result_id, patient_id, responsible_clinician_id, due_at)
-    values (result_kind, new.id, new.patient_id, new.responsible_clinician_id, now() + interval '24 hours')
+    values (result_kind, new.id, new.patient_id, coalesce(new.responsible_clinician_id, new.doctor_id), now() + interval '24 hours')
     on conflict (result_type, result_id) do update
-      set responsible_clinician_id = excluded.responsible_clinician_id,
+      set responsible_clinician_id = coalesce(excluded.responsible_clinician_id, result_acknowledgements.responsible_clinician_id),
           due_at = excluded.due_at,
           updated_at = now();
   end if;
