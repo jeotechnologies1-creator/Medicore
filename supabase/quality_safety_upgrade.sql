@@ -113,12 +113,12 @@ $$;
 
 drop trigger if exists queue_lab_result_acknowledgement on public.lab_orders;
 create trigger queue_lab_result_acknowledgement
-  after insert or update of result_status, responsible_clinician_id on public.lab_orders
+  after insert or update of status, result_status, responsible_clinician_id on public.lab_orders
   for each row execute function public.queue_result_acknowledgement('laboratory');
 
 drop trigger if exists queue_radiology_result_acknowledgement on public.radiology_orders;
 create trigger queue_radiology_result_acknowledgement
-  after insert or update of report_status, responsible_clinician_id on public.radiology_orders
+  after insert or update of status, report_status, responsible_clinician_id on public.radiology_orders
   for each row execute function public.queue_result_acknowledgement('radiology');
 
 -- A scheduled job should escalate rows past due_at. The job's service account

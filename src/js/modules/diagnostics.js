@@ -204,7 +204,7 @@
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
-            const [resultForm, setResultForm] = useState({ comments: '', values: {} });
+            const [resultForm, setResultForm] = useState({ comments: '', severity: 'normal', values: {} });
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -264,20 +264,25 @@
                 if (!Object.values(resultForm.values || {}).some((value) => String(value).trim())) {
                     return notifyPersistenceFailure('record laboratory results', new Error('Enter at least one result value before saving.'));
                 }
+                const isCritical = resultForm.severity === 'critical';
                 const nextOrder = {
                     ...selectedOrder,
-                    status: 'completed',
+                    status: isCritical ? 'critical' : 'completed',
                     resultDate: new Date().toISOString().split('T')[0],
-                    results: { values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: 'normal' })) }
+                    results: {
+                        comments: resultForm.comments.trim() || null,
+                        values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: isCritical ? 'critical' : resultForm.severity }))
+                    }
                 };
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
-                const { error } = await client.from('lab_orders').update({ status: 'completed', result_status: 'final', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
+                const { error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'final', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
                 persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowResultEntry(false);
+                setResultForm({ comments: '', severity: 'normal', values: {} });
             };
 
             return (
@@ -324,8 +329,8 @@
                                 data={labOrders}
                                 actions={(row) => (
                                     <>
-                                        {row.status !== 'completed' && (
-                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setShowResultEntry(true); }}>Enter Results</Button>
+                                        {!['completed', 'critical'].includes(row.status) && (
+                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', severity: 'normal', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
                                         )}
                                         <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
                                     </>
@@ -396,6 +401,7 @@
                                         </div>
                                     ))}
                                 </div>
+                                <Select label="Overall result assessment" value={resultForm.severity} onChange={(e) => setResultForm(prev => ({ ...prev, severity: e.target.value }))} options={[{ value: 'normal', label: 'Normal' }, { value: 'abnormal', label: 'Abnormal' }, { value: 'critical', label: 'Critical — immediate follow-up required' }]} />
                                 <TextArea label="Comments" placeholder="Additional comments..." value={resultForm.comments} onChange={(e) => setResultForm(prev => ({ ...prev, comments: e.target.value }))} />
                             </div>
                         )}
@@ -496,9 +502,12 @@
         // ==========================================
         const RadiologyModule = () => {
             const [selectedStudy, setSelectedStudy] = useState(null);
+            const [reportStudy, setReportStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
+            const [showReportEntry, setShowReportEntry] = useState(false);
             const [studies, setStudies] = useState(getLiveStore().radiologyOrders || []);
             const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
+            const [reportDraft, setReportDraft] = useState('');
 
             const handleCreateStudy = async () => {
                 if (!orderForm.patientId || !orderForm.studyType.trim()) {
@@ -535,16 +544,18 @@
 
             const handleReportStudy = async (row) => {
                 const client = window.MedicoreSupabase?.getClient?.();
-                if (!String(row.report || '').trim()) {
+                if (!String(reportDraft).trim()) {
                     return notifyPersistenceFailure('finalize radiology report', new Error('Enter the clinical report before finalizing the study.'));
                 }
-                const updated = { ...row, status: 'reported', report: row.report };
+                const updated = { ...row, status: 'reported', report: reportDraft.trim() };
                 if (!client) return notifyPersistenceFailure('finalize radiology report');
                 const { error } = await client.from('radiology_orders').update({ status: 'reported', report_status: 'final', report: updated.report }).eq('id', row.id);
                 if (error) return notifyPersistenceFailure('finalize radiology report', error);
                 const next = studies.map((item) => item.id === row.id ? updated : item);
                 persistStoreTable('radiologyOrders', next);
                 setStudies(next);
+                setShowReportEntry(false);
+                setReportDraft('');
             };
 
             return (
@@ -591,7 +602,7 @@
                             actions={(row) => (
                                 <>
                                     <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View Images</Button>
-                                    {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => handleReportStudy(row)}>Report</Button>}
+                                    {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(row.report || ''); setShowReportEntry(true); }}>Report</Button>}
                                 </>
                             )}
                         />
@@ -617,6 +628,16 @@
                             <Input label="Scheduled Date" type="date" value={orderForm.scheduledDate} onChange={(e) => setOrderForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
                             <TextArea label="Radiologist Notes" value={orderForm.report} onChange={(e) => setOrderForm(prev => ({ ...prev, report: e.target.value }))} rows={3} />
                         </div>
+                    </Modal>
+
+                    <Modal
+                        isOpen={showReportEntry}
+                        onClose={() => { setShowReportEntry(false); setReportStudy(null); }}
+                        title={'Finalize Report — ' + (reportStudy?.studyType || '')}
+                        size="md"
+                        footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => { setShowReportEntry(false); setReportStudy(null); }}>Cancel</Button><Button variant="primary" icon={Icons.Save} onClick={() => reportStudy && handleReportStudy(reportStudy)}>Finalize report</Button></div>}
+                    >
+                        <TextArea label="Radiologist report" rows={8} value={reportDraft} onChange={(e) => setReportDraft(e.target.value)} placeholder="Findings, impression, and recommended follow-up..." />
                     </Modal>
 
                     <Modal

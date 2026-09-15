@@ -57,6 +57,7 @@
             role: row.role || 'super_admin',
             name: row.full_name || row.name || row.email,
             fullName: row.full_name || row.name || row.email,
+            patientId: row.patient_id || row.patientId || null,
             department: row.department || '',
             status: row.status || 'active',
             createdAt: row.created_at || row.createdAt

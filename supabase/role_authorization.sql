@@ -15,22 +15,24 @@ language sql stable security definer set search_path = public as $$
     or exists (select 1 from public.profiles where auth_user_id = auth.uid() and patient_id = target_patient_id);
 $$;
 
--- Remove the generic policies installed by earlier migrations before defining
--- each workflow's narrowest permitted role set.
+-- Start from a known policy state. This makes the migration safe to re-run and
+-- prevents a permissive policy left by an earlier release from combining with
+-- the role-specific policies below (Postgres ORs matching RLS policies).
 do $$
-declare table_name text;
+declare table_name text; policy_name text;
 begin
   foreach table_name in array array[
     'patients','appointments','lab_orders','radiology_orders','prescriptions','pharmacy_inventory','billing',
     'admissions','surgeries','vital_signs','consultations','patient_documents','immunizations',
     'medication_administrations','encounters','patient_allergies','patient_conditions','medication_orders',
-    'care_plans','clinical_tasks','patient_consents','clinical_alerts','insurance_claims','wards','beds',
-    'medical_offices','office_staff','system_settings','compliance_exports'
+    'care_plans','care_plan_goals','clinical_tasks','patient_consents','clinical_alerts','insurance_claims','wards','beds',
+    'medical_offices','office_staff','system_settings','compliance_exports','result_acknowledgements','medication_reconciliations'
   ] loop
-    execute format('drop policy if exists %I on public.%I', 'staff manage records', table_name);
-    execute format('drop policy if exists %I on public.%I', 'staff or patient read records', table_name);
-    execute format('drop policy if exists %I on public.%I', 'Authenticated application access', table_name);
-    execute format('drop policy if exists %I on public.%I', 'Allow all access for authenticated users', table_name);
+    for policy_name in
+      select policyname from pg_policies where schemaname = 'public' and tablename = table_name
+    loop
+      execute format('drop policy if exists %I on public.%I', policy_name, table_name);
+    end loop;
   end loop;
 end $$;
 
