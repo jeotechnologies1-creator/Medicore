@@ -597,7 +597,6 @@
                                 if (Array.isArray(remoteRoleMatrix) && remoteRoleMatrix.length) {
                                     const normalizedRemote = completeMatrixRows(remoteRoleMatrix);
                                     setRoleMatrix(normalizedRemote);
-                                    localStorage.setItem('medicore_role_matrix', JSON.stringify(normalizedRemote));
                                 }
                             }
                         }
@@ -627,16 +626,17 @@
                 try {
                     const cleanedMatrix = completeMatrixRows(roleMatrix);
                     setRoleMatrix(cleanedMatrix);
-                    localStorage.setItem('medicore_settings', JSON.stringify(settings));
-                    localStorage.setItem('medicore_role_matrix', JSON.stringify(cleanedMatrix));
-                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
                         const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, cleanedMatrix);
                         if (error) {
-                            setSaveMessage('Settings saved locally; Supabase sync failed.');
+                            setSaveMessage('Settings were not saved. Supabase rejected the change.');
                             return;
                         }
+                    } else {
+                        setSaveMessage('Settings were not saved. Connect Supabase to apply access changes.');
+                        return;
                     }
+                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated', { detail: { roleMatrix: cleanedMatrix } }));
                     setSaveMessage('Settings and role matrix saved successfully.');
                 } catch (e) {
                     setSaveMessage('Unable to save settings in this browser session.');
@@ -649,12 +649,17 @@
                 setRoleMatrix(resetMatrix);
                 setDepartments(initialDepartments);
                 try {
-                    localStorage.setItem('medicore_settings', JSON.stringify(defaultSettings));
-                    localStorage.setItem('medicore_role_matrix', JSON.stringify(resetMatrix));
-                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        await window.MedicoreSupabase.saveSystemSettings(defaultSettings, resetMatrix);
+                        const { error } = await window.MedicoreSupabase.saveSystemSettings(defaultSettings, resetMatrix);
+                        if (error) {
+                            setSaveMessage('Baseline settings were not saved. Supabase rejected the change.');
+                            return;
+                        }
+                    } else {
+                        setSaveMessage('Baseline settings were not saved. Connect Supabase to apply access changes.');
+                        return;
                     }
+                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated', { detail: { roleMatrix: resetMatrix } }));
                     setSaveMessage('Baseline EMR settings restored.');
                 } catch (e) {
                     setSaveMessage('Baseline settings restored locally.');
@@ -675,8 +680,6 @@
                             }
                             : role
                     );
-                    localStorage.setItem('medicore_role_matrix', JSON.stringify(next));
-                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated'));
                     return next;
                 });
             };

@@ -47,7 +47,7 @@ The same migration creates server-side audit triggers for clinical and operation
 
 `app_activation.sql` is the final compatibility migration. It enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
 
-`role_authorization.sql` must be applied last. It replaces the former broad staff-write policies with role-specific database authorization, including administrator-only system settings and office management. Test every role in staging after applying it.
+`role_authorization.sql` must be applied last. It resets all inherited policies for clinical, portal, profile, notification, and audit tables before applying role-specific database authorization. It also restricts clinical authorship by record type, aligns document storage with document-write roles, and adds write-time data-integrity constraints. Test every role in staging after applying it; validate the new `NOT VALID` constraints after resolving any legacy-data exceptions.
 
 Deploy the staff-provisioning Edge Function after applying the SQL migrations:
 

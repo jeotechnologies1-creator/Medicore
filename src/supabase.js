@@ -298,7 +298,9 @@
             const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
             if (authError || !authData.user) return null;
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
-            if (!error && data) return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null };
+            if (!error && data?.status === 'active') {
+                return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null };
+            }
             await client.auth.signOut();
             return null;
         } catch (error) {

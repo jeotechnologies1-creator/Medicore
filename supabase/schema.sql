@@ -4,7 +4,8 @@ create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique references auth.users(id) on delete cascade,
   email text not null unique,
-  role text not null default 'super_admin',
+  -- First accounts must be explicitly promoted after identity verification.
+  role text not null default 'receptionist',
   full_name text not null,
   department text,
   status text not null default 'active',

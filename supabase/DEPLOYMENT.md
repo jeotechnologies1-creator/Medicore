@@ -46,3 +46,5 @@ supabase functions deploy create-staff
 4. Dispense a multi-item prescription and verify stock, lot choice, prescription state, and audit event in one transaction.
 5. Finalize a lab or radiology result and confirm a `result_acknowledgements` row is created.
 6. Configure a server-side schedule to invoke `public.escalate_overdue_results()` and test an overdue acknowledgement in staging.
+7. Confirm an inactive user is signed out, then test each staff role cannot create or update a record outside its assigned workflow (including direct REST requests).
+8. Review any pre-existing rows that violate the new `NOT VALID` integrity constraints, remediate them, and run `VALIDATE CONSTRAINT` for each in a planned maintenance window.

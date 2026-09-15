@@ -249,14 +249,7 @@
 
         const AuthProvider = ({ children }) => {
             const [user, setUser] = useState(null);
-            const [roleMatrix, setRoleMatrix] = useState(() => {
-                try {
-                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
-                    return normalizeRoleMatrix(saved);
-                } catch (e) {
-                    return defaultRoleMatrix;
-                }
-            });
+            const [roleMatrix, setRoleMatrix] = useState(defaultRoleMatrix);
             const [loading, setLoading] = useState(false);
 
             useEffect(() => {
@@ -266,6 +259,14 @@
                 const applySession = async (session) => {
                     if (!session?.user || !active) return;
                     const { data } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
+                    // An Auth session alone is not sufficient to use the EMR.
+                    // Deactivated accounts must not enter the UI until RLS rejects
+                    // their first request.
+                    if (data?.status !== 'active') {
+                        await client.auth.signOut();
+                        if (active) setUser(null);
+                        return;
+                    }
                     if (active && data) {
                         setUser({ ...data, name: data.full_name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null });
                     }
@@ -278,29 +279,12 @@
             useEffect(() => {
                 const hydrateRoleMatrix = async () => {
                     try {
-                        const savedLocal = (() => {
-                            try {
-                                const parsed = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
-                                return Array.isArray(parsed) ? parsed : [];
-                            } catch (e) {
-                                return [];
-                            }
-                        })();
-
-                        if (savedLocal.length) {
-                            const normalizedSaved = normalizeRoleMatrix(savedLocal);
-                            setRoleMatrix(normalizedSaved);
-                            localStorage.setItem('medicore_role_matrix', JSON.stringify(normalizedSaved));
-                            return;
-                        }
-
                         if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
                             const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
                             const remoteMatrix = Array.isArray(remoteSettings.roleMatrix) ? remoteSettings.roleMatrix : [];
                             if (remoteMatrix.length) {
                                 const normalizedRemote = normalizeRoleMatrix(remoteMatrix);
                                 setRoleMatrix(normalizedRemote);
-                                localStorage.setItem('medicore_role_matrix', JSON.stringify(normalizedRemote));
                             }
                         }
                     } catch (e) {
@@ -312,11 +296,11 @@
             }, []);
 
             useEffect(() => {
-                const refreshAccessPolicy = () => {
-                    try {
-                        const matrix = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                const refreshAccessPolicy = (event) => {
+                    const matrix = event?.detail?.roleMatrix;
+                    if (Array.isArray(matrix) && matrix.length) {
                         setRoleMatrix(normalizeRoleMatrix(matrix));
-                    } catch (e) {}
+                    }
                 };
                 window.addEventListener('medicore:access-policy-updated', refreshAccessPolicy);
                 return () => window.removeEventListener('medicore:access-policy-updated', refreshAccessPolicy);
@@ -366,14 +350,7 @@
                 return String(role || 'patient').trim().toLowerCase().replace(/\s+/g, '_');
             };
 
-            const getStoredRoleMatrix = () => {
-                try {
-                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
-                    return normalizeRoleMatrix(Array.isArray(saved) && saved.length ? saved : roleMatrix);
-                } catch (e) {
-                    return normalizeRoleMatrix(roleMatrix);
-                }
-            };
+            const getStoredRoleMatrix = () => normalizeRoleMatrix(roleMatrix);
 
             const getRolePermissions = useCallback((role) => {
                 const normalizedRole = normalizeRoleKey(role);
@@ -406,10 +383,6 @@
                 if (!user) return false;
                 // This control is deliberately evaluated here (rather than only in
                 // navigation) so direct navigation is governed by the same policy.
-                try {
-                    const savedSettings = JSON.parse(localStorage.getItem('medicore_settings') || '{}');
-                    if (savedSettings.roleBasedAccess === false) return true;
-                } catch (e) {}
                 const normalizedRole = normalizeRoleKey(user.role);
 
                 const matrix = getStoredRoleMatrix();

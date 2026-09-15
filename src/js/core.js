@@ -54,7 +54,9 @@
             ...row,
             id: row.id,
             email: row.email,
-            role: row.role || 'super_admin',
+            // Never turn a malformed or incomplete directory row into an
+            // administrator in the browser. Server RLS remains authoritative.
+            role: row.role || 'receptionist',
             name: row.full_name || row.name || row.email,
             fullName: row.full_name || row.name || row.email,
             patientId: row.patient_id || row.patientId || null,

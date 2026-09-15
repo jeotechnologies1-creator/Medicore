@@ -42,7 +42,7 @@
                 if (!messageDraft.trim()) return;
                 const client = window.MedicoreSupabase?.getClient?.();
                 if (!client || !patient?.id) return;
-                const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
+                const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
                 if (error || !data?.[0]) return;
                 setPortalMessages((current) => [...current, { id: data[0].id, sender: data[0].sender_name, direction: data[0].direction, text: data[0].message, sentAt: data[0].sent_at }]);
                 setMessageDraft('');
