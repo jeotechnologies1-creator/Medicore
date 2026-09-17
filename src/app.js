@@ -12,7 +12,7 @@
                                 <p className="text-sm text-slate-500">
                                     Please contact your super administrator to request access or update the role matrix permissions.
                                 </p>
-                                <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: 'dashboard' }))}>Return to dashboard</Button>
+                                <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'dashboard' }))}>Return to dashboard</Button>
                             </div>
                         </Card>
                     </div>
@@ -30,20 +30,20 @@
             const [dataLoad, setDataLoad] = useState({ loading: false, failures: [] });
             const [theme, setTheme] = useState(() => {
                 try {
-                    return localStorage.getItem('medicore_theme') || 'dark';
+                    return localStorage.getItem('onemed_theme') || 'dark';
                 } catch (e) {
                     return 'dark';
                 }
             });
 
             const { user, logout, hasModuleAccess } = useAuth();
-            const supabaseStatus = window.MedicoreSupabase?.getStatus?.() || { configured: false, mode: 'local' };
+            const supabaseStatus = window.OneMedSupabase?.getStatus?.() || { configured: false, mode: 'local' };
 
             useEffect(() => {
                 try {
                     document.body.classList.remove('theme-light', 'theme-dark');
                     document.body.classList.add(`theme-${theme}`);
-                    localStorage.setItem('medicore_theme', theme);
+                    localStorage.setItem('onemed_theme', theme);
                 } catch (e) {}
             }, [theme]);
 
@@ -57,14 +57,14 @@
                 const handleNavigation = (event) => {
                     if (event.detail) setActiveModule(event.detail);
                 };
-                window.addEventListener('medicore:navigate', handleNavigation);
-                return () => window.removeEventListener('medicore:navigate', handleNavigation);
+                window.addEventListener('onemed:navigate', handleNavigation);
+                return () => window.removeEventListener('onemed:navigate', handleNavigation);
             }, []);
 
             useEffect(() => {
                 const handlePersistenceError = (event) => addToast(event.detail || 'No changes were saved.', 'error');
-                window.addEventListener('medicore:persistence-error', handlePersistenceError);
-                return () => window.removeEventListener('medicore:persistence-error', handlePersistenceError);
+                window.addEventListener('onemed:persistence-error', handlePersistenceError);
+                return () => window.removeEventListener('onemed:persistence-error', handlePersistenceError);
             }, []);
 
             useEffect(() => {
@@ -113,7 +113,7 @@
 
             const persistNotificationReadState = async (notificationIds, read = true) => {
                 const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!ids.length) return null;
                 if (!client) return notifyPersistenceFailure('update notification status');
                 const { error } = await client.from('notifications').update({ read }).in('id', ids);

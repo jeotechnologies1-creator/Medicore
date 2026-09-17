@@ -2,7 +2,7 @@
 
 ## Current assessment
 
-MediCore provides a useful foundation: patient registration, appointments, orders, results, admissions, pharmacy, billing, a portal, audit logs, and role-based navigation. The app now compiles cleanly across all browser-loaded scripts. Recent fixes address a dashboard crash, department persistence, inventory valuation, expiry counting, and stock-status updates after dispensing.
+OneMed provides a useful foundation: patient registration, appointments, orders, results, admissions, pharmacy, billing, a portal, audit logs, and role-based navigation. The app now compiles cleanly across all browser-loaded scripts. Recent fixes address a dashboard crash, department persistence, inventory valuation, expiry counting, and stock-status updates after dispensing.
 
 This is not yet appropriate to describe as safer or more complete than established production EHRs. Production EHR quality depends on independently validated clinical workflows, server-enforced authorization, operational downtime processes, traceable data changes, and deployment-specific regulatory assessment.
 

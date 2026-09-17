@@ -2,11 +2,11 @@
 -- Replaces the legacy "any authenticated user can do anything" policies.
 
 create or replace function public.is_staff() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce((select role <> 'patient' and status = 'active' from public.profiles where auth_user_id = auth.uid() limit 1), false);
+  select coalesce((select role::text <> 'patient' and status::text = 'active' from public.profiles where auth_user_id = auth.uid() limit 1), false);
 $$;
 
 create or replace function public.is_admin() returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce((select role = 'super_admin' and status = 'active' from public.profiles where auth_user_id = auth.uid() limit 1), false);
+  select coalesce((select role::text = 'super_admin' and status::text = 'active' from public.profiles where auth_user_id = auth.uid() limit 1), false);
 $$;
 
 -- Operational records are staff-only. Patient-facing records get their own policy below.

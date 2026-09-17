@@ -1,4 +1,4 @@
-# MediCore EMR go-live checklist
+# OneMed EMR go-live checklist
 
 This application is a clinical-record system. Do not describe it as certified, compliant, or production-ready until the controls below have been implemented, tested, and approved by the responsible clinical, privacy, and security leaders.
 
@@ -27,4 +27,4 @@ This application is a clinical-record system. Do not describe it as certified, c
 - Exercise each role end-to-end in a staging project: registration, appointment, encounter, vital signs, orders/results, prescription/dispense, admission/discharge, billing/payment/claim, documents, portal requests, and audit review.
 - Establish clinical governance: named medical director, safety lead, privacy officer, change-control process, user training, support escalation, and release rollback plan.
 
-FHIR is intended for structured, electronic health-information exchange and uses resources as the common exchange building blocks. See the [FHIR overview](https://hl7.org/fhir/overview.html). The HHS guidance is a useful security baseline, but it does not replace advice for the jurisdiction in which MediCore is deployed.
+FHIR is intended for structured, electronic health-information exchange and uses resources as the common exchange building blocks. See the [FHIR overview](https://hl7.org/fhir/overview.html). The HHS guidance is a useful security baseline, but it does not replace advice for the jurisdiction in which OneMed is deployed.

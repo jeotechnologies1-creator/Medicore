@@ -31,7 +31,7 @@
             }, [initialTab]);
 
             useEffect(() => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !patient?.id) return;
                 client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at').then(({ data, error }) => {
                     if (!error) setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at })));
@@ -40,7 +40,7 @@
 
             const handleSendMessage = async () => {
                 if (!messageDraft.trim()) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !patient?.id) return;
                 const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
                 if (error || !data?.[0]) return;
@@ -49,7 +49,7 @@
             };
 
             const handleBookAppointment = async () => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !patient?.id || !appointmentDraft.date) return;
                 const { error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: appointmentDraft.doctorId || null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null });
                 if (error) return;
@@ -66,7 +66,7 @@
 
             const handleRequestRefill = async () => {
                 if (!refillDraft.medication.trim()) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !patient?.id) return;
                 const { error } = await client.from('medication_refill_requests').insert({ patient_id: patient.id, medication_name: refillDraft.medication.trim(), quantity: Number(refillDraft.quantity || 0), notes: refillDraft.notes || null });
                 if (error) return;

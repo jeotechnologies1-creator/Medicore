@@ -1,6 +1,6 @@
-# MediCore
+# OneMed
 
-MediCore is a browser-based EMR/Hospital Management System backed by Supabase.
+OneMed is a browser-based EMR/Hospital Management System backed by Supabase.
 
 ## Front-end structure
 
@@ -27,11 +27,13 @@ Run the SQL files in this order in the Supabase SQL editor:
 9. `supabase/atomic_pharmacy_dispensing.sql`
 10. `supabase/quality_safety_upgrade.sql`
 11. `supabase/app_activation.sql`
-12. `supabase/role_authorization.sql`
+12. `supabase/legacy_role_enum_compatibility.sql` (only for legacy projects using `public.user_role`)
+13. `supabase/role_authorization.sql`
+14. `supabase/safe_core_multibranch.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
-MediCore has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
+OneMed has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
 
 The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
 

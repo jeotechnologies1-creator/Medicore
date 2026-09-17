@@ -71,7 +71,7 @@
                     chronic_conditions: 'None'
                 };
 
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function' ? window.OneMedSupabase.getClient() : null;
                 if (!client) return notifyPersistenceFailure('register patient');
                 setSaving(true);
                 const { data, error } = await client.from('patients').insert([payload]).select();
@@ -203,7 +203,7 @@
                     : null;
 
                 const insertClinicalRecord = async (table, payload) => {
-                    const client = window.MedicoreSupabase?.getClient?.();
+                    const client = window.OneMedSupabase?.getClient?.();
                     if (!client) return null;
                     const { data, error } = await client.from(table).insert(payload).select();
                     if (error) {
@@ -283,7 +283,7 @@
                 const handleSaveDischargeSummary = async () => {
                     if (!dischargeForm.summary.trim() && !dischargeForm.followUp.trim() && !dischargeForm.instructions.trim()) return;
                     const activeAdmission = (appData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
-                    const client = window.MedicoreSupabase?.getClient?.();
+                    const client = window.OneMedSupabase?.getClient?.();
                     if (!activeAdmission || !client) return notifyPersistenceFailure('finalize discharge');
                     const { data: reconciliationData, error: reconciliationError } = await client.from('medication_reconciliations').insert({
                         patient_id: patient.id,

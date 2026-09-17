@@ -420,7 +420,7 @@
                     status: Number(stockForm.stockQuantity) <= Number(stockForm.reorderLevel) ? 'low_stock' : 'active'
                 };
 
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('add inventory');
                 const { data, error } = await client.from('pharmacy_inventory').insert([{
                     name: payload.name, generic_name: payload.genericName || null, category: payload.category || null,
@@ -438,7 +438,7 @@
             };
 
             const handleDispense = async (prescription) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('dispense medication');
                 const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id });
                 if (error || !data?.items) return notifyPersistenceFailure('dispense medication', error || new Error('The dispensing transaction did not return a result.'));
@@ -632,11 +632,20 @@
             const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
+            const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
 
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
+
+            useEffect(() => {
+                let active = true;
+                window.OneMedSupabase?.loadSystemSettings?.().then((settings) => {
+                    if (active) setBankAccounts(Array.isArray(settings?.bankAccounts) ? settings.bankAccounts : []);
+                }).catch(() => {});
+                return () => { active = false; };
+            }, []);
 
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
@@ -660,7 +669,7 @@
                     status: Number(invoiceForm.paid || 0) >= Number(invoiceForm.total || 0) ? 'paid' : 'pending'
                 };
 
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create invoice');
                 const { data, error } = await client.from('billing').insert([{
                     patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date,
@@ -687,7 +696,7 @@
                     return { ...invoice, paid: paidNow, balance, status, paymentMethod: paymentForm.method || invoice.paymentMethod };
                 });
                 const changed = updated.find(invoice => invoice.id === paymentForm.invoiceId);
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !changed) return notifyPersistenceFailure('process payment');
                 const { error } = await client.from('billing').update({ paid: changed.paid, balance: changed.balance, status: changed.status, payment_method: changed.paymentMethod }).eq('id', changed.id);
                 if (error) return notifyPersistenceFailure('process payment', error);
@@ -706,7 +715,7 @@
                     return { ...claim, status: nextStatus, amountApproved: Number(claim.amountApproved || 0) || Number(claim.amountClaimed || 0) };
                 });
                 const changed = nextClaims.find(claim => claim.id === claimId);
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !changed) return notifyPersistenceFailure('advance insurance claim');
                 const { error } = await client.from('insurance_claims').update({ status: changed.status, amount_approved: changed.amountApproved }).eq('id', claimId);
                 if (error) return notifyPersistenceFailure('advance insurance claim', error);
@@ -725,7 +734,7 @@
                     amountApproved: Number(claimForm.amountApproved || 0),
                     status: Number(claimForm.amountApproved || 0) > 0 ? 'under_review' : 'pending'
                 };
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('submit insurance claim');
                 const { data, error } = await client.from('insurance_claims').insert({ patient_id: nextClaim.patientId, claim_number: nextClaim.claimNumber, provider: nextClaim.provider, amount_claimed: nextClaim.amountClaimed, amount_approved: nextClaim.amountApproved, status: nextClaim.status }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('submit insurance claim', error);
@@ -945,6 +954,12 @@
                     >
                         <div className="space-y-4">
                             <Select label="Payment method" value={paymentForm.method} onChange={(e) => setPaymentForm(prev => ({ ...prev, method: e.target.value }))} options={[{ value: 'Card', label: 'Card' }, { value: 'Cash', label: 'Cash' }, { value: 'Bank Transfer', label: 'Bank Transfer' }, { value: 'Insurance', label: 'Insurance' }]} />
+                            {paymentForm.method === 'Bank Transfer' && (
+                                <div className="rounded-lg border border-medical-200 bg-medical-50 p-3 text-sm text-medical-900">
+                                    <p className="font-medium">Pay into a verified hospital account</p>
+                                    {bankAccounts.length ? bankAccounts.map((account) => <p key={account.accountNumber} className="mt-1">{account.bankName} · {account.accountName} · {account.accountNumber}</p>) : <p className="mt-1 text-amber-700">No verified account has been configured. Ask a Super Admin before accepting a transfer.</p>}
+                                </div>
+                            )}
                             <Input label="Amount" type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))} />
                             <Input label="Reference" value={paymentForm.reference} onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))} />
                         </div>
@@ -998,7 +1013,7 @@
                     acuity: admissionForm.acuity
                 };
 
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('admit patient');
                 const { data, error } = await client.from('admissions').insert([{
                     patient_id: payload.patientId, ward: payload.ward || null, bed_number: payload.bedNumber || null,
@@ -1149,7 +1164,7 @@
                     priority: surgeryForm.priority
                 };
 
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('schedule surgery');
                 const { data, error } = await client.from('surgeries').insert([{
                     patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure,

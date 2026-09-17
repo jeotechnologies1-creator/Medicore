@@ -31,7 +31,7 @@
                     notes: appointmentForm.notes || '',
                     createdAt: new Date().toISOString()
                 };
-                const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function' ? window.MedicoreSupabase.getClient() : null;
+                const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function' ? window.OneMedSupabase.getClient() : null;
                 if (client) {
                     const { data, error } = await client.from('appointments').insert([{
                         patient_id: payload.patientId, doctor_id: payload.doctorId || null,
@@ -64,7 +64,7 @@
             };
 
             const handleCheckIn = async (appointment) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) { setSaveError('Supabase is not configured.'); return; }
                 const { error } = await client.from('appointments').update({ status: 'checked_in' }).eq('id', appointment.id);
                 if (error) { setSaveError(error.message); return; }
@@ -244,7 +244,7 @@
                     results: null,
                     technicianId: null
                 };
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create laboratory order');
                 const { data, error } = await client.from('lab_orders').insert([{
                     patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType,
@@ -274,7 +274,7 @@
                         values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: isCritical ? 'critical' : resultForm.severity }))
                     }
                 };
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
                 const { error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'final', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
@@ -452,7 +452,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Clinical Decision Support</h2>
                             <p className="text-slate-500 mt-1">Evidence-based alerts, drug checks, and protocol guidance</p>
                         </div>
-                        <Button variant="primary" icon={Icons.ShieldCheck} onClick={() => window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: 'clinical_safety' }))}>Review Safety</Button>
+                        <Button variant="primary" icon={Icons.ShieldCheck} onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'clinical_safety' }))}>Review Safety</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -525,7 +525,7 @@
                     orderedDate: new Date().toISOString().split('T')[0]
                 };
 
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create radiology order');
                 const { data, error } = await client.from('radiology_orders').insert([{
                     patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType,
@@ -543,7 +543,7 @@
             };
 
             const handleReportStudy = async (row) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!String(reportDraft).trim()) {
                     return notifyPersistenceFailure('finalize radiology report', new Error('Enter the clinical report before finalizing the study.'));
                 }

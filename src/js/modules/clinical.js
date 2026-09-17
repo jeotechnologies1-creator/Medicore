@@ -4,7 +4,7 @@
 
             const handleSaveConsultation = async () => {
                 if (!form.patientId || !form.chiefComplaint) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return;
                 const { data, error } = await client.from('consultations').insert({
                     patient_id: form.patientId, doctor_id: form.doctorId || null, chief_complaint: form.chiefComplaint,
@@ -76,7 +76,7 @@
 
             const handleSaveVitals = async () => {
                 if (!form.patientId) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return;
                 const numericOrNull = (value) => value === '' ? null : Number(value);
                 const { data, error } = await client.from('vital_signs').insert({
@@ -158,7 +158,7 @@
             const patients = getLiveStore().patients || [];
 
             const save = async (table, payload, setter, appTable, mapper) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return false;
                 const { data, error } = await client.from(table).insert([payload]).select();
                 if (error || !data?.[0]) { console.error(`Unable to save ${table}`, error); return false; }
@@ -204,7 +204,7 @@
             };
 
             const acknowledgeResult = async (acknowledgement) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !user?.id) return notifyPersistenceFailure('acknowledge result');
                 const { data, error } = await client.from('result_acknowledgements').update({
                     status: 'acknowledged', acknowledged_at: new Date().toISOString(), acknowledged_by: user.id
@@ -355,7 +355,7 @@
 
             const saveEncounter = async () => {
                 if (!encounterForm.patientId || !encounterForm.reason.trim()) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('start encounter');
                 const { data, error } = await client.from('encounters').insert({ patient_id: encounterForm.patientId, attending_clinician_id: user?.id || null, encounter_type: encounterForm.encounterType, location: encounterForm.location || null, reason_for_visit: encounterForm.reason.trim(), status: 'in_progress' }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('start encounter', error);
@@ -365,7 +365,7 @@
             };
             const saveImmunization = async () => {
                 if (!immunizationForm.patientId || !immunizationForm.vaccine.trim()) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record immunization');
                 const { data, error } = await client.from('immunizations').insert({ patient_id: immunizationForm.patientId, vaccine: immunizationForm.vaccine.trim(), status: 'administered', administered_date: immunizationForm.administeredDate || null, next_due_date: immunizationForm.nextDueDate || null, notes: immunizationForm.notes || null }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('record immunization', error);
@@ -375,7 +375,7 @@
             };
             const saveAdministration = async () => {
                 if (!administrationForm.patientId || !administrationForm.medicationName.trim()) return;
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record medication administration');
                 const { data, error } = await client.from('medication_administrations').insert({ patient_id: administrationForm.patientId, medication_name: administrationForm.medicationName.trim(), dosage: administrationForm.dosage || null, administered_by: user?.id || null, notes: administrationForm.notes || null }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('record medication administration', error);
@@ -384,7 +384,7 @@
                 setAdministrationForm({ patientId: '', medicationName: '', dosage: '', notes: '' });
             };
             const completeEncounter = async (encounter) => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('complete encounter');
                 const { data, error } = await client.from('encounters').update({ status: 'completed', ended_at: new Date().toISOString() }).eq('id', encounter.id).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('complete encounter', error);
@@ -410,7 +410,7 @@
                 const file = event.target.files && event.target.files[0];
                 if (!file || !patientId) { setUploadError('Select a patient before uploading a document.'); return; }
                 setUploadError('');
-                const { data, error } = await window.MedicoreSupabase.uploadPatientDocument(patientId, file, documentType);
+                const { data, error } = await window.OneMedSupabase.uploadPatientDocument(patientId, file, documentType);
                 if (error || !data) { setUploadError(error?.message || 'Upload failed.'); return; }
                 const next = [normalizeDocuments([data])[0], ...documents];
                 appData.documents = next;
@@ -419,7 +419,7 @@
             };
 
             const openDocument = async (document) => {
-                const { data, error } = await window.MedicoreSupabase.createDocumentUrl(document.fileUrl);
+                const { data, error } = await window.OneMedSupabase.createDocumentUrl(document.fileUrl);
                 if (error || !data?.signedUrl) { setUploadError(error?.message || 'Unable to open the document.'); return; }
                 window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
             };

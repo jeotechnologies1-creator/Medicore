@@ -1,10 +1,12 @@
 -- Run after app_activation.sql. Replaces broad "any staff member" write access
--- with minimum role-based permissions for the MediCore browser workflows.
+-- with minimum role-based permissions for the OneMed browser workflows.
+-- If profiles.role is a legacy enum, run legacy_role_enum_compatibility.sql
+-- as a separate SQL Editor query before running this migration.
 
 create or replace function public.has_any_role(allowed_roles text[]) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((
-    select status = 'active' and role = any(allowed_roles)
+    select status::text = 'active' and role::text = any(allowed_roles)
     from public.profiles where auth_user_id = auth.uid() limit 1
   ), false);
 $$;
@@ -207,7 +209,7 @@ create policy "clinical read medication reconciliations" on public.medication_re
 alter table public.profiles alter column role set default 'receptionist';
 alter table public.profiles drop constraint if exists profiles_role_allowed;
 alter table public.profiles add constraint profiles_role_allowed check (
-  role in ('super_admin','doctor','nurse','receptionist','pharmacist','laboratory_scientist','radiographer','accountant','patient')
+  role::text in ('super_admin','doctor','nurse','receptionist','pharmacist','laboratory_scientist','radiographer','accountant','patient')
 ) not valid;
 alter table public.profiles drop constraint if exists profiles_status_allowed;
 alter table public.profiles add constraint profiles_status_allowed check (status in ('active','inactive','suspended')) not valid;

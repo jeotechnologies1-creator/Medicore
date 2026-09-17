@@ -1,17 +1,17 @@
 (function () {
-    const STORAGE_KEY = 'medicore_supabase_config';
+    const STORAGE_KEY = 'onemed_supabase_config';
     let client = null;
     let clientSignature = '';
 
     // Earlier builds could cache a browser-only record store. Clinical records
     // are now Supabase-only, so discard that legacy cache on every startup.
     try {
-        localStorage.removeItem('medicore_store');
-        localStorage.removeItem('medicore_seed_data');
+        localStorage.removeItem('onemed_store');
+        localStorage.removeItem('onemed_seed_data');
     } catch (e) {}
 
     const getConfig = () => {
-        const override = window.__MEDICORE_SUPABASE__ || {};
+        const override = window.__ONEMED_SUPABASE__ || {};
         const saved = (() => {
             try {
                 return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -37,7 +37,7 @@
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         } catch (e) {}
-        window.__MEDICORE_SUPABASE__ = normalized;
+        window.__ONEMED_SUPABASE__ = normalized;
         client = null;
         clientSignature = '';
         return normalized;
@@ -314,7 +314,7 @@
         if (client) await client.auth.signOut();
     };
 
-    window.MedicoreSupabase = {
+    window.OneMedSupabase = {
         getConfig,
         setConfig,
         isConfigured,

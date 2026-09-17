@@ -1,4 +1,4 @@
-# MediCore database activation
+# OneMed database activation
 
 Apply these files in the Supabase SQL Editor, in this exact order, to a new project. Each script is additive/idempotent where practical; always test upgrades against a staging copy first.
 

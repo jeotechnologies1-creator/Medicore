@@ -472,19 +472,19 @@
         // A displayed record is therefore always a record that Supabase accepted.
         const notifyPersistenceFailure = (operation, error) => {
             const reason = error?.message ? ` ${error.message}` : '';
-            window.dispatchEvent(new CustomEvent('medicore:persistence-error', {
+            window.dispatchEvent(new CustomEvent('onemed:persistence-error', {
                 detail: `Unable to ${operation}. No changes were saved.${reason}`
             }));
             return null;
         };
 
         const navigateTo = (module) => {
-            window.dispatchEvent(new CustomEvent('medicore:navigate', { detail: module }));
+            window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: module }));
         };
 
         const loadSupabaseTables = async () => {
-            const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function'
-                ? window.MedicoreSupabase.getClient()
+            const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function'
+                ? window.OneMedSupabase.getClient()
                 : null;
             if (!client) {
                 initializeEmptyStore();

@@ -1,4 +1,4 @@
--- MediCore clinical-safety and interoperability migration
+-- OneMed clinical-safety and interoperability migration
 -- Run this AFTER schema.sql, clinical_modules.sql and wards_beds_insurance.sql.
 -- It is intentionally additive: existing records remain available.
 
@@ -203,7 +203,7 @@ end; $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_auth_user();
 
--- Tighten policies created by earlier MediCore scripts on already-deployed projects.
+-- Tighten policies created by earlier OneMed scripts on already-deployed projects.
 -- Role- and patient-scoped policies should replace this transitional staff setup before go-live.
 do $$
 declare table_name text;

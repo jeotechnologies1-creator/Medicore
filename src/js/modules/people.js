@@ -212,8 +212,8 @@
                 setSaving(true);
                 setMessage('');
                 try {
-                    const client = window.MedicoreSupabase && typeof window.MedicoreSupabase.getClient === 'function'
-                        ? window.MedicoreSupabase.getClient()
+                    const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function'
+                        ? window.OneMedSupabase.getClient()
                         : null;
 
                     if (!client) {
@@ -273,7 +273,7 @@
                 setCreatingStaff(true);
                 setStaffMessage('');
                 try {
-                    const client = window.MedicoreSupabase?.getClient?.();
+                    const client = window.OneMedSupabase?.getClient?.();
                     if (!client) throw new Error('Supabase client is not available.');
                     const { data, error } = await client.functions.invoke('create-staff', { body: { ...staffForm, fullName: staffForm.fullName, email: staffForm.email.trim() } });
                     if (error) throw error;

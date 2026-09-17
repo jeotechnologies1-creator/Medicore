@@ -293,6 +293,7 @@
             const defaultSettings = {
                 facilityName: '',
                 facilityCode: '',
+                bankAccounts: [],
                 timezone: 'UTC',
                 locale: 'en-US',
                 currency: 'USD',
@@ -556,9 +557,9 @@
 
             const [settings, setSettings] = useState(() => {
                 try {
-                    const saved = JSON.parse(localStorage.getItem('medicore_settings') || '{}');
+                    const saved = JSON.parse(localStorage.getItem('onemed_settings') || '{}');
                     const sanitizedSaved = { ...saved };
-                    if (sanitizedSaved.facilityName === 'MediCore Hospital') sanitizedSaved.facilityName = '';
+                    if (sanitizedSaved.facilityName === 'OneMed Hospital') sanitizedSaved.facilityName = '';
                     if (sanitizedSaved.facilityCode === 'MC-001') sanitizedSaved.facilityCode = '';
                     if (sanitizedSaved.phone === '+1 (800) 555-0147') sanitizedSaved.phone = '';
                     if (sanitizedSaved.serviceLine === 'General Hospital & Outpatient Clinics') sanitizedSaved.serviceLine = '';
@@ -568,9 +569,10 @@
                 }
             });
             const [saveMessage, setSaveMessage] = useState('');
+            const [bankAccountDraft, setBankAccountDraft] = useState({ bankName: '', accountName: '', accountNumber: '' });
             const [roleMatrix, setRoleMatrix] = useState(() => {
                 try {
-                    const saved = JSON.parse(localStorage.getItem('medicore_role_matrix') || '[]');
+                    const saved = JSON.parse(localStorage.getItem('onemed_role_matrix') || '[]');
                     if (Array.isArray(saved) && saved.length) {
                         return completeMatrixRows(saved);
                     }
@@ -589,8 +591,8 @@
             useEffect(() => {
                 const hydrateFromSupabase = async () => {
                     try {
-                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
-                            const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
+                        if (window.OneMedSupabase && typeof window.OneMedSupabase.loadSystemSettings === 'function') {
+                            const remoteSettings = await window.OneMedSupabase.loadSystemSettings();
                             if (remoteSettings && Object.keys(remoteSettings).length) {
                                 const { roleMatrix: remoteRoleMatrix, ...remoteOnlySettings } = remoteSettings;
                                 setSettings(prev => ({ ...prev, ...remoteOnlySettings }));
@@ -600,14 +602,14 @@
                                 }
                             }
                         }
-                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadDepartments === 'function') {
-                            const remoteDepartments = await window.MedicoreSupabase.loadDepartments();
+                        if (window.OneMedSupabase && typeof window.OneMedSupabase.loadDepartments === 'function') {
+                            const remoteDepartments = await window.OneMedSupabase.loadDepartments();
                             if (remoteDepartments && remoteDepartments.length) {
                                 setDepartments(remoteDepartments);
                             }
                         }
-                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadComplianceExports === 'function') {
-                            const remoteExports = await window.MedicoreSupabase.loadComplianceExports();
+                        if (window.OneMedSupabase && typeof window.OneMedSupabase.loadComplianceExports === 'function') {
+                            const remoteExports = await window.OneMedSupabase.loadComplianceExports();
                             setExportHistory(remoteExports || []);
                         }
                     } catch (e) {
@@ -622,12 +624,34 @@
                 setSettings(prev => ({ ...prev, [key]: value }));
             };
 
+            const addBankAccount = () => {
+                const bankName = bankAccountDraft.bankName.trim();
+                const accountName = bankAccountDraft.accountName.trim();
+                const accountNumber = bankAccountDraft.accountNumber.replace(/\s+/g, '');
+                if (!bankName || !accountName || !/^\d{10}$/.test(accountNumber)) {
+                    setSaveMessage('Enter a bank name, account name, and a valid 10-digit Nigerian account number.');
+                    return;
+                }
+                if ((settings.bankAccounts || []).some((account) => account.accountNumber === accountNumber)) {
+                    setSaveMessage('This bank account is already listed.');
+                    return;
+                }
+                updateSetting('bankAccounts', [...(settings.bankAccounts || []), { bankName, accountName, accountNumber, primary: !(settings.bankAccounts || []).length }]);
+                setBankAccountDraft({ bankName: '', accountName: '', accountNumber: '' });
+                setSaveMessage('Bank account added. Save Settings to make it available to Billing.');
+            };
+
+            const removeBankAccount = (accountNumber) => {
+                const remaining = (settings.bankAccounts || []).filter((account) => account.accountNumber !== accountNumber);
+                updateSetting('bankAccounts', remaining.map((account, index) => ({ ...account, primary: index === 0 })));
+            };
+
             const saveSettings = async () => {
                 try {
                     const cleanedMatrix = completeMatrixRows(roleMatrix);
                     setRoleMatrix(cleanedMatrix);
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        const { error } = await window.MedicoreSupabase.saveSystemSettings(settings, cleanedMatrix);
+                    if (window.OneMedSupabase && typeof window.OneMedSupabase.saveSystemSettings === 'function') {
+                        const { error } = await window.OneMedSupabase.saveSystemSettings(settings, cleanedMatrix);
                         if (error) {
                             setSaveMessage('Settings were not saved. Supabase rejected the change.');
                             return;
@@ -636,7 +660,7 @@
                         setSaveMessage('Settings were not saved. Connect Supabase to apply access changes.');
                         return;
                     }
-                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated', { detail: { roleMatrix: cleanedMatrix } }));
+                    window.dispatchEvent(new CustomEvent('onemed:access-policy-updated', { detail: { roleMatrix: cleanedMatrix } }));
                     setSaveMessage('Settings and role matrix saved successfully.');
                 } catch (e) {
                     setSaveMessage('Unable to save settings in this browser session.');
@@ -649,8 +673,8 @@
                 setRoleMatrix(resetMatrix);
                 setDepartments(initialDepartments);
                 try {
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.saveSystemSettings === 'function') {
-                        const { error } = await window.MedicoreSupabase.saveSystemSettings(defaultSettings, resetMatrix);
+                    if (window.OneMedSupabase && typeof window.OneMedSupabase.saveSystemSettings === 'function') {
+                        const { error } = await window.OneMedSupabase.saveSystemSettings(defaultSettings, resetMatrix);
                         if (error) {
                             setSaveMessage('Baseline settings were not saved. Supabase rejected the change.');
                             return;
@@ -659,7 +683,7 @@
                         setSaveMessage('Baseline settings were not saved. Connect Supabase to apply access changes.');
                         return;
                     }
-                    window.dispatchEvent(new CustomEvent('medicore:access-policy-updated', { detail: { roleMatrix: resetMatrix } }));
+                    window.dispatchEvent(new CustomEvent('onemed:access-policy-updated', { detail: { roleMatrix: resetMatrix } }));
                     setSaveMessage('Baseline EMR settings restored.');
                 } catch (e) {
                     setSaveMessage('Baseline settings restored locally.');
@@ -708,8 +732,8 @@
                 };
 
                 try {
-                    if (!window.MedicoreSupabase?.createDepartment) throw new Error('Supabase is not configured.');
-                    const { data: savedDepartment, error } = await window.MedicoreSupabase.createDepartment(newDepartment);
+                    if (!window.OneMedSupabase?.createDepartment) throw new Error('Supabase is not configured.');
+                    const { data: savedDepartment, error } = await window.OneMedSupabase.createDepartment(newDepartment);
                     if (error || !savedDepartment) throw error || new Error('The department could not be saved.');
                     setDepartments(prev => [...prev, savedDepartment].sort((a, b) => a.name.localeCompare(b.name)));
                     setDepartmentDraft({ name: '', type: 'Ward', capacity: 20, status: 'active' });
@@ -731,8 +755,8 @@
                 setDepartments(nextDepartments);
 
                 try {
-                    if (!window.MedicoreSupabase?.updateDepartment) throw new Error('Supabase is not configured.');
-                    const { data: savedDepartment, error } = await window.MedicoreSupabase.updateDepartment(id, changedDepartment);
+                    if (!window.OneMedSupabase?.updateDepartment) throw new Error('Supabase is not configured.');
+                    const { data: savedDepartment, error } = await window.OneMedSupabase.updateDepartment(id, changedDepartment);
                     if (error || !savedDepartment) throw error || new Error('The department could not be saved.');
                     setDepartments(current => current.map((item) => item.id === id ? savedDepartment : item));
                 } catch (e) {
@@ -745,8 +769,8 @@
                 const nextDepartments = departments.filter(item => item.id !== id);
                 setDepartments(nextDepartments);
                 try {
-                    if (!window.MedicoreSupabase?.deleteDepartment) throw new Error('Supabase is not configured.');
-                    const { error } = await window.MedicoreSupabase.deleteDepartment(id);
+                    if (!window.OneMedSupabase?.deleteDepartment) throw new Error('Supabase is not configured.');
+                    const { error } = await window.OneMedSupabase.deleteDepartment(id);
                     if (error) throw error;
                     setSaveMessage('Department removed from the configuration.');
                 } catch (e) {
@@ -771,15 +795,15 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = 'medicore-audit-export.csv';
+                link.download = 'onemed-audit-export.csv';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
 
                 try {
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.recordComplianceExport === 'function') {
-                        const result = await window.MedicoreSupabase.recordComplianceExport('audit_csv', 'medicore-audit-export.csv', rows.length, {
+                    if (window.OneMedSupabase && typeof window.OneMedSupabase.recordComplianceExport === 'function') {
+                        const result = await window.OneMedSupabase.recordComplianceExport('audit_csv', 'onemed-audit-export.csv', rows.length, {
                             generatedBy: 'super_admin',
                             fileType: 'csv'
                         });
@@ -881,6 +905,25 @@
                                 </div>
                                 <Input label="Admin email" type="email" value={settings.contactEmail} onChange={(e) => updateSetting('contactEmail', e.target.value)} />
                                 <Input label="Service line" value={settings.serviceLine} onChange={(e) => updateSetting('serviceLine', e.target.value)} />
+                            </div>
+                        </Card>
+
+                        <Card title="Bank Transfer Accounts (NGN)">
+                            <p className="mb-4 text-sm text-slate-500">Only a Super Admin can maintain these verified payment instructions. They are shown when Finance posts a bank-transfer payment.</p>
+                            <div className="space-y-3">
+                                {(settings.bankAccounts || []).map((account) => (
+                                    <div key={account.accountNumber} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+                                        <div>
+                                            <p className="font-medium text-slate-800">{account.bankName} {account.primary ? <span className="text-xs text-medical-600">Primary</span> : null}</p>
+                                            <p className="text-xs text-slate-500">{account.accountName} · {account.accountNumber}</p>
+                                        </div>
+                                        <Button variant="ghost" size="sm" onClick={() => removeBankAccount(account.accountNumber)}>Remove</Button>
+                                    </div>
+                                ))}
+                                <Input label="Bank name" value={bankAccountDraft.bankName} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, bankName: e.target.value }))} />
+                                <Input label="Account name" value={bankAccountDraft.accountName} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, accountName: e.target.value }))} />
+                                <Input label="10-digit account number" inputMode="numeric" value={bankAccountDraft.accountNumber} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, accountNumber: e.target.value }))} />
+                                <Button variant="secondary" size="sm" onClick={addBankAccount}>Add bank account</Button>
                             </div>
                         </Card>
 

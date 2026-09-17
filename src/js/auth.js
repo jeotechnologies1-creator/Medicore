@@ -253,7 +253,7 @@
             const [loading, setLoading] = useState(false);
 
             useEffect(() => {
-                const client = window.MedicoreSupabase?.getClient?.();
+                const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return undefined;
                 let active = true;
                 const applySession = async (session) => {
@@ -279,8 +279,8 @@
             useEffect(() => {
                 const hydrateRoleMatrix = async () => {
                     try {
-                        if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loadSystemSettings === 'function') {
-                            const remoteSettings = await window.MedicoreSupabase.loadSystemSettings();
+                        if (window.OneMedSupabase && typeof window.OneMedSupabase.loadSystemSettings === 'function') {
+                            const remoteSettings = await window.OneMedSupabase.loadSystemSettings();
                             const remoteMatrix = Array.isArray(remoteSettings.roleMatrix) ? remoteSettings.roleMatrix : [];
                             if (remoteMatrix.length) {
                                 const normalizedRemote = normalizeRoleMatrix(remoteMatrix);
@@ -302,8 +302,8 @@
                         setRoleMatrix(normalizeRoleMatrix(matrix));
                     }
                 };
-                window.addEventListener('medicore:access-policy-updated', refreshAccessPolicy);
-                return () => window.removeEventListener('medicore:access-policy-updated', refreshAccessPolicy);
+                window.addEventListener('onemed:access-policy-updated', refreshAccessPolicy);
+                return () => window.removeEventListener('onemed:access-policy-updated', refreshAccessPolicy);
             }, []);
 
             const login = useCallback(async (email, password) => {
@@ -313,9 +313,9 @@
                     const normalizedEmail = String(email || '').trim();
                     const normalizedPassword = String(password || '');
 
-                    if (window.MedicoreSupabase && typeof window.MedicoreSupabase.loginProfile === 'function') {
+                    if (window.OneMedSupabase && typeof window.OneMedSupabase.loginProfile === 'function') {
                         try {
-                            found = await window.MedicoreSupabase.loginProfile(normalizedEmail, normalizedPassword);
+                            found = await window.OneMedSupabase.loginProfile(normalizedEmail, normalizedPassword);
                         } catch (error) {
                             console.warn('Supabase login failed:', error);
                             found = null;
@@ -343,7 +343,7 @@
 
             const logout = useCallback(() => {
                 setUser(null);
-                window.MedicoreSupabase?.logout?.();
+                window.OneMedSupabase?.logout?.();
             }, []);
 
             const normalizeRoleKey = (role) => {
@@ -448,7 +448,7 @@
                             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-medical-600 text-white mb-4 shadow-lg shadow-medical-200">
                                 <Icons.HeartPulse size={32} />
                             </div>
-                            <h1 className="text-3xl font-bold text-slate-900">MediCore EMR</h1>
+                            <h1 className="text-3xl font-bold text-slate-900">OneMed EMR</h1>
                             <p className="text-slate-500 mt-2">Hospital Management System</p>
                         </div>
                         

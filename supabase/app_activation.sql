@@ -1,4 +1,4 @@
--- MediCore application-contract migration
+-- OneMed application-contract migration
 -- Run AFTER every migration listed in README.md, including quality_safety_upgrade.sql.
 -- It aligns the database policies/functions with the front-end workflows.
 
@@ -6,7 +6,7 @@
 create or replace function public.is_clinical_staff() returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((
-    select role in ('super_admin','doctor','nurse','pharmacist','laboratory_scientist','radiographer')
+    select role::text in ('super_admin','doctor','nurse','pharmacist','laboratory_scientist','radiographer')
       and status = 'active'
     from public.profiles
     where auth_user_id = auth.uid()
@@ -21,6 +21,17 @@ create policy "staff read directory" on public.profiles for select using (public
 
 -- Notifications are private to their intended profile. Staff may create a
 -- notification for a recipient; only administrators may remove one.
+-- Older deployments used `is_read`; the browser and current schema use `read`.
+alter table public.notifications add column if not exists read boolean not null default false;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'notifications' and column_name = 'is_read'
+  ) then
+    execute 'update public.notifications set read = coalesce(is_read, false) where read = false';
+  end if;
+end $$;
 drop policy if exists "staff manage records" on public.notifications;
 drop policy if exists "users read own notifications" on public.notifications;
 drop policy if exists "users update own notifications" on public.notifications;

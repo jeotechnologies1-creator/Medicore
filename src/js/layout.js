@@ -107,7 +107,7 @@
                             </div>
                             {!collapsed && (
                                 <div>
-                                    <h1 className="font-bold text-slate-900 text-lg leading-tight">MediCore</h1>
+                                    <h1 className="font-bold text-slate-900 text-lg leading-tight">OneMed</h1>
                                     <p className="text-xs text-slate-400">EMR System</p>
                                 </div>
                             )}
@@ -171,7 +171,7 @@
                             </div>
                             <div>
                                 <p className="text-xs uppercase tracking-[0.28em] text-medical-200">Care command</p>
-                                <h1 className="text-base font-semibold text-white">MediCore</h1>
+                                <h1 className="text-base font-semibold text-white">OneMed</h1>
                             </div>
                         </div>
                         <div className="w-full max-w-xl">
