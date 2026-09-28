@@ -56,6 +56,8 @@ assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about lik
 assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
 assert.match(patients, /log_patient_access/, 'Opening a patient chart must write an access log first.');
 assert.match(patients, /schema\('public'\)\.rpc\('log_patient_access'/, 'Patient access logging must call the exposed public schema explicitly.');
+assert.match(patients, /error\?\.code === 'PGRST202'/, 'A missing access-log RPC must not block a chart already authorized by row-level security.');
+assert.match(patients, /this access was not logged/, 'Missing read-audit support must remain visible to the user.');
 assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
 assert.match(safeCore, /if not public\.is_staff\(\) and not public\.can_access_patient\(target_patient_id\)/, 'Patient access logging must allow the same staff and patient-owner groups as patient reads.');
 assert.match(safeCore, /drop function if exists public\.log_patient_access\(uuid, text\);[\s\S]*?create function public\.log_patient_access\(jsonb\)/, 'Migration must provide the PostgREST unnamed JSONB RPC fallback.');
