@@ -169,3 +169,6 @@ create policy "admins read clinical versions" on public.clinical_record_versions
 create policy "admins read patient access logs" on public.patient_access_logs for select using (public.is_admin());
 create policy "admins manage fhir jobs" on public.fhir_exchange_jobs for all using (public.is_admin()) with check (public.is_admin());
 create policy "admins manage downtime events" on public.downtime_events for all using (public.is_admin()) with check (public.is_admin());
+
+-- Make newly created/replaced RPCs visible to PostgREST immediately.
+notify pgrst, 'reload schema';
