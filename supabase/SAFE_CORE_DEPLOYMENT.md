@@ -2,30 +2,42 @@
 
 Apply `safe_core_multibranch.sql` after `role_authorization.sql` in staging, perform role tests, back up production, then apply it during an approved maintenance window.
 
-The migration defines `public.log_patient_access(uuid, text)` and requests a PostgREST schema-cache reload at the end. It drops and recreates the RPC so a deployed copy with older argument names cannot survive `CREATE OR REPLACE`. If the patient module still reports that `log_patient_access` cannot be found, confirm the app is configured for this same Supabase project and run this repair in that project's SQL Editor:
+The migration defines `public.log_patient_access(jsonb)` with one unnamed argument and requests a PostgREST schema-cache reload at the end. PostgREST can route the request JSON body to this unnamed JSONB RPC even when named-argument lookup fails. If the patient module still reports that `log_patient_access` cannot be found, confirm the app is configured for this same Supabase project and run this repair in that project's SQL Editor:
 
 ```sql
 drop function if exists public.log_patient_access(uuid, text);
+drop function if exists public.log_patient_access(jsonb);
 
-create function public.log_patient_access(target_patient_id uuid, access_purpose text default null)
+create function public.log_patient_access(jsonb)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare actor uuid;
+declare
+  target_patient_id uuid;
+  access_purpose text;
+  actor uuid;
 begin
+  if $1 is null or jsonb_typeof($1) <> 'object' then
+    raise exception 'Invalid patient access request';
+  end if;
+  target_patient_id := nullif($1 ->> 'target_patient_id', '')::uuid;
+  access_purpose := nullif(trim($1 ->> 'access_purpose'), '');
+  if target_patient_id is null then
+    raise exception 'A patient ID is required';
+  end if;
   if not public.is_staff() and not public.can_access_patient(target_patient_id) then
     raise exception 'Not authorized to access this patient record';
   end if;
   select id into actor from public.profiles where auth_user_id = auth.uid() limit 1;
   insert into public.patient_access_logs(patient_id, actor_id, purpose)
-  values (target_patient_id, actor, nullif(trim(access_purpose), ''));
+  values (target_patient_id, actor, access_purpose);
 end;
 $$;
 
-revoke all on function public.log_patient_access(uuid, text) from public;
-grant execute on function public.log_patient_access(uuid, text) to authenticated;
+revoke all on function public.log_patient_access(jsonb) from public;
+grant execute on function public.log_patient_access(jsonb) to authenticated;
 notify pgrst, 'reload schema';
 ```
 
@@ -35,12 +47,12 @@ To confirm the deployed signature, run:
 
 ```sql
 select
-  to_regprocedure('public.log_patient_access(uuid,text)') as registered_signature,
-  (select proargnames from pg_proc where oid = to_regprocedure('public.log_patient_access(uuid,text)')) as argument_names,
-  has_function_privilege('authenticated', to_regprocedure('public.log_patient_access(uuid,text)'), 'EXECUTE') as authenticated_can_execute;
+  to_regprocedure('public.log_patient_access(jsonb)') as registered_signature,
+  (select proargnames from pg_proc where oid = to_regprocedure('public.log_patient_access(jsonb)')) as argument_names,
+  has_function_privilege('authenticated', to_regprocedure('public.log_patient_access(jsonb)'), 'EXECUTE') as authenticated_can_execute;
 ```
 
-Expected values are `public.log_patient_access(uuid,text)`, `{target_patient_id,access_purpose}`, and `true`. If the signature is null, the migration/repair was not run against the app's project. If the argument names differ, run the repair above. If all three values match and the app still receives `PGRST202`, verify the app's configured Supabase project URL, run `NOTIFY pgrst, 'reload schema';` as a separate SQL Editor query, wait for it to complete, then reload the app.
+Expected values are `public.log_patient_access(jsonb)`, a null/empty argument-name list, and `true`. If the signature is null, the migration/repair was not run against the app's project. If the execute check is false, rerun the grant statements. If both checks pass and the app still receives `PGRST202`, verify the app's configured Supabase project URL, run `NOTIFY pgrst, 'reload schema';` as a separate SQL Editor query, wait for it to complete, then reload the app.
 
 ## Actions outside this repository
 
