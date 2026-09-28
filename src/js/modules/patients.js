@@ -13,6 +13,7 @@
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
             const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
             const [patientAccessError, setPatientAccessError] = useState('');
+            const [patientAccessWarning, setPatientAccessWarning] = useState('');
             const [saving, setSaving] = useState(false);
             const [form, setForm] = useState({
                 firstName: '',
@@ -130,6 +131,7 @@
             const handlePatientClick = (patient) => {
                 const openChart = async () => {
                     setPatientAccessError('');
+                    setPatientAccessWarning('');
                     const client = window.OneMedSupabase?.getClient?.();
                     if (!client) {
                         setPatientAccessError('Patient chart access could not be recorded because the database is unavailable.');
@@ -143,8 +145,12 @@
                         if (error) throw error;
                     } catch (error) {
                         const diagnostic = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(' — ');
-                        setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
-                        return;
+                        if (['PGRST202', 'PGRST205'].includes(error?.code)) {
+                            setPatientAccessWarning(`Chart opened under the existing Supabase row-level permissions, but the read was not logged because the access-log endpoint is unavailable (${error.code}). Apply the updated safe_core_multibranch.sql and refresh the PostgREST schema cache.`);
+                        } else {
+                            setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
+                            return;
+                        }
                     }
                     setSelectedPatient(patient);
                     setActiveTab('overview');
@@ -1106,6 +1112,7 @@
             return (
                 <div className="p-6">
                     {patientAccessError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{patientAccessError}</div>}
+                    {patientAccessWarning && <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">{patientAccessWarning}</div>}
                     {selectedPatient ? (
                         <div>
                             <button

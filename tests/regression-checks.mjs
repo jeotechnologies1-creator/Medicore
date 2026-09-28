@@ -55,6 +55,8 @@ assert.match(system, /recordComplianceExport/, 'FHIR exports must be audited bef
 assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about likely duplicate patient records.');
 assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
 assert.match(patients, /from\('patient_access_logs'\)\.insert/, 'Opening a patient chart must write an access log before displaying it.');
+assert.match(patients, /\['PGRST202', 'PGRST205'\]/, 'Missing access-log API objects must not block charts already authorized by row-level security.');
+assert.match(patients, /the read was not logged/, 'Access-log API failures must remain visible to the user.');
 assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
 assert.match(safeCore, /create trigger stamp_patient_access_log before insert/, 'Patient-access actor and timestamp must be stamped by the database.');
 assert.match(safeCore, /create policy "authorized users log patient access" on public\.patient_access_logs for insert/, 'Patient-access log inserts must be authorized by row-level security.');
