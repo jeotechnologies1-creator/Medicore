@@ -55,5 +55,7 @@ assert.match(patients, /samePhone/, 'Registration duplicate matching must compar
 assert.match(patients, /log_patient_access/, 'Opening a patient chart must write an access log first.');
 assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
 assert.match(safeCore, /if not public\.is_staff\(\) and not public\.can_access_patient\(target_patient_id\)/, 'Patient access logging must allow the same staff and patient-owner groups as patient reads.');
+assert.match(safeCore, /drop function if exists public\.log_patient_access\(uuid, text\);\s*create function public\.log_patient_access\(target_patient_id uuid, access_purpose text/, 'Migration must normalize deployed RPC argument names.');
+assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after installing RPCs.');
 
 console.log('Regression checks passed.');

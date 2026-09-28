@@ -2,7 +2,34 @@
 
 Apply `safe_core_multibranch.sql` after `role_authorization.sql` in staging, perform role tests, back up production, then apply it during an approved maintenance window.
 
-The migration defines `public.log_patient_access(uuid, text)` and requests a PostgREST schema-cache reload at the end. If the patient module reports that `log_patient_access` cannot be found, confirm the app is configured for this same Supabase project and rerun the full `safe_core_multibranch.sql` migration in that project's SQL Editor. After confirming the function exists, you can refresh PostgREST's cache with `NOTIFY pgrst, 'reload schema';`. Reload the app after the SQL Editor query completes.
+The migration defines `public.log_patient_access(uuid, text)` and requests a PostgREST schema-cache reload at the end. It drops and recreates the RPC so a deployed copy with older argument names cannot survive `CREATE OR REPLACE`. If the patient module still reports that `log_patient_access` cannot be found, confirm the app is configured for this same Supabase project and run this repair in that project's SQL Editor:
+
+```sql
+drop function if exists public.log_patient_access(uuid, text);
+
+create function public.log_patient_access(target_patient_id uuid, access_purpose text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare actor uuid;
+begin
+  if not public.is_staff() and not public.can_access_patient(target_patient_id) then
+    raise exception 'Not authorized to access this patient record';
+  end if;
+  select id into actor from public.profiles where auth_user_id = auth.uid() limit 1;
+  insert into public.patient_access_logs(patient_id, actor_id, purpose)
+  values (target_patient_id, actor, nullif(trim(access_purpose), ''));
+end;
+$$;
+
+revoke all on function public.log_patient_access(uuid, text) from public;
+grant execute on function public.log_patient_access(uuid, text) to authenticated;
+notify pgrst, 'reload schema';
+```
+
+The repair requires `safe_core_multibranch.sql` prerequisites to exist. Reload the app after the SQL Editor query completes.
 
 To confirm the deployed signature, run:
 

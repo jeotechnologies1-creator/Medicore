@@ -108,7 +108,11 @@ create table if not exists public.patient_access_logs (
   source text not null default 'web', accessed_at timestamptz not null default now()
 );
 create index if not exists patient_access_logs_patient_idx on public.patient_access_logs(patient_id, accessed_at desc);
-create or replace function public.log_patient_access(target_patient_id uuid, access_purpose text default null) returns void language plpgsql security definer set search_path = public as $$
+-- PostgreSQL cannot rename input parameters with CREATE OR REPLACE. Drop this
+-- RPC first so deployed copies with older parameter names are normalized to
+-- the names used by the Supabase JavaScript client.
+drop function if exists public.log_patient_access(uuid, text);
+create function public.log_patient_access(target_patient_id uuid, access_purpose text default null) returns void language plpgsql security definer set search_path = public as $$
 declare actor uuid; begin
   -- Match the patient table's read policy: active staff may open demographic
   -- records, while patients may access only their own linked record. Clinical
