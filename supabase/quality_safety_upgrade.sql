@@ -136,3 +136,5 @@ end;
 $$;
 
 revoke all on function public.escalate_overdue_results() from public;
+revoke all on function public.escalate_overdue_results() from anon, authenticated;
+grant execute on function public.escalate_overdue_results() to service_role;

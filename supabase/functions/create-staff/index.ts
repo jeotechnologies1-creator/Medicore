@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 Deno.serve(async (request) => {
@@ -22,14 +23,24 @@ Deno.serve(async (request) => {
   const adminClient = createClient(url, serviceKey);
   const { data: requesterProfile } = await adminClient
     .from('profiles')
-    .select('role')
+    .select('role, status')
     .eq('auth_user_id', user.id)
     .maybeSingle();
-  if (requesterProfile?.role !== 'super_admin') {
+  if (requesterProfile?.role !== 'super_admin' || requesterProfile?.status !== 'active') {
     return Response.json({ error: 'Only a super admin can create staff accounts.' }, { status: 403, headers: corsHeaders });
   }
 
-  const { email, password, fullName, role, department } = await request.json();
+  let payload: Record<string, unknown>;
+  try {
+    payload = await request.json();
+  } catch {
+    return Response.json({ error: 'Request body must be valid JSON.' }, { status: 400, headers: corsHeaders });
+  }
+  const email = typeof payload.email === 'string' ? payload.email.trim() : '';
+  const password = typeof payload.password === 'string' ? payload.password : '';
+  const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : '';
+  const role = typeof payload.role === 'string' ? payload.role : '';
+  const department = typeof payload.department === 'string' ? payload.department.trim() : '';
   const allowedRoles = ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant'];
   if (!email || !password || !fullName || !allowedRoles.includes(role) || password.length < 8) {
     return Response.json({ error: 'Provide a name, email, supported role, and a password of at least 8 characters.' }, { status: 400, headers: corsHeaders });
@@ -49,6 +60,9 @@ Deno.serve(async (request) => {
     .eq('auth_user_id', created.user.id)
     .select('id, email, full_name, role, department, status')
     .single();
-  if (profileError) return Response.json({ error: profileError.message }, { status: 500, headers: corsHeaders });
+  if (profileError) {
+    await adminClient.auth.admin.deleteUser(created.user.id);
+    return Response.json({ error: profileError.message }, { status: 500, headers: corsHeaders });
+  }
   return Response.json({ staff: profile }, { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });

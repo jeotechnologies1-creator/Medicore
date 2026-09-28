@@ -57,7 +57,7 @@ drop policy if exists "patients request appointments" on public.appointments;
 create policy "staff manage appointments" on public.appointments for all using (public.is_staff()) with check (public.is_staff());
 create policy "patients read own appointments" on public.appointments for select using (public.can_access_patient(patient_id));
 create policy "patients request appointments" on public.appointments for insert with check (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = appointments.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = appointments.patient_id)
   and status = 'requested'
 );
 

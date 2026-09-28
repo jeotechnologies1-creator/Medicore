@@ -162,13 +162,14 @@ create policy "admins delete notifications" on public.notifications for delete u
 create policy "admins read audit logs" on public.audit_logs for select using (public.is_admin());
 
 create policy "authorized read portal messages" on public.patient_messages for select using (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = patient_messages.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = patient_messages.patient_id)
   or public.has_any_role(array['super_admin','doctor','nurse'])
 );
 create policy "patients send portal messages" on public.patient_messages for insert with check (
   exists (
     select 1 from public.profiles p
     where p.auth_user_id = auth.uid()
+      and p.status::text = 'active'
       and p.patient_id = patient_messages.patient_id
       and p.id = patient_messages.sender_profile_id
   ) and direction = 'outgoing'
@@ -179,11 +180,11 @@ create policy "care team send portal messages" on public.patient_messages for in
   and direction = 'incoming'
 );
 create policy "authorized read refill requests" on public.medication_refill_requests for select using (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = medication_refill_requests.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = medication_refill_requests.patient_id)
   or public.has_any_role(array['super_admin','doctor','nurse','pharmacist'])
 );
 create policy "patients request refills" on public.medication_refill_requests for insert with check (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = medication_refill_requests.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = medication_refill_requests.patient_id)
   and status = 'pending' and (quantity is null or quantity > 0)
 );
 create policy "care team manage refill requests" on public.medication_refill_requests for all using (

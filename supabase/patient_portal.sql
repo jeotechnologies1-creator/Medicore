@@ -40,13 +40,13 @@ drop policy if exists "clinical staff manage refill requests" on public.medicati
 
 create policy "portal participants read messages" on public.patient_messages for select using (public.can_access_patient(patient_id));
 create policy "patients send messages" on public.patient_messages for insert with check (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = patient_messages.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = patient_messages.patient_id)
   and direction = 'outgoing'
 );
 create policy "clinical staff send messages" on public.patient_messages for insert with check (public.is_clinical_staff());
 create policy "portal participants read refill requests" on public.medication_refill_requests for select using (public.can_access_patient(patient_id));
 create policy "patients request refills" on public.medication_refill_requests for insert with check (
-  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.patient_id = medication_refill_requests.patient_id)
+  exists (select 1 from public.profiles p where p.auth_user_id = auth.uid() and p.status::text = 'active' and p.patient_id = medication_refill_requests.patient_id)
   and status = 'pending'
 );
 create policy "clinical staff manage refill requests" on public.medication_refill_requests for all using (public.is_clinical_staff()) with check (public.is_clinical_staff());
