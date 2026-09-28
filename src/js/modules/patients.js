@@ -136,13 +136,14 @@
                         return;
                     }
                     try {
-                        const { error } = await client.rpc('log_patient_access', {
+                        const { error } = await client.schema('public').rpc('log_patient_access', {
                             target_patient_id: patient.id,
                             access_purpose: 'patient_chart'
                         });
                         if (error) throw error;
                     } catch (error) {
-                        setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${error?.message || ''}`.trim());
+                        const diagnostic = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(' — ');
+                        setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
                         return;
                     }
                     setSelectedPatient(patient);

@@ -34,12 +34,13 @@ The repair requires `safe_core_multibranch.sql` prerequisites to exist. Reload t
 To confirm the deployed signature, run:
 
 ```sql
-select routine_schema, routine_name, parameter_name, data_type
-from information_schema.parameters
-where specific_schema = 'public'
-  and specific_name like 'log_patient_access%'
-order by ordinal_position;
+select
+  to_regprocedure('public.log_patient_access(uuid,text)') as registered_signature,
+  (select proargnames from pg_proc where oid = to_regprocedure('public.log_patient_access(uuid,text)')) as argument_names,
+  has_function_privilege('authenticated', to_regprocedure('public.log_patient_access(uuid,text)'), 'EXECUTE') as authenticated_can_execute;
 ```
+
+Expected values are `public.log_patient_access(uuid,text)`, `{target_patient_id,access_purpose}`, and `true`. If the signature is null, the migration/repair was not run against the app's project. If the argument names differ, run the repair above. If all three values match and the app still receives `PGRST202`, verify the app's configured Supabase project URL, run `NOTIFY pgrst, 'reload schema';` as a separate SQL Editor query, wait for it to complete, then reload the app.
 
 ## Actions outside this repository
 
