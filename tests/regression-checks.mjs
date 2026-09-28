@@ -42,6 +42,8 @@ assert.match(authorization, /'profiles','notifications','audit_logs','patient_me
 assert.match(authorization, /profiles_role_allowed/, 'Profile roles must be constrained at the database layer.');
 assert.match(authorization, /billing_amounts_nonnegative/, 'Billing totals must reject negative values.');
 assert.match(authorization, /care team upload patient documents/, 'Document storage writes must match care-team document permissions.');
+assert.match(authorization, /drop policy if exists "care team upload patient documents" on storage\.objects;/, 'Storage upload policies must be replaceable when the authorization migration is rerun.');
+assert.match(authorization, /drop policy if exists "care team delete patient documents" on storage\.objects;/, 'Storage delete policies must be replaceable when the authorization migration is rerun.');
 assert.match(diagnostics, /Overall result assessment/, 'Laboratory results must support normal, abnormal, and critical assessments.');
 assert.match(diagnostics, /Finalize Report/, 'Radiology must provide a report-entry workflow before finalization.');
 assert.match(quality, /update of status, result_status, responsible_clinician_id/, 'Final lab results must queue acknowledgement when status changes.');

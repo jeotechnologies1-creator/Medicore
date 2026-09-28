@@ -189,6 +189,8 @@ create policy "care team manage refill requests" on public.medication_refill_req
 -- cannot create document metadata must not be able to upload an orphaned file.
 drop policy if exists "clinical staff upload patient documents" on storage.objects;
 drop policy if exists "clinical staff delete patient documents" on storage.objects;
+drop policy if exists "care team upload patient documents" on storage.objects;
+drop policy if exists "care team delete patient documents" on storage.objects;
 create policy "care team upload patient documents" on storage.objects for insert with check (
   bucket_id = 'patient-documents' and public.has_any_role(array['super_admin','doctor','nurse'])
 );
