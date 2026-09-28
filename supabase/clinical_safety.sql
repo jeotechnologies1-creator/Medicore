@@ -226,7 +226,12 @@ $$;
 
 create or replace function public.can_access_patient(target_patient_id uuid) returns boolean language sql stable security definer set search_path = public as $$
   select public.is_clinical_staff()
-      or exists (select 1 from public.profiles where auth_user_id = auth.uid() and patient_id = target_patient_id);
+      or exists (
+        select 1 from public.profiles
+        where auth_user_id = auth.uid()
+          and status::text = 'active'
+          and patient_id = target_patient_id
+      );
 $$;
 
 -- These are the policies for the new clinical tables. Existing broad policies in schema.sql

@@ -14,6 +14,30 @@ begin
   end if;
 end $$;
 
+-- Keep patient-linked reads unavailable to suspended or inactive profiles.
+-- These helpers are consumed by patient RLS policies and access-log inserts.
+create or replace function public.can_access_patient(target_patient_id uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_clinical_staff()
+    or exists (
+      select 1 from public.profiles
+      where auth_user_id = auth.uid()
+        and status::text = 'active'
+        and patient_id = target_patient_id
+    );
+$$;
+
+create or replace function public.can_read_patient_record(target_patient_id uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_clinical_staff()
+    or exists (
+      select 1 from public.profiles
+      where auth_user_id = auth.uid()
+        and status::text = 'active'
+        and patient_id = target_patient_id
+    );
+$$;
+
 create table if not exists public.facilities (
   id uuid primary key default gen_random_uuid(), code text not null unique, name text not null,
   facility_type text not null default 'hospital' check (facility_type in ('hospital','clinic','diagnostic_center','pharmacy')),

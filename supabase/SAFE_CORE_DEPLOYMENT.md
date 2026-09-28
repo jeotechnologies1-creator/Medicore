@@ -2,6 +2,8 @@
 
 Apply `safe_core_multibranch.sql` after `role_authorization.sql` in staging, perform role tests, back up production, then apply it during an approved maintenance window.
 
+This migration is step 13 in `DEPLOYMENT.md`. It also replaces the patient-linked access helpers so inactive profiles cannot retain access through a patient link. Reapply it after upgrading an existing project.
+
 Patient chart reads are written directly to `patient_access_logs`; they no longer depend on PostgREST resolving a custom RPC. A database trigger stamps the active actor, time, action, and source. RLS permits inserts only for active staff or a patient accessing their own linked record, and authenticated clients cannot alter or delete logged events.
 
 ```sql
@@ -17,6 +19,8 @@ notify pgrst, 'reload schema';
 ```
 
 Apply the updated `safe_core_multibranch.sql` to the same project the app uses, then reload the app after the SQL Editor query completes.
+
+If the table, insert grant, policy, and trigger checks all pass but the app still reports `PGRST205`, run `notify pgrst, 'reload schema';` as a separate SQL Editor query. Verify the SQL Editor project is the one configured by the app and that `public` is enabled under the project's API exposed schemas. The repository's `index.html` currently points to project ref `wlarlseefitzcnfigyib`.
 
 To confirm the direct-write policy and actor-stamping trigger are installed, run:
 

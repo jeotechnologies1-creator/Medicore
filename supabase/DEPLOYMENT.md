@@ -14,6 +14,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 10. `quality_safety_upgrade.sql`
 11. `app_activation.sql`
 12. `role_authorization.sql`
+13. `safe_core_multibranch.sql`
 
 The front-end calls the following database contracts:
 
@@ -25,6 +26,7 @@ The front-end calls the following database contracts:
 | Medication dispensing | `pharmacy_inventory`, `prescriptions`, `dispense_prescription(uuid)` from `atomic_pharmacy_dispensing.sql` |
 | Documents | `patient_documents` plus the private `patient-documents` Storage bucket from `production_hardening.sql` |
 | Portal messages and refill requests | `patient_messages`, `medication_refill_requests` from `patient_portal.sql` |
+| Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 
@@ -48,3 +50,4 @@ supabase functions deploy create-staff
 6. Configure a server-side schedule to invoke `public.escalate_overdue_results()` and test an overdue acknowledgement in staging.
 7. Confirm an inactive user is signed out, then test each staff role cannot create or update a record outside its assigned workflow (including direct REST requests).
 8. Review any pre-existing rows that violate the new `NOT VALID` integrity constraints, remediate them, and run `VALIDATE CONSTRAINT` for each in a planned maintenance window.
+9. Confirm patient-linked reads are denied to inactive profiles and that opening a chart creates one row in `patient_access_logs` for the authenticated active profile.

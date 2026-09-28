@@ -14,7 +14,12 @@ $$;
 create or replace function public.can_read_patient_record(target_patient_id uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.is_clinical_staff()
-    or exists (select 1 from public.profiles where auth_user_id = auth.uid() and patient_id = target_patient_id);
+    or exists (
+      select 1 from public.profiles
+      where auth_user_id = auth.uid()
+        and status::text = 'active'
+        and patient_id = target_patient_id
+    );
 $$;
 
 -- Reading a record and authoring it are deliberately separate permissions.
