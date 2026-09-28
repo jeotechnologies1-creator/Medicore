@@ -54,13 +54,11 @@ assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match t
 assert.match(system, /recordComplianceExport/, 'FHIR exports must be audited before download.');
 assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about likely duplicate patient records.');
 assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
-assert.match(patients, /log_patient_access/, 'Opening a patient chart must write an access log first.');
-assert.match(patients, /schema\('public'\)\.rpc\('log_patient_access'/, 'Patient access logging must call the exposed public schema explicitly.');
-assert.match(patients, /error\?\.code === 'PGRST202'/, 'A missing access-log RPC must not block a chart already authorized by row-level security.');
-assert.match(patients, /this access was not logged/, 'Missing read-audit support must remain visible to the user.');
+assert.match(patients, /from\('patient_access_logs'\)\.insert/, 'Opening a patient chart must write an access log before displaying it.');
 assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
-assert.match(safeCore, /if not public\.is_staff\(\) and not public\.can_access_patient\(target_patient_id\)/, 'Patient access logging must allow the same staff and patient-owner groups as patient reads.');
-assert.match(safeCore, /drop function if exists public\.log_patient_access\(uuid, text\);[\s\S]*?create function public\.log_patient_access\(jsonb\)/, 'Migration must provide the PostgREST unnamed JSONB RPC fallback.');
-assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after installing RPCs.');
+assert.match(safeCore, /create trigger stamp_patient_access_log before insert/, 'Patient-access actor and timestamp must be stamped by the database.');
+assert.match(safeCore, /create policy "authorized users log patient access" on public\.patient_access_logs for insert/, 'Patient-access log inserts must be authorized by row-level security.');
+assert.match(safeCore, /revoke update, delete, truncate, references, trigger on public\.patient_access_logs from authenticated/, 'Authenticated clients must not alter or delete access logs.');
+assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after its schema changes.');
 
 console.log('Regression checks passed.');

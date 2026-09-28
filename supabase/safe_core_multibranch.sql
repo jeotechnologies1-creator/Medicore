@@ -108,29 +108,24 @@ create table if not exists public.patient_access_logs (
   source text not null default 'web', accessed_at timestamptz not null default now()
 );
 create index if not exists patient_access_logs_patient_idx on public.patient_access_logs(patient_id, accessed_at desc);
--- Use one unnamed jsonb argument. PostgREST can route the Supabase JSON body to
--- an unnamed json/jsonb parameter even if a stale cache has older named args.
+create or replace function public.stamp_patient_access_log() returns trigger language plpgsql security definer set search_path = public as $$
+declare actor uuid;
+begin
+  select id into actor from public.profiles where auth_user_id = auth.uid() and status::text = 'active' limit 1;
+  if actor is null then raise exception 'An active authenticated profile is required to log patient access'; end if;
+  new.actor_id := actor;
+  new.action := 'read';
+  new.source := 'web';
+  new.accessed_at := clock_timestamp();
+  return new;
+end; $$;
+drop trigger if exists stamp_patient_access_log on public.patient_access_logs;
+create trigger stamp_patient_access_log before insert on public.patient_access_logs for each row execute function public.stamp_patient_access_log();
+revoke all on public.patient_access_logs from anon;
+revoke update, delete, truncate, references, trigger on public.patient_access_logs from authenticated;
+grant select, insert on public.patient_access_logs to authenticated;
 drop function if exists public.log_patient_access(uuid, text);
 drop function if exists public.log_patient_access(jsonb);
-create function public.log_patient_access(jsonb) returns void language plpgsql security definer set search_path = public as $$
-declare
-  target_patient_id uuid;
-  access_purpose text;
-  actor uuid;
-begin
-  if $1 is null or jsonb_typeof($1) <> 'object' then raise exception 'Invalid patient access request'; end if;
-  target_patient_id := nullif($1 ->> 'target_patient_id', '')::uuid;
-  access_purpose := nullif(trim($1 ->> 'access_purpose'), '');
-  if target_patient_id is null then raise exception 'A patient ID is required'; end if;
-  -- Match the patient table's read policy: active staff may open demographic
-  -- records, while patients may access only their own linked record. Clinical
-  -- record tables still apply their narrower table-specific policies.
-  if not public.is_staff() and not public.can_access_patient(target_patient_id) then raise exception 'Not authorized to access this patient record'; end if;
-  select id into actor from public.profiles where auth_user_id = auth.uid() limit 1;
-  insert into public.patient_access_logs(patient_id, actor_id, purpose) values (target_patient_id, actor, access_purpose);
-end; $$;
-revoke all on function public.log_patient_access(jsonb) from public;
-grant execute on function public.log_patient_access(jsonb) to authenticated;
 
 create table if not exists public.fhir_exchange_jobs (
   id uuid primary key default gen_random_uuid(), patient_id uuid references public.patients(id) on delete set null,
@@ -177,6 +172,10 @@ do $$ declare table_name text; begin
     execute format('create policy %I on public.%I for all using (public.has_any_role(array[''super_admin'',''doctor'',''nurse''])) with check (public.has_any_role(array[''super_admin'',''doctor'',''nurse'']))', 'clinical manage record', table_name);
   end loop;
 end $$;
+drop policy if exists "authorized users log patient access" on public.patient_access_logs;
+create policy "authorized users log patient access" on public.patient_access_logs for insert with check (
+  public.is_staff() or public.can_access_patient(patient_id)
+);
 create policy "admins read clinical versions" on public.clinical_record_versions for select using (public.is_admin());
 create policy "admins read patient access logs" on public.patient_access_logs for select using (public.is_admin());
 create policy "admins manage fhir jobs" on public.fhir_exchange_jobs for all using (public.is_admin()) with check (public.is_admin());

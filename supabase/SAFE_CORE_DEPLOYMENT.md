@@ -2,57 +2,32 @@
 
 Apply `safe_core_multibranch.sql` after `role_authorization.sql` in staging, perform role tests, back up production, then apply it during an approved maintenance window.
 
-The migration defines `public.log_patient_access(jsonb)` with one unnamed argument and requests a PostgREST schema-cache reload at the end. PostgREST can route the request JSON body to this unnamed JSONB RPC even when named-argument lookup fails. If the patient module still reports that `log_patient_access` cannot be found, confirm the app is configured for this same Supabase project and run this repair in that project's SQL Editor:
+Patient chart reads are written directly to `patient_access_logs`; they no longer depend on PostgREST resolving a custom RPC. A database trigger stamps the active actor, time, action, and source. RLS permits inserts only for active staff or a patient accessing their own linked record, and authenticated clients cannot alter or delete logged events.
 
 ```sql
-drop function if exists public.log_patient_access(uuid, text);
-drop function if exists public.log_patient_access(jsonb);
-
-create function public.log_patient_access(jsonb)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  target_patient_id uuid;
-  access_purpose text;
-  actor uuid;
-begin
-  if $1 is null or jsonb_typeof($1) <> 'object' then
-    raise exception 'Invalid patient access request';
-  end if;
-  target_patient_id := nullif($1 ->> 'target_patient_id', '')::uuid;
-  access_purpose := nullif(trim($1 ->> 'access_purpose'), '');
-  if target_patient_id is null then
-    raise exception 'A patient ID is required';
-  end if;
-  if not public.is_staff() and not public.can_access_patient(target_patient_id) then
-    raise exception 'Not authorized to access this patient record';
-  end if;
-  select id into actor from public.profiles where auth_user_id = auth.uid() limit 1;
-  insert into public.patient_access_logs(patient_id, actor_id, purpose)
-  values (target_patient_id, actor, access_purpose);
-end;
-$$;
-
-revoke all on function public.log_patient_access(jsonb) from public;
-grant execute on function public.log_patient_access(jsonb) to authenticated;
+-- Reapply the updated safe_core_multibranch.sql first so the table, trigger,
+-- RLS insert policy, and grants exist. This block is safe to rerun afterward.
+drop policy if exists "authorized users log patient access" on public.patient_access_logs;
+create policy "authorized users log patient access" on public.patient_access_logs for insert with check (
+  public.is_staff() or public.can_access_patient(patient_id)
+);
+grant select, insert on public.patient_access_logs to authenticated;
+revoke update, delete, truncate, references, trigger on public.patient_access_logs from authenticated;
 notify pgrst, 'reload schema';
 ```
 
-The repair requires `safe_core_multibranch.sql` prerequisites to exist. Reload the app after the SQL Editor query completes.
+Apply the updated `safe_core_multibranch.sql` to the same project the app uses, then reload the app after the SQL Editor query completes.
 
-To confirm the deployed signature, run:
+To confirm the direct-write policy and actor-stamping trigger are installed, run:
 
 ```sql
 select
-  to_regprocedure('public.log_patient_access(jsonb)') as registered_signature,
-  (select proargnames from pg_proc where oid = to_regprocedure('public.log_patient_access(jsonb)')) as argument_names,
-  has_function_privilege('authenticated', to_regprocedure('public.log_patient_access(jsonb)'), 'EXECUTE') as authenticated_can_execute;
+  exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'patient_access_logs' and policyname = 'authorized users log patient access' and cmd = 'INSERT') as insert_policy_installed,
+  exists (select 1 from pg_trigger where tgrelid = 'public.patient_access_logs'::regclass and tgname = 'stamp_patient_access_log' and not tgisinternal) as actor_stamp_trigger_installed,
+  has_table_privilege('authenticated', 'public.patient_access_logs', 'INSERT') as authenticated_can_insert;
 ```
 
-Expected values are `public.log_patient_access(jsonb)`, a null/empty argument-name list, and `true`. If the signature is null, the migration/repair was not run against the app's project. If the execute check is false, rerun the grant statements. If both checks pass and the app still receives `PGRST202`, verify the app's configured Supabase project URL, run `NOTIFY pgrst, 'reload schema';` as a separate SQL Editor query, wait for it to complete, then reload the app.
+All three results should be `true`. If not, the updated migration was not fully applied to the app's project.
 
 ## Actions outside this repository
 

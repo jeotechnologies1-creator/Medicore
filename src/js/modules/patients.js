@@ -13,7 +13,6 @@
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
             const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
             const [patientAccessError, setPatientAccessError] = useState('');
-            const [patientAccessWarning, setPatientAccessWarning] = useState('');
             const [saving, setSaving] = useState(false);
             const [form, setForm] = useState({
                 firstName: '',
@@ -131,26 +130,21 @@
             const handlePatientClick = (patient) => {
                 const openChart = async () => {
                     setPatientAccessError('');
-                    setPatientAccessWarning('');
                     const client = window.OneMedSupabase?.getClient?.();
                     if (!client) {
                         setPatientAccessError('Patient chart access could not be recorded because the database is unavailable.');
                         return;
                     }
                     try {
-                        const { error } = await client.schema('public').rpc('log_patient_access', {
-                            target_patient_id: patient.id,
-                            access_purpose: 'patient_chart'
+                        const { error } = await client.schema('public').from('patient_access_logs').insert({
+                            patient_id: patient.id,
+                            purpose: 'patient_chart'
                         });
                         if (error) throw error;
                     } catch (error) {
                         const diagnostic = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(' — ');
-                        if (error?.code === 'PGRST202') {
-                            setPatientAccessWarning('This chart is available under the existing Supabase row-level permissions, but this access was not logged because the access-log function is missing from the connected project. Reapply safe_core_multibranch.sql to restore read auditing.');
-                        } else {
-                            setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
-                            return;
-                        }
+                        setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
+                        return;
                     }
                     setSelectedPatient(patient);
                     setActiveTab('overview');
@@ -1112,7 +1106,6 @@
             return (
                 <div className="p-6">
                     {patientAccessError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{patientAccessError}</div>}
-                    {patientAccessWarning && <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">{patientAccessWarning}</div>}
                     {selectedPatient ? (
                         <div>
                             <button
