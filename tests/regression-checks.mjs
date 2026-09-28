@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -13,7 +13,10 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('supabase/quality_safety_upgrade.sql'),
     read('supabase/production_hardening.sql'),
     read('supabase/app_activation.sql'),
-    read('supabase/role_authorization.sql')
+    read('supabase/role_authorization.sql'),
+    read('src/js/modules/system.js'),
+    read('src/js/modules/patients.js'),
+    read('supabase/safe_core_multibranch.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -43,5 +46,14 @@ assert.match(diagnostics, /Overall result assessment/, 'Laboratory results must 
 assert.match(diagnostics, /Finalize Report/, 'Radiology must provide a report-entry workflow before finalization.');
 assert.match(quality, /update of status, result_status, responsible_clinician_id/, 'Final lab results must queue acknowledgement when status changes.');
 assert.match(quality, /update of status, report_status, responsible_clinician_id/, 'Final radiology reports must queue acknowledgement when status changes.');
+assert.match(system, /resourceType: 'Bundle', type: 'collection'/, 'Patient export must use a FHIR collection bundle.');
+assert.match(system, /fhir_version: '4\.0\.1'/, 'FHIR exports must record the FHIR R4 version.');
+assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match the database export-audit authorization.');
+assert.match(system, /recordComplianceExport/, 'FHIR exports must be audited before download.');
+assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about likely duplicate patient records.');
+assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
+assert.match(patients, /log_patient_access/, 'Opening a patient chart must write an access log first.');
+assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
+assert.match(safeCore, /if not public\.is_staff\(\) and not public\.can_access_patient\(target_patient_id\)/, 'Patient access logging must allow the same staff and patient-owner groups as patient reads.');
 
 console.log('Regression checks passed.');

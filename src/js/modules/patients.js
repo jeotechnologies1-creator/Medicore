@@ -10,6 +10,9 @@
             const [filterStatus, setFilterStatus] = useState('all');
             const [patients, setPatients] = useState((getLiveStore().patients || []));
             const [formErrors, setFormErrors] = useState({});
+            const [possibleDuplicates, setPossibleDuplicates] = useState([]);
+            const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
+            const [patientAccessError, setPatientAccessError] = useState('');
             const [saving, setSaving] = useState(false);
             const [form, setForm] = useState({
                 firstName: '',
@@ -23,6 +26,11 @@
                 emergencyContactName: '',
                 emergencyContactPhone: ''
             });
+
+            useEffect(() => {
+                setPossibleDuplicates([]);
+                setDuplicateAcknowledged(false);
+            }, [form]);
 
             const filteredPatients = useMemo(() => {
                 let filtered = patients || [];
@@ -52,6 +60,22 @@
                 if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address.';
                 setFormErrors(errors);
                 if (Object.keys(errors).length) return;
+
+                const normalizeName = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+                const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+                const email = String(form.email || '').trim().toLocaleLowerCase();
+                const matches = (patients || []).filter((patient) => {
+                    const sameNameAndBirthDate = normalizeName(patient.firstName) === normalizeName(form.firstName)
+                        && normalizeName(patient.lastName) === normalizeName(form.lastName)
+                        && patient.dateOfBirth === form.dateOfBirth;
+                    const samePhone = normalizePhone(form.phone).length >= 7 && normalizePhone(patient.phone) === normalizePhone(form.phone);
+                    const sameEmail = email.length > 0 && String(patient.email || '').trim().toLocaleLowerCase() === email;
+                    return sameNameAndBirthDate || samePhone || sameEmail;
+                });
+                if (matches.length && !duplicateAcknowledged) {
+                    setPossibleDuplicates(matches.slice(0, 5));
+                    return;
+                }
 
                 const payload = {
                     patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
@@ -94,6 +118,8 @@
                     setPatients(nextPatients);
                     setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
                     setFormErrors({});
+                    setPossibleDuplicates([]);
+                    setDuplicateAcknowledged(false);
                     setShowRegistration(false);
                 } else {
                     notifyPersistenceFailure('register patient', error);
@@ -102,8 +128,27 @@
             };
 
             const handlePatientClick = (patient) => {
-                setSelectedPatient(patient);
-                setActiveTab('overview');
+                const openChart = async () => {
+                    setPatientAccessError('');
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) {
+                        setPatientAccessError('Patient chart access could not be recorded because the database is unavailable.');
+                        return;
+                    }
+                    try {
+                        const { error } = await client.rpc('log_patient_access', {
+                            target_patient_id: patient.id,
+                            access_purpose: 'patient_chart'
+                        });
+                        if (error) throw error;
+                    } catch (error) {
+                        setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${error?.message || ''}`.trim());
+                        return;
+                    }
+                    setSelectedPatient(patient);
+                    setActiveTab('overview');
+                };
+                openChart();
             };
 
             const PatientDetailView = ({ patient }) => {
@@ -193,6 +238,50 @@
                     status: 'active',
                     onsetDate: ''
                 });
+                const [documentFile, setDocumentFile] = useState(null);
+                const [documentType, setDocumentType] = useState('Clinical Note');
+                const [documentBusy, setDocumentBusy] = useState(false);
+                const [documentMessage, setDocumentMessage] = useState('');
+                const [documentLink, setDocumentLink] = useState(null);
+                const patientDocuments = (appData.documents || []).filter((document) => document.patientId === patient.id);
+                const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse', 'pharmacist', 'laboratory_scientist', 'radiographer'].includes(user?.role);
+
+                const uploadDocument = async () => {
+                    if (!canUploadPatientDocument || !documentFile || documentBusy) return;
+                    setDocumentMessage('');
+                    if (documentFile.size > 10 * 1024 * 1024) {
+                        setDocumentMessage('Choose a file smaller than 10 MB.');
+                        return;
+                    }
+                    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(documentFile.type)) {
+                        setDocumentMessage('Only PDF, JPEG, and PNG files are supported.');
+                        return;
+                    }
+                    setDocumentBusy(true);
+                    try {
+                        const result = await window.OneMedSupabase?.uploadPatientDocument?.(patient.id, documentFile, documentType);
+                        if (!result || result.error || !result.data) throw result?.error || new Error('The document could not be saved.');
+                        const saved = normalizeDocuments([result.data])[0];
+                        appData.documents = [saved, ...(appData.documents || [])];
+                        setDocumentFile(null);
+                        setDocumentMessage('Document uploaded securely.');
+                    } catch (error) {
+                        setDocumentMessage(`Upload failed. ${error?.message || ''}`.trim());
+                    } finally {
+                        setDocumentBusy(false);
+                    }
+                };
+
+                const createDocumentLink = async (document) => {
+                    setDocumentMessage('');
+                    try {
+                        const result = await window.OneMedSupabase?.createDocumentUrl?.(document.fileUrl);
+                        if (!result || result.error || !result.data?.signedUrl) throw result?.error || new Error('The document is unavailable.');
+                        setDocumentLink({ id: document.id, url: result.data.signedUrl });
+                    } catch (error) {
+                        setDocumentMessage(`Could not create a secure document link. ${error?.message || ''}`.trim());
+                    }
+                };
 
                 const allergyMatch = medicationForm.medicationName
                     ? patientAllergies.find((allergy) => {
@@ -991,13 +1080,20 @@
 
                             {activeTab === 'documents' && (
                                 <Card title="Patient Documents">
-                                    <div className="text-center py-8">
-                                        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 mb-4">
-                                            <Icons.Upload size={40} className="mx-auto text-slate-400 mb-3" />
-                                            <p className="text-sm text-slate-600 font-medium">Drag and drop files here</p>
-                                            <p className="text-xs text-slate-400 mt-1">or click to browse</p>
-                                        </div>
-                                        <p className="text-slate-500">No documents uploaded yet</p>
+                                    <div className="space-y-5">
+                                        {canUploadPatientDocument ? <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                                            <Input label="Document type" value={documentType} onChange={(event) => setDocumentType(event.target.value)} />
+                                            <div><label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="patient-document-file">File (PDF, JPEG, PNG; up to 10 MB)</label><input id="patient-document-file" type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => { setDocumentFile(event.target.files?.[0] || null); setDocumentMessage(''); }} className="block w-full text-sm text-slate-600" /></div>
+                                            <Button variant="primary" disabled={!documentFile || documentBusy} onClick={uploadDocument}>{documentBusy ? 'Uploading…' : 'Upload securely'}</Button>
+                                        </div> : <p className="text-sm text-slate-500">Document uploads are limited to authorized clinical staff.</p>}
+                                        {documentMessage && <p className="text-sm text-slate-700" role="status">{documentMessage}</p>}
+                                        {patientDocuments.length ? <DataTable columns={[
+                                            { key: 'fileName', title: 'File' }, { key: 'documentType', title: 'Type' }, { key: 'size', title: 'Size' },
+                                            { key: 'uploadedAt', title: 'Uploaded', render: (row) => formatDateTime(row.uploadedAt) }
+                                        ]} data={patientDocuments} actions={(row) => documentLink?.id === row.id
+                                            ? <div className="flex items-center gap-2"><a href={documentLink.url} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-lg px-3 py-2 text-sm font-medium text-medical-700 hover:bg-medical-50">Open secure link</a><Button variant="ghost" size="sm" onClick={() => createDocumentLink(row)}>Refresh</Button></div>
+                                            : <Button variant="secondary" size="sm" onClick={() => createDocumentLink(row)}>Create secure link</Button>} />
+                                            : <p className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">No documents have been uploaded for this patient.</p>}
                                     </div>
                                 </Card>
                             )}
@@ -1020,6 +1116,7 @@
                         </div>
                     ) : (
                         <div className="space-y-6 animate-fade-in">
+                            {patientAccessError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{patientAccessError}</div>}
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900">Patients</h2>
@@ -1092,6 +1189,16 @@
                             </div>
                         }
                     >
+                        {possibleDuplicates.length > 0 && (
+                            <div className="col-span-2 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
+                                <h3 className="font-semibold text-amber-950">Possible existing patient record</h3>
+                                <p className="mt-1 text-sm text-amber-900">Compare these records before creating another chart. A shared phone number or similar demographic details may be legitimate; continue only after checking the patient identity.</p>
+                                <ul className="mt-3 space-y-2 text-sm text-amber-950">
+                                    {possibleDuplicates.map((patient) => <li key={patient.id} className="rounded bg-white/70 px-3 py-2">{patient.patientNumber || 'No ID'} · {patient.firstName} {patient.lastName} · DOB {patient.dateOfBirth || 'unknown'} · {patient.phone || patient.email || 'no contact details'}</li>)}
+                                </ul>
+                                <Button className="mt-3" variant="secondary" onClick={() => setDuplicateAcknowledged(true)} disabled={duplicateAcknowledged}>{duplicateAcknowledged ? 'Reviewed — registration can continue' : 'I reviewed these records; continue'}</Button>
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <Input label="First Name" required error={formErrors.firstName} value={form.firstName} onChange={(e) => setForm(prev => ({ ...prev, firstName: e.target.value }))} />
                             <Input label="Last Name" required error={formErrors.lastName} value={form.lastName} onChange={(e) => setForm(prev => ({ ...prev, lastName: e.target.value }))} />

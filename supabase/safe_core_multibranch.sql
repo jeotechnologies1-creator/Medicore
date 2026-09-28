@@ -110,7 +110,10 @@ create table if not exists public.patient_access_logs (
 create index if not exists patient_access_logs_patient_idx on public.patient_access_logs(patient_id, accessed_at desc);
 create or replace function public.log_patient_access(target_patient_id uuid, access_purpose text default null) returns void language plpgsql security definer set search_path = public as $$
 declare actor uuid; begin
-  if not public.can_read_patient_record(target_patient_id) then raise exception 'Not authorized to access this patient record'; end if;
+  -- Match the patient table's read policy: active staff may open demographic
+  -- records, while patients may access only their own linked record. Clinical
+  -- record tables still apply their narrower table-specific policies.
+  if not public.is_staff() and not public.can_access_patient(target_patient_id) then raise exception 'Not authorized to access this patient record'; end if;
   select id into actor from public.profiles where auth_user_id = auth.uid() limit 1;
   insert into public.patient_access_logs(patient_id, actor_id, purpose) values (target_patient_id, actor, nullif(trim(access_purpose), ''));
 end; $$;

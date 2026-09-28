@@ -204,6 +204,10 @@
         // COMPLIANCE VAULT MODULE
         // ==========================================
         const ComplianceVaultModule = () => {
+            const { user } = useAuth();
+            const [exportPatientId, setExportPatientId] = useState('');
+            const [exportMessage, setExportMessage] = useState('');
+            const [exporting, setExporting] = useState(false);
             const documents = appData.documents || [];
             const files = documents.map((document) => ({
                 id: document.id,
@@ -232,6 +236,99 @@
                 { label: 'Retention coverage', value: '—' }
             ];
 
+            const exportPatientBundle = async () => {
+                if (user?.role !== 'super_admin') {
+                    setExportMessage('FHIR export requires the super administrator role because export records are restricted by the current database policy.');
+                    return;
+                }
+                const patient = (appData.patients || []).find((item) => item.id === exportPatientId);
+                if (!patient || exporting) return;
+                setExporting(true);
+                setExportMessage('');
+                const entries = [];
+                const add = (resource) => {
+                    if (!resource?.id) return;
+                    entries.push({ fullUrl: `urn:onemed:fhir:${resource.resourceType}:${encodeURIComponent(resource.id)}`, resource });
+                };
+                const patientId = String(patient.id);
+                const patientRef = { reference: `Patient/${patientId}` };
+                const patientResource = {
+                    resourceType: 'Patient', id: patientId, active: patient.status !== 'inactive',
+                    identifier: patient.patientNumber ? [{ system: 'urn:onemed:medical-record-number', value: String(patient.patientNumber) }] : undefined,
+                    name: [{ family: [patient.lastName].filter(Boolean).join(' ') || undefined, given: [patient.firstName].filter(Boolean) }],
+                    gender: ({ male: 'male', female: 'female', other: 'other', unknown: 'unknown' })[String(patient.gender || '').toLowerCase()] || 'unknown',
+                    birthDate: /^\d{4}-\d{2}-\d{2}$/.test(patient.dateOfBirth || '') ? patient.dateOfBirth : undefined,
+                    telecom: [patient.phone && { system: 'phone', value: patient.phone }, patient.email && { system: 'email', value: patient.email }].filter(Boolean),
+                    address: patient.address ? [{ text: patient.address }] : undefined
+                };
+                add(patientResource);
+                (appData.encounters || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'Encounter', id: String(row.id), status: ({ planned: 'planned', arrived: 'arrived', in_progress: 'in-progress', 'in-progress': 'in-progress', onleave: 'onleave', finished: 'finished', completed: 'finished', cancelled: 'cancelled', 'entered-in-error': 'entered-in-error' })[row.status] || 'unknown',
+                    class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: ({ outpatient: 'AMB', emergency: 'EMER', inpatient: 'IMP' })[row.encounterType] || 'AMB', display: row.encounterType || 'outpatient' },
+                    subject: patientRef, period: { start: row.startedAt || undefined, end: row.endedAt || undefined },
+                    reasonCode: row.reasonForVisit ? [{ text: row.reasonForVisit }] : undefined
+                }));
+                (appData.allergies || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'AllergyIntolerance', id: String(row.id), patient: patientRef,
+                    clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical', code: ['active', 'inactive', 'resolved'].includes(row.clinicalStatus) ? row.clinicalStatus : 'active' }] },
+                    code: { text: row.substance || 'Unspecified substance' }, category: ['food', 'medication', 'environment', 'biologic'].includes(row.category) ? [row.category] : undefined,
+                    criticality: ['low', 'high', 'unable-to-assess'].includes(row.criticality) ? row.criticality : 'unable-to-assess',
+                    reaction: row.reaction ? [{ manifestation: [{ text: row.reaction }], severity: ({ mild: 'mild', moderate: 'moderate', severe: 'severe' })[String(row.severity || '').toLowerCase()] }] : undefined
+                }));
+                (appData.conditions || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'Condition', id: String(row.id), subject: patientRef,
+                    clinicalStatus: { text: row.clinicalStatus || 'active' }, verificationStatus: { text: row.verificationStatus || 'provisional' },
+                    code: { text: row.conditionName || 'Unspecified condition' }, onsetDateTime: row.onsetDate || undefined, note: row.notes ? [{ text: row.notes }] : undefined
+                }));
+                (appData.medicationOrders || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'MedicationRequest', id: String(row.id), status: ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft', 'unknown'].includes(row.status) ? row.status : 'unknown',
+                    intent: 'order', medicationCodeableConcept: { text: row.medicationName || 'Unspecified medication' }, subject: patientRef,
+                    dosageInstruction: [{ text: [row.dose, row.doseUnit, row.route, row.frequency].filter(Boolean).join(' ') }], reasonCode: row.indication ? [{ text: row.indication }] : undefined
+                }));
+                (appData.vitals || []).filter((row) => row.patientId === patient.id).forEach((row) => {
+                    const measurements = [
+                        ['temperature', row.temperature, 'Cel', '°C'], ['heart-rate', row.heartRate, '/min', 'beats/minute'],
+                        ['respiratory-rate', row.respiratoryRate, '/min', 'breaths/minute'], ['oxygen-saturation', row.oxygenSaturation, '%', '%'],
+                        ['body-weight', row.weight, 'kg', 'kg'], ['body-height', row.height, 'cm', 'cm'], ['body-mass-index', row.bmi, 'kg/m2', 'kg/m²']
+                    ];
+                    measurements.forEach(([code, raw, unit, display]) => {
+                        const value = Number(raw);
+                        if (!Number.isFinite(value) || raw === null || raw === undefined || raw === '') return;
+                        add({ resourceType: 'Observation', id: `${String(row.id)}-${code}`.replace(/[^A-Za-z0-9.-]/g, '-').slice(0, 64), status: 'final', category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }],
+                            code: { text: code }, subject: patientRef, effectiveDateTime: row.timestamp || undefined, valueQuantity: { value, unit: display, system: 'http://unitsofmeasure.org', code: unit } });
+                    });
+                    if (row.bloodPressureSystolic != null && row.bloodPressureDiastolic != null) {
+                        add({ resourceType: 'Observation', id: `${String(row.id)}-blood-pressure`.replace(/[^A-Za-z0-9.-]/g, '-').slice(0, 64), status: 'final', category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }],
+                            code: { text: 'blood pressure panel' }, subject: patientRef, effectiveDateTime: row.timestamp || undefined,
+                            component: [{ code: { text: 'systolic blood pressure' }, valueQuantity: { value: Number(row.bloodPressureSystolic), unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' } }, { code: { text: 'diastolic blood pressure' }, valueQuantity: { value: Number(row.bloodPressureDiastolic), unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' } }] });
+                    }
+                });
+                (appData.immunizations || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'Immunization', id: String(row.id), status: ({ administered: 'completed', completed: 'completed', 'entered-in-error': 'entered-in-error', 'not-done': 'not-done' })[row.status] || 'not-done', vaccineCode: { text: row.vaccine || 'Unspecified vaccine' }, patient: patientRef,
+                    occurrenceDateTime: row.administeredDate || undefined, note: row.notes ? [{ text: row.notes }] : undefined
+                }));
+                (appData.carePlans || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                    resourceType: 'CarePlan', id: String(row.id), status: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'].includes(row.status) ? row.status : 'unknown',
+                    intent: 'plan', subject: patientRef, title: row.title || 'Care plan', description: row.description || undefined, period: { end: row.targetDate || undefined }
+                }));
+
+                const bundle = { resourceType: 'Bundle', type: 'collection', timestamp: new Date().toISOString(), entry: entries };
+                const fileName = `onemed-fhir-r4-${String(patient.patientNumber || patient.id).replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
+                try {
+                    const audit = await window.OneMedSupabase?.recordComplianceExport?.('fhir_r4_patient_bundle', fileName, entries.length, { patient_id: patient.id, fhir_version: '4.0.1', bundle_type: 'collection' });
+                    if (!audit || audit.error) throw audit?.error || new Error('The export event could not be recorded.');
+                    const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/fhir+json;charset=utf-8' }));
+                    const link = document.createElement('a');
+                    link.href = blobUrl; link.download = fileName; link.click();
+                    URL.revokeObjectURL(blobUrl);
+                    setExportMessage(`Exported ${entries.length} FHIR R4 resources. The export event was recorded.`);
+                } catch (error) {
+                    setExportMessage(`Export stopped: ${error?.message || 'the export event could not be recorded.'}`);
+                } finally {
+                    setExporting(false);
+                }
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -258,6 +355,15 @@
                             ))}
                         </div>
                     </Card>
+
+                    {user?.role === 'super_admin' ? <Card title="FHIR R4 patient export">
+                        <p className="mb-4 text-sm text-slate-600">Download a patient scoped FHIR R4 collection Bundle containing available demographics, encounters, allergies, problems, medication orders, observations, immunizations, and care plans. Export is recorded before the file is created.</p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div className="flex-1"><Select label="Patient" value={exportPatientId} onChange={(event) => { setExportPatientId(event.target.value); setExportMessage(''); }} options={[{ value: '', label: 'Select a patient…' }, ...(appData.patients || []).map((item) => ({ value: item.id, label: `${item.patientNumber || item.id} — ${item.firstName || ''} ${item.lastName || ''}`.trim() }))]} /></div>
+                            <Button variant="primary" icon={Icons.Download} disabled={!exportPatientId || exporting} onClick={exportPatientBundle}>{exporting ? 'Preparing export…' : 'Download FHIR Bundle'}</Button>
+                        </div>
+                        {exportMessage && <p className="mt-3 text-sm text-slate-700" role="status">{exportMessage}</p>}
+                    </Card> : <Card title="FHIR R4 patient export"><p className="text-sm text-slate-600">Patient export is restricted to super administrators by the current database authorization policy.</p></Card>}
 
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         <Card title="Clinical document register"><p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Policies are not represented by a Supabase table in the current schema. The repository lists the persisted clinical documents below.</p></Card>
