@@ -69,6 +69,7 @@
             ...row,
             id: row.id,
             patientNumber: row.patient_number || row.patientNumber,
+            medicalRecordNumber: row.medical_record_number || row.medicalRecordNumber || '',
             firstName: row.first_name || row.firstName,
             lastName: row.last_name || row.lastName,
             dateOfBirth: row.date_of_birth || row.dateOfBirth,

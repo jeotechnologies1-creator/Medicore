@@ -11,6 +11,7 @@
                 const roleMenus = {
                     super_admin: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
+                        { id: 'records', label: 'Records', icon: Icons.FolderOpen },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                         { id: 'doctors', label: 'Doctors', icon: Icons.Stethoscope },
                         { id: 'laboratory', label: 'Laboratory', icon: Icons.FlaskConical },
@@ -59,6 +60,9 @@
                         { id: 'patients', label: 'Patient Registration', icon: Icons.UserPlus },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                         { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
+                    ],
+                    records_officer: [
+                        { id: 'records', label: 'Records', icon: Icons.FolderOpen },
                     ],
                     laboratory_scientist: [
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },

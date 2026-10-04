@@ -22,7 +22,7 @@ begin
   if role_type_name is not null then
     foreach role_label in array array[
       'super_admin','doctor','nurse','receptionist','pharmacist',
-      'laboratory_scientist','radiographer','accountant','patient'
+      'laboratory_scientist','radiographer','accountant','records_officer','patient'
     ] loop
       execute format('alter type %I.%I add value if not exists %L', role_type_schema, role_type_name, role_label);
     end loop;

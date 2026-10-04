@@ -444,6 +444,7 @@
             const permissionDepartments = [
                 { key: 'dashboard', label: 'Dashboard' },
                 { key: 'patients', label: 'Patients' },
+                { key: 'records', label: 'Records' },
                 { key: 'appointments', label: 'Appointments' },
                 { key: 'doctors', label: 'Doctors' },
                 { key: 'laboratory', label: 'Laboratory' },
@@ -471,7 +472,7 @@
                 { key: 'settings', label: 'Settings' }
             ];
             const permissionAliases = {
-                appointments: 'appointment', doctors: 'doctor', laboratory: 'labs', radiology: 'imaging',
+                appointments: 'appointment', records: 'record_management', doctors: 'doctor', laboratory: 'labs', radiology: 'imaging',
                 clinical_workflows: 'encounters', clinical_decision_support: 'cds', operations: 'ops',
                 procurement: 'supply_chain', referrals: 'care_coordination', workforce: 'staffing',
                 insurance: 'claims', payments: 'payment', documents: 'document_control', compliance: 'governance',
@@ -495,6 +496,7 @@
                     permissions: {
                         dashboard: true,
                         patients: true,
+                        records: true,
                         appointments: true,
                         doctors: true,
                         laboratory: true,
@@ -642,6 +644,13 @@
                         insurance: true,
                         payments: true,
                         reports: true
+                    }
+                },
+                {
+                    role: 'Records Officer',
+                    permissions: {
+                        dashboard: true,
+                        records: true
                     }
                 }
             ];

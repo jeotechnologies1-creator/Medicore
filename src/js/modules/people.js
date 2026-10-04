@@ -2,7 +2,7 @@
         // ==========================================
         const HRStaffModule = () => {
             const [activeTab, setActiveTab] = useState('overview');
-            const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'super_admin'].includes(person.role));
+            const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'super_admin'].includes(person.role));
             const activeStaff = staff.filter((person) => person.status === 'active').length;
             const attendanceRate = staff.length ? Math.round((activeStaff / staff.length) * 100) : 0;
             const departments = Array.from(new Set(staff.map((person) => person.department || 'General').filter(Boolean)));
@@ -349,7 +349,7 @@
                                 <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
                                 <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
                                 <Input label="Temporary password" type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
-                                <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant'].map(value => ({ value, label: value.replaceAll('_', ' ') }))} />
+                                <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'records_officer', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant'].map(value => ({ value, label: value.replaceAll('_', ' ') }))} />
                                 <Input label="Department" value={staffForm.department} onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })} />
                                 {staffMessage && <p className={'text-sm ' + (staffMessage.includes('now sign in') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" onClick={handleCreateStaff} disabled={creatingStaff} icon={creatingStaff ? Icons.RefreshCw : Icons.UserPlus}>

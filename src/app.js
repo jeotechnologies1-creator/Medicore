@@ -174,7 +174,9 @@
                     report: 'reports',
                     audit_logs: 'audit',
                     system_settings: 'settings',
-                    portal: 'portal'
+                    portal: 'portal',
+                    record_management: 'records',
+                    medical_records: 'records'
                 };
 
                 const safeId = String(moduleId || '').trim();
@@ -184,6 +186,7 @@
             const moduleMap = {
                 dashboard: () => <DashboardModule />,
                 patients: () => <PatientsModule />,
+                records: () => <RecordsModule />,
                 appointments: () => user?.role === 'patient' ? <PatientPortalModule initialTab="appointments" /> : <AppointmentsModule />,
                 doctors: () => <DoctorsModule />,
                 consultations: () => <ConsultationsModule />,

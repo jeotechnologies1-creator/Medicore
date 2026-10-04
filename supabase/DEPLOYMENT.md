@@ -27,6 +27,7 @@ The front-end calls the following database contracts:
 | Documents | `patient_documents` plus the private `patient-documents` Storage bucket from `production_hardening.sql` |
 | Portal messages and refill requests | `patient_messages`, `medication_refill_requests` from `patient_portal.sql` |
 | Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
+| Records Officer registry and read-only clinical chart access | `records` permission, `records_officer` profile role, and patient-record RLS from `role_authorization.sql` plus `safe_core_multibranch.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 
@@ -39,6 +40,8 @@ supabase functions deploy create-staff
 ```
 
 `create-staff` is the only front-end-invoked function that is not a Postgres function. It uses `SUPABASE_SERVICE_ROLE_KEY` in the Supabase Edge Function environment. Never expose that key in the front end.
+
+The staff form can create `records_officer` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql` so the enum accepts the new role. Records Officers can read patient charts but cannot write clinical records; the `records` module permission controls their app navigation.
 
 ## Post-deployment checks
 

@@ -41,7 +41,7 @@ Deno.serve(async (request) => {
   const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : '';
   const role = typeof payload.role === 'string' ? payload.role : '';
   const department = typeof payload.department === 'string' ? payload.department.trim() : '';
-  const allowedRoles = ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant'];
+  const allowedRoles = ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer'];
   if (!email || !password || !fullName || !allowedRoles.includes(role) || password.length < 8) {
     return Response.json({ error: 'Provide a name, email, supported role, and a password of at least 8 characters.' }, { status: 400, headers: corsHeaders });
   }

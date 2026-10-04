@@ -30,6 +30,7 @@ $$;
 create or replace function public.can_read_patient_record(target_patient_id uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.is_clinical_staff()
+    or public.has_any_role(array['records_officer'])
     or exists (
       select 1 from public.profiles
       where auth_user_id = auth.uid()
@@ -189,7 +190,7 @@ create policy "admins manage facilities" on public.facilities for all using (pub
 create policy "finance read bank accounts" on public.facility_bank_accounts for select using (public.has_any_role(array['super_admin','accountant','receptionist']));
 create policy "admins manage bank accounts" on public.facility_bank_accounts for all using (public.is_admin()) with check (public.is_admin());
 do $$ declare table_name text; begin
-  foreach table_name in array array['patient_next_of_kin','nursing_notes','intake_output_records','pain_assessments','emergency_visits','clinical_record_versions','patient_access_logs'] loop
+  foreach table_name in array array['patient_next_of_kin','nursing_notes','intake_output_records','pain_assessments','emergency_visits'] loop
     execute format('create policy %I on public.%I for select using (public.can_read_patient_record(patient_id))', 'authorized patient record read', table_name);
   end loop;
   foreach table_name in array array['patient_next_of_kin','nursing_notes','intake_output_records','pain_assessments','emergency_visits'] loop

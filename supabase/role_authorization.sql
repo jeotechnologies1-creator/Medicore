@@ -14,6 +14,7 @@ $$;
 create or replace function public.can_read_patient_record(target_patient_id uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.is_clinical_staff()
+    or public.has_any_role(array['records_officer'])
     or exists (
       select 1 from public.profiles
       where auth_user_id = auth.uid()
@@ -217,7 +218,7 @@ create policy "clinical read medication reconciliations" on public.medication_re
 alter table public.profiles alter column role set default 'receptionist';
 alter table public.profiles drop constraint if exists profiles_role_allowed;
 alter table public.profiles add constraint profiles_role_allowed check (
-  role::text in ('super_admin','doctor','nurse','receptionist','pharmacist','laboratory_scientist','radiographer','accountant','patient')
+  role::text in ('super_admin','doctor','nurse','receptionist','pharmacist','laboratory_scientist','radiographer','accountant','records_officer','patient')
 ) not valid;
 alter table public.profiles drop constraint if exists profiles_status_allowed;
 alter table public.profiles add constraint profiles_status_allowed check (status in ('active','inactive','suspended')) not valid;

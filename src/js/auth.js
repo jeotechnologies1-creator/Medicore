@@ -3,13 +3,14 @@
         // ==========================================
         const AuthContext = React.createContext(null);
         const canonicalModuleKeys = [
-            'dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
+            'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
             'hr', 'offices', 'reports', 'audit', 'settings'
         ];
 
         const legacyPermissionAliases = {
             appointments: ['appointment'],
+            records: ['record_management', 'medical_records'],
             doctors: ['doctor'],
             laboratory: ['labs', 'lab', 'lab_orders'],
             radiology: ['imaging'],
@@ -93,6 +94,7 @@
                 permissions: {
                     dashboard: true,
                     patients: true,
+                    records: true,
                     appointments: true,
                     doctors: true,
                     laboratory: true,
@@ -244,6 +246,13 @@
                     audit: false,
                     settings: false
                 }
+            },
+            {
+                role: 'Records Officer',
+                permissions: {
+                    dashboard: true,
+                    records: true
+                }
             }
         ];
 
@@ -394,10 +403,11 @@
                 }
 
                 const fallback = {
-                    super_admin: ['dashboard', 'patients', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
+                    super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
                     doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments', 'billing'],
+                    records_officer: ['dashboard', 'records'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],
                     radiographer: ['dashboard', 'radiology', 'upload'],
