@@ -7,6 +7,7 @@ const RecordsModule = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [accessMessage, setAccessMessage] = useState('');
     const [accessError, setAccessError] = useState('');
+    const [documentLinks, setDocumentLinks] = useState({});
     const patients = appData.patients || [];
 
     const filteredPatients = patients.filter((patient) => {
@@ -40,6 +41,37 @@ const RecordsModule = () => {
             }
         }
         setSelectedPatient(patient);
+    };
+
+    const createDocumentLink = async (document) => {
+        setAccessMessage('');
+        setAccessError('');
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) {
+            setAccessError('The document link could not be created because the database is unavailable.');
+            return;
+        }
+        try {
+            const { error } = await client.schema('public').from('patient_access_logs').insert({
+                patient_id: document.patientId,
+                purpose: 'records_document'
+            });
+            if (error) throw error;
+        } catch (error) {
+            if (['PGRST202', 'PGRST205'].includes(error?.code)) {
+                setAccessMessage(`The document link may open, but this access was not logged (${error.code}).`);
+            } else {
+                setAccessError(`The document link was not created because access could not be logged. ${error?.message || ''}`.trim());
+                return;
+            }
+        }
+        try {
+            const { data, error } = await window.OneMedSupabase.createDocumentUrl(document.fileUrl);
+            if (error || !data?.signedUrl) throw error || new Error('The storage service returned no secure link.');
+            setDocumentLinks((links) => ({ ...links, [document.id]: data.signedUrl }));
+        } catch (error) {
+            setAccessError(`Unable to create a secure document link. ${error?.message || ''}`.trim());
+        }
     };
 
     if (selectedPatient) {
@@ -96,6 +128,21 @@ const RecordsModule = () => {
                         </div>
                     </Card>
                 </div>
+                <Card title="Patient documents" subtitle="Private attachments are opened through short-lived, audited links.">
+                    {documents.length ? <div className="divide-y divide-slate-100">
+                        {documents.map((document) => (
+                            <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                                <div>
+                                    <p className="font-medium text-slate-800">{document.fileName}</p>
+                                    <p className="text-xs text-slate-500">{document.documentType} · {document.size}</p>
+                                </div>
+                                {documentLinks[document.id]
+                                    ? <div className="flex items-center gap-2"><a href={documentLinks[document.id]} target="_blank" rel="noopener noreferrer" className="rounded-lg px-3 py-2 text-sm font-medium text-medical-700 hover:bg-medical-50">Open secure link</a><Button size="sm" variant="ghost" onClick={() => createDocumentLink(document)}>Refresh</Button></div>
+                                    : <Button size="sm" variant="outline" icon={Icons.FileText} onClick={() => createDocumentLink(document)}>Create secure link</Button>}
+                            </div>
+                        ))}
+                    </div> : <p className="text-sm text-slate-500">No documents have been uploaded for this patient.</p>}
+                </Card>
             </div>
         );
     }

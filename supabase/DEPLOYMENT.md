@@ -41,13 +41,13 @@ supabase functions deploy create-staff
 
 `create-staff` is the only front-end-invoked function that is not a Postgres function. It uses `SUPABASE_SERVICE_ROLE_KEY` in the Supabase Edge Function environment. Never expose that key in the front end.
 
-The staff form can create `records_officer` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql` so the enum accepts the new role. Records Officers can read patient charts but cannot write clinical records; the `records` module permission controls their app navigation.
+The staff form creates active `records_officer` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql` so the enum accepts the new role. Records Officers can read patient charts and private attachments but cannot write clinical records or upload/delete files; the `records` module permission controls their app navigation.
 
 ## Post-deployment checks
 
 1. Create or link the initial account in Supabase Auth, then promote its `profiles.role` to `super_admin` manually.
 2. Create one account for each role and confirm its permitted screens and rows only.
-3. Upload and read a document as a clinician; confirm a patient can read only their own document.
+3. Upload and read a document as a clinician; confirm a Records Officer can read it but cannot upload or delete files, and a patient can read only their own document.
 4. Dispense a multi-item prescription and verify stock, lot choice, prescription state, and audit event in one transaction.
 5. Finalize a lab or radiology result and confirm a `result_acknowledgements` row is created.
 6. Configure a server-side schedule to invoke `public.escalate_overdue_results()` and test an overdue acknowledgement in staging.

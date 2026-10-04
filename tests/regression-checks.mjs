@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -16,7 +16,12 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('supabase/role_authorization.sql'),
     read('src/js/modules/system.js'),
     read('src/js/modules/patients.js'),
-    read('supabase/safe_core_multibranch.sql')
+    read('supabase/safe_core_multibranch.sql'),
+    read('src/js/modules/records.js'),
+    read('src/js/layout.js'),
+    read('src/js/modules/people.js'),
+    read('supabase/functions/create-staff/index.ts'),
+    read('supabase/legacy_role_enum_compatibility.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -62,5 +67,21 @@ assert.match(safeCore, /create trigger stamp_patient_access_log before insert/, 
 assert.match(safeCore, /create policy "authorized users log patient access" on public\.patient_access_logs for insert/, 'Patient-access log inserts must be authorized by row-level security.');
 assert.match(safeCore, /revoke update, delete, truncate, references, trigger on public\.patient_access_logs from authenticated/, 'Authenticated clients must not alter or delete access logs.');
 assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after its schema changes.');
+assert.match(app, /records: \(\) => <RecordsModule \/>/, 'The Records screen must be registered as a separate module.');
+assert.match(auth, /records_officer: \['dashboard', 'records'\]/, 'Records Officers must default to the Records module only.');
+assert.match(system, /role: 'Records Officer',[\s\S]*?records: true/, 'The administrator permission matrix must enable Records for its staff role.');
+assert.match(layout, /records_officer:[\s\S]*?id: 'records', label: 'Records'/, 'Records Officers must have a Records navigation item.');
+assert.match(people, /'records_officer'/, 'Administrators must be able to select and manage Records Officers.');
+assert.match(staffFunction, /requesterProfile\?\.status !== 'active'/, 'Staff creation must require an active administrator.');
+assert.match(staffFunction, /'records_officer'/, 'The staff provisioning endpoint must accept the Records Officer role.');
+assert.match(staffFunction, /status: 'active'/, 'New Records Officer accounts must be activated during provisioning.');
+assert.match(authorization, /role::text in \([^\n]*'records_officer'/, 'The profile role constraint must accept Records Officers.');
+assert.match(legacyRoles, /'accountant','records_officer','patient'/, 'Legacy role enums must be upgraded before Records Officers are created.');
+assert.match(authorization, /or public\.has_any_role\(array\['records_officer'\]\)/, 'Records Officers must have read-only clinical chart access.');
+assert.match(safeCore, /create policy "records officers read patient documents" on storage\.objects for select/, 'Records Officers must be able to read private chart attachments.');
+assert.doesNotMatch(safeCore, /records officers read patient documents" on storage\.objects for (insert|update|delete)/, 'Records Officers must not upload, update, or delete chart attachments.');
+assert.match(records, /purpose: 'records_module'/, 'Opening a chart in Records must be audited.');
+assert.match(records, /purpose: 'records_document'/, 'Opening a private document from Records must be audited.');
+assert.match(records, /createDocumentUrl\(document\.fileUrl\)/, 'Records must open private attachments through short-lived signed URLs.');
 
 console.log('Regression checks passed.');

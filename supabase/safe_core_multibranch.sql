@@ -195,7 +195,7 @@ do $$ declare table_name text; begin
   end loop;
   foreach table_name in array array['patient_next_of_kin','nursing_notes','intake_output_records','pain_assessments','emergency_visits'] loop
     execute format('create policy %I on public.%I for all using (public.has_any_role(array[''super_admin'',''doctor'',''nurse''])) with check (public.has_any_role(array[''super_admin'',''doctor'',''nurse'']))', 'clinical manage record', table_name);
-  end loop;
+  end loop; 
 end $$;
 drop policy if exists "authorized users log patient access" on public.patient_access_logs;
 create policy "authorized users log patient access" on public.patient_access_logs for insert with check (
@@ -205,6 +205,18 @@ create policy "admins read clinical versions" on public.clinical_record_versions
 create policy "admins read patient access logs" on public.patient_access_logs for select using (public.is_admin());
 create policy "admins manage fhir jobs" on public.fhir_exchange_jobs for all using (public.is_admin()) with check (public.is_admin());
 create policy "admins manage downtime events" on public.downtime_events for all using (public.is_admin()) with check (public.is_admin());
+
+-- Records Officers may retrieve existing private chart attachments, but the
+-- role is deliberately excluded from document upload and delete policies.
+drop policy if exists "records officers read patient documents" on storage.objects;
+create policy "records officers read patient documents" on storage.objects for select using (
+  bucket_id = 'patient-documents'
+  and public.has_any_role(array['records_officer'])
+  and exists (
+    select 1 from public.patients p
+    where p.id::text = split_part(name, '/', 1)
+  )
+);
 
 -- Make newly created/replaced RPCs visible to PostgREST immediately.
 notify pgrst, 'reload schema';

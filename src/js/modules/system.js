@@ -480,12 +480,14 @@
                 hr: 'staff', offices: 'office', reports: 'report', audit: 'audit_logs', settings: 'system_settings'
             };
             const normalizeMatrixRows = (matrix) => (matrix || []).map((row) => {
-                const isSuperAdmin = String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'super_admin';
+                const roleKey = String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_');
+                const isSuperAdmin = roleKey === 'super_admin';
                 return {
                     ...row,
                     permissions: permissionDepartments.reduce((permissions, department) => {
                         const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
-                        return { ...permissions, [department.key]: value === undefined ? isSuperAdmin : Boolean(value) };
+                        const defaultAllowed = isSuperAdmin || (roleKey === 'records_officer' && ['dashboard', 'records'].includes(department.key));
+                        return { ...permissions, [department.key]: value === undefined ? defaultAllowed : Boolean(value) };
                     }, { ...(row.permissions || {}) })
                 };
             });

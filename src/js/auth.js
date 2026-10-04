@@ -71,6 +71,10 @@
                 if (permissions.clinical_workflows === undefined && ['super_admin', 'doctor', 'nurse'].includes(roleKey)) {
                     permissions.clinical_workflows = true;
                 }
+                if (roleKey === 'records_officer') {
+                    if (permissions.dashboard === undefined) permissions.dashboard = true;
+                    if (permissions.records === undefined) permissions.records = true;
+                }
 
                 // Older matrices did not include every department. Preserve an
                 // administrator's explicit choices, while giving legacy Super
