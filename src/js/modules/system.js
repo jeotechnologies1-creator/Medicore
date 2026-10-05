@@ -686,7 +686,7 @@
                 }
             });
             const [saveMessage, setSaveMessage] = useState('');
-            const [bankAccountDraft, setBankAccountDraft] = useState({ bankName: '', accountName: '', accountNumber: '' });
+            const [bankAccountDraft, setBankAccountDraft] = useState({ bankName: '', accountName: '', accountNumber: '', department: '' });
             const [roleMatrix, setRoleMatrix] = useState(() => {
                 try {
                     const saved = JSON.parse(localStorage.getItem('onemed_role_matrix') || '[]');
@@ -753,8 +753,14 @@
                     setSaveMessage('This bank account is already listed.');
                     return;
                 }
-                updateSetting('bankAccounts', [...(settings.bankAccounts || []), { bankName, accountName, accountNumber, primary: !(settings.bankAccounts || []).length }]);
-                setBankAccountDraft({ bankName: '', accountName: '', accountNumber: '' });
+                const department = bankAccountDraft.department.trim();
+                const alreadyAssigned = (settings.bankAccounts || []).some((account) => [account.department, ...(account.departments || [])].filter(Boolean).some((name) => name.trim().toLowerCase() === department.toLowerCase()));
+                if (department && alreadyAssigned) {
+                    setSaveMessage(`A payment account is already assigned to ${department}. Remove it before assigning a different account.`);
+                    return;
+                }
+                updateSetting('bankAccounts', [...(settings.bankAccounts || []), { bankName, accountName, accountNumber, department, departments: department ? [department] : [], primary: !(settings.bankAccounts || []).length }]);
+                setBankAccountDraft({ bankName: '', accountName: '', accountNumber: '', department: '' });
                 setSaveMessage('Bank account added. Save Settings to make it available to Billing.');
             };
 
@@ -1026,13 +1032,14 @@
                         </Card>
 
                         <Card title="Bank Transfer Accounts (NGN)">
-                            <p className="mb-4 text-sm text-slate-500">Only a Super Admin can maintain these verified payment instructions. They are shown when Finance posts a bank-transfer payment.</p>
+                            <p className="mb-4 text-sm text-slate-500">Assign a separate bank account to each department or service. Patient invoices use the account matching the invoice department/service; leave the assignment blank only for a general fallback account.</p>
                             <div className="space-y-3">
                                 {(settings.bankAccounts || []).map((account) => (
                                     <div key={account.accountNumber} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
                                         <div>
                                             <p className="font-medium text-slate-800">{account.bankName} {account.primary ? <span className="text-xs text-medical-600">Primary</span> : null}</p>
                                             <p className="text-xs text-slate-500">{account.accountName} · {account.accountNumber}</p>
+                                            <p className="text-xs text-slate-500">Department/service: {account.department || (account.departments || []).join(', ') || 'General account'}</p>
                                         </div>
                                         <Button variant="ghost" size="sm" onClick={() => removeBankAccount(account.accountNumber)}>Remove</Button>
                                     </div>
@@ -1040,6 +1047,7 @@
                                 <Input label="Bank name" value={bankAccountDraft.bankName} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, bankName: e.target.value }))} />
                                 <Input label="Account name" value={bankAccountDraft.accountName} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, accountName: e.target.value }))} />
                                 <Input label="10-digit account number" inputMode="numeric" value={bankAccountDraft.accountNumber} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, accountNumber: e.target.value }))} />
+                                <Input label="Department or service for this account" value={bankAccountDraft.department} onChange={(e) => setBankAccountDraft(prev => ({ ...prev, department: e.target.value }))} />
                                 <Button variant="secondary" size="sm" onClick={addBankAccount}>Add bank account</Button>
                             </div>
                         </Card>

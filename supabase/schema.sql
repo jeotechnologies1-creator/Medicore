@@ -117,6 +117,8 @@ create table if not exists public.billing (
   paid numeric(12,2) default 0,
   balance numeric(12,2) default 0,
   payment_method text,
+  department text,
+  service text,
   status text not null default 'pending',
   created_at timestamptz not null default now()
 );

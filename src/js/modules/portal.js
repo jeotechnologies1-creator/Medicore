@@ -16,6 +16,26 @@
             });
             const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
             const [portalMessages, setPortalMessages] = useState([]);
+            const [bankAccounts, setBankAccounts] = useState([]);
+
+            useEffect(() => {
+                let active = true;
+                const client = window.OneMedSupabase?.getClient?.();
+                client?.rpc('get_portal_payment_accounts').then(({ data, error }) => {
+                    if (active && !error) setBankAccounts(Array.isArray(data) ? data : []);
+                }).catch(() => {});
+                return () => { active = false; };
+            }, []);
+
+            const paymentAccountFor = (invoice) => {
+                const scope = [invoice.department, invoice.service].filter(Boolean).map((item) => item.trim().toLowerCase());
+                const scopesFor = (account) => [account.department, ...(account.departments || [])].filter(Boolean).map((item) => item.trim().toLowerCase());
+                const scopedAccounts = bankAccounts.filter((account) => scopesFor(account).length);
+                return scopedAccounts.find((account) => scopesFor(account).some((item) => scope.includes(item)))
+                    || bankAccounts.find((account) => !scopesFor(account).length)
+                    || (!scopedAccounts.length ? bankAccounts.find((account) => account.primary) : null)
+                    || null;
+            };
 
             const tabs = [
                 { id: 'overview', label: 'Overview' },
@@ -204,14 +224,20 @@
                                 <DataTable
                                     columns={[
                                         { key: 'invoiceNumber', title: 'Invoice' },
+                                        { key: 'department', title: 'Department / Service', render: (row) => [row.department, row.service].filter(Boolean).join(' · ') || 'General' },
                                         { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
                                         { key: 'total', title: 'Total', render: (row) => formatCurrency(row.total) },
                                         { key: 'balance', title: 'Balance', render: (row) => formatCurrency(row.balance) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : 'warning'}>{row.status}</Badge> },
-                                        { key: 'action', title: 'Action', render: () => <span className="text-slate-500 text-sm">Portal payment available in cashier</span> }
+                                        { key: 'action', title: 'Payment account', render: (row) => {
+                                            if (Number(row.balance || 0) <= 0) return <span className="text-emerald-700 text-xs">No balance due</span>;
+                                            const account = paymentAccountFor(row);
+                                            return account ? <div className="text-xs text-slate-600"><span className="font-medium">{account.bankName}</span><br />{account.accountName}<br />{account.accountNumber}<br /><span>Use {row.invoiceNumber} as reference</span></div> : <span className="text-amber-700 text-xs">No account configured for this service</span>;
+                                        } }
                                     ]}
                                     data={appData.billing.filter(b => b.patientId === patient.id)}
                                 />
+                                <p className="mt-3 text-xs text-slate-500">After making a bank transfer, share your receipt with the cashier for confirmation. Portal instructions do not confirm or automatically reconcile a payment.</p>
                             </Card>
                         )}
 

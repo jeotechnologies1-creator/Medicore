@@ -177,6 +177,8 @@
             paid: row.paid ?? 0,
             balance: row.balance ?? 0,
             paymentMethod: row.payment_method || row.paymentMethod,
+            department: row.department || '',
+            service: row.service || '',
             status: row.status || 'pending'
         }));
 

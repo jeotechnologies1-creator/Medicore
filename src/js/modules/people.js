@@ -189,6 +189,9 @@
             const [staffForm, setStaffForm] = useState({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
             const [staffMessage, setStaffMessage] = useState('');
             const [creatingStaff, setCreatingStaff] = useState(false);
+            const [patientPortalForm, setPatientPortalForm] = useState({ patientId: '', email: '', password: '' });
+            const [patientPortalMessage, setPatientPortalMessage] = useState('');
+            const [creatingPatientPortal, setCreatingPatientPortal] = useState(false);
 
             const offices = appData.offices || [];
             const experts = (appData.users || []).filter((person) => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(person.role) || person.role.includes('doctor') || person.role.includes('nurse'));
@@ -290,6 +293,26 @@
                 }
             };
 
+            const handleCreatePatientPortal = async () => {
+                if (user?.role !== 'super_admin') return setPatientPortalMessage('Only a super admin can create patient portal accounts.');
+                if (!patientPortalForm.patientId || !patientPortalForm.email || patientPortalForm.password.length < 8) return setPatientPortalMessage('Choose a patient, enter their email, and set a password of at least 8 characters.');
+                setCreatingPatientPortal(true);
+                setPatientPortalMessage('');
+                try {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) throw new Error('Supabase client is not available.');
+                    const { data, error } = await client.functions.invoke('create-patient-portal', { body: { ...patientPortalForm, email: patientPortalForm.email.trim() } });
+                    if (error) throw error;
+                    if (!data?.patient) throw new Error(data?.error || 'Unable to create the patient portal account.');
+                    setPatientPortalForm({ patientId: '', email: '', password: '' });
+                    setPatientPortalMessage('Patient portal account created. The patient can sign in with the email and password provided.');
+                } catch (error) {
+                    setPatientPortalMessage(error.message || 'Unable to create the patient portal account.');
+                } finally {
+                    setCreatingPatientPortal(false);
+                }
+            };
+
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
                     <div className="flex items-center justify-between">
@@ -344,7 +367,16 @@
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <Card title="Create Staff Account">
+                        {user?.role === 'super_admin' && <Card title="Create Patient Portal Account">
+                            <div className="space-y-4">
+                                <Select label="Patient record" value={patientPortalForm.patientId} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(appData.patients || []).map(patient => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />
+                                <Input label="Patient email" type="email" value={patientPortalForm.email} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, email: e.target.value }))} />
+                                <Input label="Temporary password (8+ characters)" type="password" value={patientPortalForm.password} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, password: e.target.value }))} />
+                                {patientPortalMessage && <p className={'text-sm ' + (patientPortalMessage.includes('created') ? 'text-emerald-600' : 'text-red-600')}>{patientPortalMessage}</p>}
+                                <Button variant="primary" className="w-full justify-center" onClick={handleCreatePatientPortal} disabled={creatingPatientPortal} icon={creatingPatientPortal ? Icons.RefreshCw : Icons.UserPlus}>{creatingPatientPortal ? 'Creating account...' : 'Create Patient Portal'}</Button>
+                            </div>
+                        </Card>}
+                        {user?.role === 'super_admin' && <Card title="Create Staff Account">
                             <div className="space-y-4">
                                 <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
                                 <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
@@ -356,7 +388,7 @@
                                     {creatingStaff ? 'Creating account...' : 'Create Staff Account'}
                                 </Button>
                             </div>
-                        </Card>
+                        </Card>}
 
                         <Card title="Office Portfolio">
                             <div className="space-y-3">

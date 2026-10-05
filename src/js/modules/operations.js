@@ -630,7 +630,7 @@
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
             const [invoices, setInvoices] = useState(getLiveStore().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
-            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
+            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, department: '', service: '', status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
@@ -665,6 +665,8 @@
                     total: Number(invoiceForm.total || 0),
                     paid: Number(invoiceForm.paid || 0),
                     balance: Math.max(0, Number(invoiceForm.total || 0) - Number(invoiceForm.paid || 0)),
+                    department: invoiceForm.department.trim(),
+                    service: invoiceForm.service.trim(),
                     paymentMethod: 'cash',
                     status: Number(invoiceForm.paid || 0) >= Number(invoiceForm.total || 0) ? 'paid' : 'pending'
                 };
@@ -674,7 +676,7 @@
                 const { data, error } = await client.from('billing').insert([{
                     patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date,
                     subtotal: payload.subtotal, discount: payload.discount, tax: payload.tax, total: payload.total,
-                    paid: payload.paid, balance: payload.balance, payment_method: payload.paymentMethod, status: payload.status
+                    paid: payload.paid, balance: payload.balance, department: payload.department || null, service: payload.service || null, payment_method: payload.paymentMethod, status: payload.status
                 }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
@@ -682,7 +684,7 @@
                 persistStoreTable('billing', next);
                 setInvoices(next);
                 setShowNewInvoice(false);
-                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, status: 'pending' });
+                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, department: '', service: '', status: 'pending' });
             };
 
             const handleProcessPayment = async () => {
@@ -937,6 +939,8 @@
                             <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
                             <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
                             <Input label="Amount Paid" type="number" value={invoiceForm.paid} onChange={(e) => setInvoiceForm(prev => ({ ...prev, paid: e.target.value }))} />
+                            <Input label="Department" value={invoiceForm.department} onChange={(e) => setInvoiceForm(prev => ({ ...prev, department: e.target.value }))} />
+                            <Input label="Service" value={invoiceForm.service} onChange={(e) => setInvoiceForm(prev => ({ ...prev, service: e.target.value }))} />
                         </div>
                     </Modal>
 
