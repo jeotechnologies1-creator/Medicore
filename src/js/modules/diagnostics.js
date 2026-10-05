@@ -1,5 +1,7 @@
         // ==========================================
         const AppointmentsModule = () => {
+            const { user } = useAuth();
+            const isReceptionist = user?.role === 'receptionist';
             const [view, setView] = useState('list');
             const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
             const [showNewAppointment, setShowNewAppointment] = useState(false);
@@ -83,14 +85,14 @@
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Appointments</h2>
-                            <p className="text-slate-500 mt-1">Schedule and manage patient appointments</p>
+                            <p className="text-slate-500 mt-1">{isReceptionist ? 'View scheduled patient appointments' : 'Schedule and manage patient appointments'}</p>
                         </div>
                         <div className="flex gap-2">
                             <div className="flex bg-slate-100 rounded-lg p-1">
                                 <button onClick={() => setView('list')} className={'px-3 py-1.5 rounded-md text-sm font-medium transition-colors ' + (view === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>List</button>
                                 <button onClick={() => setView('calendar')} className={'px-3 py-1.5 rounded-md text-sm font-medium transition-colors ' + (view === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>Calendar</button>
                             </div>
-                            <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewAppointment(true)}>New Appointment</Button>
+                            {!isReceptionist && <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewAppointment(true)}>New Appointment</Button>}
                         </div>
                     </div>
 
@@ -131,9 +133,9 @@
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : row.status === 'cancelled' ? 'danger' : 'default'}>{row.status}</Badge> }
                                 ]}
                                 data={filteredAppointments.sort((a, b) => a.time.localeCompare(b.time))}
-                                actions={(row) => (
+                                actions={!isReceptionist ? (row) => (
                                     row.status === 'scheduled' && <Button variant="primary" size="sm" onClick={() => handleCheckIn(row)}>Check In</Button>
-                                )}
+                                ) : undefined}
                             />
                         ) : (
                             <div className="overflow-x-auto">

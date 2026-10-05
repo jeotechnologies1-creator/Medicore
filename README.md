@@ -31,6 +31,7 @@ Run the SQL files in this order in the Supabase SQL editor:
 13. `supabase/role_authorization.sql`
 14. `supabase/safe_core_multibranch.sql`
 15. `supabase/receptionist_records_referrals.sql`
+16. `supabase/patient_appointment_coordination.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 

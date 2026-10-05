@@ -11,6 +11,10 @@ const RecordsModule = () => {
     const [documentLinks, setDocumentLinks] = useState({});
     const [referrals, setReferrals] = useState([]);
     const [referralError, setReferralError] = useState('');
+    const [appointmentRequests, setAppointmentRequests] = useState([]);
+    const [appointmentProviders, setAppointmentProviders] = useState([]);
+    const [appointmentAssignments, setAppointmentAssignments] = useState({});
+    const [appointmentMessage, setAppointmentMessage] = useState('');
     const patients = appData.patients || [];
 
     useEffect(() => {
@@ -20,6 +24,20 @@ const RecordsModule = () => {
         client.from('patient_record_referrals').select('id, patient_id, reason, status, created_at, patients(first_name, last_name, patient_number)').order('created_at', { ascending: false }).then(({ data, error }) => {
             if (error) setReferralError(error.message);
             else setReferrals(data || []);
+        });
+        client.from('appointments').select('*').eq('status', 'requested').order('created_at', { ascending: true }).then(({ data, error }) => {
+            if (error) setAppointmentMessage(error.message);
+            else {
+                const requests = data || [];
+                setAppointmentRequests(requests);
+                setAppointmentAssignments(Object.fromEntries(requests.map((row) => [row.id, {
+                    doctorId: '', date: row.appointment_date || '', time: row.appointment_time || '', doctorConfirmed: false
+                }])));
+            }
+        });
+        client.rpc('get_appointment_providers').then(({ data, error }) => {
+            if (error) setAppointmentMessage(error.message);
+            else setAppointmentProviders(data || []);
         });
     }, [user?.role]);
 
@@ -63,6 +81,25 @@ const RecordsModule = () => {
         if (error) return setReferralError(error.message);
         setReferralError('');
         setReferrals((current) => current.map((item) => item.id === referral.id ? { ...item, ...data } : item));
+    };
+
+    const resolveAppointmentRequest = async (request, action) => {
+        const assignment = appointmentAssignments[request.id] || {};
+        if (action === 'scheduled' && (!assignment.doctorId || !assignment.date || !assignment.time || !assignment.doctorConfirmed)) {
+            setAppointmentMessage('Confirm the slot with the doctor, then enter the doctor, date, and time before scheduling.');
+            return;
+        }
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return setAppointmentMessage('The appointment request could not be updated because the database is unavailable.');
+        setAppointmentMessage('');
+        const changes = action === 'scheduled'
+            ? { status: 'scheduled', doctor_id: assignment.doctorId, appointment_date: assignment.date, appointment_time: assignment.time }
+            : { status: 'declined' };
+        const { data, error } = await client.from('appointments').update(changes).eq('id', request.id).eq('status', 'requested').select().single();
+        if (error) return setAppointmentMessage(error.message);
+        setAppointmentRequests((current) => current.filter((row) => row.id !== request.id));
+        appData.appointments = (appData.appointments || []).map((row) => row.id === request.id ? { ...row, ...normalizeAppointments([data])[0] } : row);
+        setAppointmentMessage(action === 'scheduled' ? 'Appointment confirmed. The patient will see the confirmed date and time in their portal.' : 'Appointment request declined.');
     };
 
     const createDocumentLink = async (document) => {
@@ -176,6 +213,39 @@ const RecordsModule = () => {
                 <p className="mt-1 text-sm text-slate-500">Find a patient and review their read-only chart index.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient appointment requests" subtitle="Check the requested department with a doctor, then enter the agreed appointment date and time.">
+                {appointmentMessage && <p className="mb-3 text-sm text-slate-700" role="status">{appointmentMessage}</p>}
+                {appointmentRequests.length ? <div className="space-y-4">
+                    {appointmentRequests.map((request) => {
+                        const patient = patients.find((item) => item.id === request.patient_id);
+                        const assignment = appointmentAssignments[request.id] || {};
+                        return <div key={request.id} className="rounded-xl border border-slate-200 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p className="font-semibold text-slate-800">{patient ? `${patient.firstName} ${patient.lastName}` : `Patient ${request.patient_id}`}</p>
+                                    <p className="text-sm text-slate-600">{request.department || 'Department not specified'} · {request.appointment_type || 'Appointment'}</p>
+                                    <p className="mt-1 text-xs text-slate-500">Preferred: {formatDate(request.appointment_date)}{request.appointment_time ? ` at ${request.appointment_time}` : ''}</p>
+                                    {request.notes && <p className="mt-2 text-sm text-slate-600">Reason: {request.notes}</p>}
+                                </div>
+                                <Badge variant="warning">Awaiting scheduling</Badge>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <Select label="Doctor confirmed with" value={assignment.doctorId || ''} onChange={(event) => setAppointmentAssignments((current) => ({ ...current, [request.id]: { ...assignment, doctorId: event.target.value } }))} options={[{ value: '', label: appointmentProviders.length ? 'Select doctor...' : 'No active doctors available' }, ...appointmentProviders.map((provider) => ({ value: provider.id, label: `${provider.full_name}${provider.department ? ` · ${provider.department}` : ''}` }))]} />
+                                <Input label="Confirmed date" type="date" value={assignment.date || ''} onChange={(event) => setAppointmentAssignments((current) => ({ ...current, [request.id]: { ...assignment, date: event.target.value } }))} />
+                                <Input label="Confirmed time" type="time" value={assignment.time || ''} onChange={(event) => setAppointmentAssignments((current) => ({ ...current, [request.id]: { ...assignment, time: event.target.value } }))} />
+                            </div>
+                            <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" checked={Boolean(assignment.doctorConfirmed)} onChange={(event) => setAppointmentAssignments((current) => ({ ...current, [request.id]: { ...assignment, doctorConfirmed: event.target.checked } }))} className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500" />
+                                I confirmed this appointment slot with the doctor.
+                            </label>
+                            <div className="mt-3 flex justify-end gap-2">
+                                <Button size="sm" variant="ghost" onClick={() => resolveAppointmentRequest(request, 'declined')}>Decline request</Button>
+                                <Button size="sm" variant="primary" onClick={() => resolveAppointmentRequest(request, 'scheduled')}>Confirm appointment</Button>
+                            </div>
+                        </div>;
+                    })}
+                </div> : <p className="text-sm text-slate-500">There are no appointment requests waiting for scheduling.</p>}
+            </Card>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient referrals to Records" subtitle="Administrative requests sent by reception.">
                 {referralError && <p className="mb-3 text-sm text-red-600">{referralError}</p>}
                 {referrals.length ? <div className="divide-y divide-slate-100">

@@ -16,6 +16,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 12. `role_authorization.sql`
 13. `safe_core_multibranch.sql`
 14. `receptionist_records_referrals.sql`
+15. `patient_appointment_coordination.sql`
 
 The front-end calls the following database contracts:
 
@@ -30,6 +31,7 @@ The front-end calls the following database contracts:
 | Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
 | Records Officer registry and read-only clinical chart access | `records` permission, `records_officer` profile role, and patient-record RLS from `role_authorization.sql` plus `safe_core_multibranch.sql` |
 | Reception referrals to Records | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
+| Patient portal booking and Records scheduling | Patient-owned appointment request policies, Records-only scheduling of open requests, and `get_appointment_providers()` from `patient_appointment_coordination.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 

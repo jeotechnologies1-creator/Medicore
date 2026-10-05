@@ -8,7 +8,6 @@
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
                 department: '',
-                doctorId: '',
                 date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                 time: '',
                 reason: '',
@@ -17,15 +16,22 @@
             const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
             const [portalMessages, setPortalMessages] = useState([]);
             const [bankAccounts, setBankAccounts] = useState([]);
+            const [appointmentRequests, setAppointmentRequests] = useState([]);
+            const [appointmentMessage, setAppointmentMessage] = useState('');
 
             useEffect(() => {
                 let active = true;
                 const client = window.OneMedSupabase?.getClient?.();
+                if (client && patient?.id) {
+                    client.from('appointments').select('*').eq('patient_id', patient.id).order('appointment_date', { ascending: true }).then(({ data, error }) => {
+                        if (active && !error) setAppointmentRequests(normalizeAppointments(data || []));
+                    });
+                }
                 client?.rpc('get_portal_payment_accounts').then(({ data, error }) => {
                     if (active && !error) setBankAccounts(Array.isArray(data) ? data : []);
                 }).catch(() => {});
                 return () => { active = false; };
-            }, []);
+            }, [patient?.id]);
 
             const paymentAccountFor = (invoice) => {
                 const scope = [invoice.department, invoice.service].filter(Boolean).map((item) => item.trim().toLowerCase());
@@ -70,12 +76,19 @@
 
             const handleBookAppointment = async () => {
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !patient?.id || !appointmentDraft.date) return;
-                const { error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: appointmentDraft.doctorId || null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null });
-                if (error) return;
+                if (!client || !patient?.id || !appointmentDraft.date || !appointmentDraft.department) {
+                    setAppointmentMessage('Choose a department and preferred date to send your appointment request.');
+                    return;
+                }
+                const { data, error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time || null, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null }).select().single();
+                if (error || !data) {
+                    setAppointmentMessage(error?.message || 'Your appointment request could not be sent.');
+                    return;
+                }
+                setAppointmentRequests((current) => [...current, ...normalizeAppointments([data])]);
+                setAppointmentMessage('Request sent. The Records team will confirm the date and time after checking with the doctor.');
                 setAppointmentDraft({
                     department: '',
-                    doctorId: '',
                     date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                     time: '',
                     reason: '',
@@ -166,15 +179,23 @@
                         {activeTab === 'appointments' && (
                             <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.7fr] gap-6">
                                 <Card>
+                                    <div className="mb-3 flex justify-end">
+                                        <Button variant="ghost" size="sm" onClick={async () => {
+                                            const client = window.OneMedSupabase?.getClient?.();
+                                            if (!client || !patient?.id) return;
+                                            const { data, error } = await client.from('appointments').select('*').eq('patient_id', patient.id).order('appointment_date', { ascending: true });
+                                            if (!error) setAppointmentRequests(normalizeAppointments(data || []));
+                                        }}>Refresh appointment status</Button>
+                                    </div>
                                     <DataTable
                                         columns={[
-                                            { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
+                                            { key: 'date', title: 'Requested / confirmed date', render: (row) => formatDate(row.date) },
                                             { key: 'time', title: 'Time' },
                                             { key: 'type', title: 'Type' },
                                             { key: 'department', title: 'Department' },
-                                            { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'scheduled' ? 'info' : 'default'}>{row.status}</Badge> }
+                                            { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' || row.status === 'scheduled' ? 'success' : row.status === 'declined' ? 'danger' : 'warning'}>{row.status === 'scheduled' ? 'confirmed' : row.status}</Badge> }
                                         ]}
-                                        data={appData.appointments.filter(a => a.patientId === patient.id)}
+                                        data={appointmentRequests}
                                     />
                                 </Card>
                                 <Card title="Request appointment">
@@ -184,7 +205,9 @@
                                         <Input label="Preferred time" type="time" value={appointmentDraft.time} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, time: e.target.value }))} />
                                         <Select label="Visit type" value={appointmentDraft.visitType} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, visitType: e.target.value }))} options={[{ value: '', label: 'Select visit type' }, { value: 'follow_up', label: 'Follow-up' }, { value: 'consultation', label: 'Consultation' }, { value: 'review', label: 'Review' }, { value: 'procedure', label: 'Procedure' }]} />
                                         <Input label="Reason" value={appointmentDraft.reason} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, reason: e.target.value }))} />
-                                        <Button variant="primary" icon={Icons.Calendar} onClick={handleBookAppointment}>Submit request</Button>
+                                        {appointmentMessage && <p className={'text-sm ' + (appointmentMessage.startsWith('Request sent') ? 'text-emerald-700' : 'text-red-600')}>{appointmentMessage}</p>}
+                                        <p className="text-xs text-slate-500">Your preferred date is a request. The Records team will check the doctor’s availability and confirm the date and time here.</p>
+                                        <Button variant="primary" icon={Icons.Calendar} onClick={handleBookAppointment}>Send appointment request</Button>
                                     </div>
                                 </Card>
                             </div>
