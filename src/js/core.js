@@ -13,6 +13,7 @@
             prescriptions: [],
             pharmacyInventory: [],
             billing: [],
+            paymentSubmissions: [],
             admissions: [],
             surgeries: [],
             encounters: [],
@@ -449,7 +450,7 @@
 
         const createEmptyStore = () => ({
             users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [],
-            pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [],
+            pharmacyInventory: [], billing: [], paymentSubmissions: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [],
             vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [],
             medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [],
             insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: []
@@ -464,7 +465,7 @@
         // The browser store only mirrors rows read from Supabase. It starts empty
         // so a missing connection can never produce demonstration records.
         const getLiveStore = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff', 'resultAcknowledgements', 'medicationReconciliations'];
+            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'paymentSubmissions', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff', 'resultAcknowledgements', 'medicationReconciliations'];
             const next = {};
             tables.forEach((table) => {
                 next[table] = Array.isArray(appData[table]) ? appData[table] : [];

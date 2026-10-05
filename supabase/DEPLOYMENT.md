@@ -17,6 +17,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 13. `safe_core_multibranch.sql`
 14. `receptionist_records_referrals.sql`
 15. `patient_appointment_coordination.sql`
+16. `accounts_payment_approval.sql`
 
 The front-end calls the following database contracts:
 
@@ -33,6 +34,7 @@ The front-end calls the following database contracts:
 | Reception referrals to Records | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
 | Patient portal booking and Records scheduling | Patient-owned requests, Records appointment booking/confirmation, `get_appointment_providers()`, and patient confirmation notifications from `patient_appointment_coordination.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
+| Payment review | `payment_submissions` and `review_payment_submission(uuid,text)` from `accounts_payment_approval.sql`; payments remain pending until Accounts approval |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 
 ## Required non-SQL deployment

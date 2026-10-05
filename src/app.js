@@ -118,6 +118,16 @@
                 };
             }, [isAuthenticated]);
 
+            useEffect(() => {
+                const refresh = async () => {
+                    const result = await loadSupabaseTables();
+                    setDataLoad({ loading: false, failures: result?.failures || [] });
+                    setDataVersion((value) => value + 1);
+                };
+                window.addEventListener('onemed:refresh-data', refresh);
+                return () => window.removeEventListener('onemed:refresh-data', refresh);
+            }, []);
+
             const handleLogin = () => setIsAuthenticated(true);
 
             const addToast = (message, type = 'info') => {

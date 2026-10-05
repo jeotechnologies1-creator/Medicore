@@ -630,7 +630,7 @@
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
             const [invoices, setInvoices] = useState(getLiveStore().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
-            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, department: '', service: '', status: 'pending' });
+            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
@@ -684,7 +684,7 @@
                 persistStoreTable('billing', next);
                 setInvoices(next);
                 setShowNewInvoice(false);
-                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, paid: 0, department: '', service: '', status: 'pending' });
+                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
             };
 
             const handleProcessPayment = async () => {
@@ -820,7 +820,7 @@
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.createdAt) },
                                     { key: 'actions', title: 'Accounts review', render: row => row.status === 'pending' && ['accountant', 'super_admin'].includes(user?.role) ? <div className="flex gap-2"><Button size="sm" variant="primary" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'approved' }); if (error) notifyPersistenceFailure('approve payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Approve</Button><Button size="sm" variant="danger" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'rejected' }); if (error) notifyPersistenceFailure('reject payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Reject</Button></div> : null }
                                 ]}
-                                data={appData.paymentSubmissions || []}
+                                data={(appData.paymentSubmissions || []).map(payment => ({ ...payment, invoiceNumber: invoices.find(invoice => invoice.id === payment.invoiceId)?.invoiceNumber || 'Invoice unavailable' }))}
                             />
                         </Card>
                     )}
@@ -931,7 +931,6 @@
                             <Select label="Patient" value={invoiceForm.patientId} onChange={(e) => setInvoiceForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
                             <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
-                            <Input label="Amount Paid" type="number" value={invoiceForm.paid} onChange={(e) => setInvoiceForm(prev => ({ ...prev, paid: e.target.value }))} />
                             <Input label="Department" value={invoiceForm.department} onChange={(e) => setInvoiceForm(prev => ({ ...prev, department: e.target.value }))} />
                             <Input label="Service" value={invoiceForm.service} onChange={(e) => setInvoiceForm(prev => ({ ...prev, service: e.target.value }))} />
                         </div>
@@ -940,12 +939,12 @@
                     <Modal
                         isOpen={showPaymentModal}
                         onClose={() => setShowPaymentModal(false)}
-                        title="Post payment"
+                        title="Submit payment for Accounts approval"
                         size="sm"
                         footer={
                             <div className="flex justify-end gap-3">
                                 <Button variant="ghost" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.CheckCircle} onClick={handleProcessPayment}>Save payment</Button>
+                                <Button variant="primary" icon={Icons.CheckCircle} onClick={handleProcessPayment}>Submit for approval</Button>
                             </div>
                         }
                     >
