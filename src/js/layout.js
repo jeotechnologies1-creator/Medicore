@@ -57,9 +57,8 @@
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
                     ],
                     receptionist: [
-                        { id: 'patients', label: 'Patient Registration', icon: Icons.UserPlus },
+                        { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
-                        { id: 'billing', label: 'Billing', icon: Icons.CreditCard },
                     ],
                     records_officer: [
                         { id: 'records', label: 'Records', icon: Icons.FolderOpen },

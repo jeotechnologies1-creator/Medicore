@@ -482,12 +482,14 @@
             const normalizeMatrixRows = (matrix) => (matrix || []).map((row) => {
                 const roleKey = String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_');
                 const isSuperAdmin = roleKey === 'super_admin';
+                const isReceptionist = roleKey === 'receptionist';
                 return {
                     ...row,
                     permissions: permissionDepartments.reduce((permissions, department) => {
                         const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
                         const defaultAllowed = isSuperAdmin || (roleKey === 'records_officer' && ['dashboard', 'records'].includes(department.key));
-                        return { ...permissions, [department.key]: value === undefined ? defaultAllowed : Boolean(value) };
+                        const receptionistAllowed = ['dashboard', 'patients', 'appointments'].includes(department.key);
+                        return { ...permissions, [department.key]: isReceptionist ? receptionistAllowed : value === undefined ? defaultAllowed : Boolean(value) };
                     }, { ...(row.permissions || {}) })
                 };
             });
@@ -608,7 +610,7 @@
                         laboratory: false,
                         radiology: false,
                         pharmacy: false,
-                        billing: true,
+                        billing: false,
                         insurance: false,
                         payments: false,
                         documents: false,
@@ -1125,7 +1127,8 @@
                                                 type="checkbox"
                                                 checked={Boolean(row.permissions?.[department.key])}
                                                 onChange={() => togglePermission(row.role, department.key)}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500"
+                                                disabled={String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'receptionist'}
+                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500 disabled:cursor-not-allowed disabled:opacity-40"
                                                 aria-label={`${row.role}: ${department.label}`}
                                             />
                                         )

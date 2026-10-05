@@ -3,12 +3,25 @@
 // Read-only chart index for Records Officers.
 // ==========================================
 const RecordsModule = () => {
+    const { user } = useAuth();
     const [query, setQuery] = useState('');
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [accessMessage, setAccessMessage] = useState('');
     const [accessError, setAccessError] = useState('');
     const [documentLinks, setDocumentLinks] = useState({});
+    const [referrals, setReferrals] = useState([]);
+    const [referralError, setReferralError] = useState('');
     const patients = appData.patients || [];
+
+    useEffect(() => {
+        if (!['super_admin', 'records_officer'].includes(user?.role)) return;
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return;
+        client.from('patient_record_referrals').select('id, patient_id, reason, status, created_at, patients(first_name, last_name, patient_number)').order('created_at', { ascending: false }).then(({ data, error }) => {
+            if (error) setReferralError(error.message);
+            else setReferrals(data || []);
+        });
+    }, [user?.role]);
 
     const filteredPatients = patients.filter((patient) => {
         const search = query.trim().toLocaleLowerCase();
@@ -41,6 +54,15 @@ const RecordsModule = () => {
             }
         }
         setSelectedPatient(patient);
+    };
+
+    const markReferralReviewed = async (referral) => {
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return setReferralError('The referral could not be updated because the database is unavailable.');
+        const { data, error } = await client.from('patient_record_referrals').update({ status: 'reviewed', reviewed_at: new Date().toISOString() }).eq('id', referral.id).select().single();
+        if (error) return setReferralError(error.message);
+        setReferralError('');
+        setReferrals((current) => current.map((item) => item.id === referral.id ? { ...item, ...data } : item));
     };
 
     const createDocumentLink = async (document) => {
@@ -154,6 +176,22 @@ const RecordsModule = () => {
                 <p className="mt-1 text-sm text-slate-500">Find a patient and review their read-only chart index.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient referrals to Records" subtitle="Administrative requests sent by reception.">
+                {referralError && <p className="mb-3 text-sm text-red-600">{referralError}</p>}
+                {referrals.length ? <div className="divide-y divide-slate-100">
+                    {referrals.map((referral) => <div key={referral.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <div>
+                            <p className="font-medium text-slate-800">{referral.patients?.first_name} {referral.patients?.last_name} · {referral.patients?.patient_number || referral.patient_id}</p>
+                            <p className="text-sm text-slate-600">{referral.reason}</p>
+                            <p className="text-xs text-slate-500">{formatDate(referral.created_at)} · {referral.status}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => openRecord(patients.find((patient) => patient.id === referral.patient_id))} disabled={!patients.some((patient) => patient.id === referral.patient_id)}>Open record</Button>
+                            {referral.status === 'pending' && <Button size="sm" variant="secondary" onClick={() => markReferralReviewed(referral)}>Mark reviewed</Button>}
+                        </div>
+                    </div>)}
+                </div> : <p className="text-sm text-slate-500">No patient referrals have been sent to Records.</p>}
+            </Card>}
             <Card title="Patient index" subtitle={`${filteredPatients.length} of ${patients.length} records`}>
                 <div className="mb-4 max-w-lg">
                     <Input label="Search records" placeholder="Name, MRN, patient number, or phone" value={query} onChange={(event) => setQuery(event.target.value)} />

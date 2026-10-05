@@ -68,6 +68,13 @@
                 // Saved role matrices may predate this clinical module. Apply the
                 // clinician default only when an administrator has not set it.
                 const roleKey = String(row?.role || '').trim().toLowerCase().replace(/\s+/g, '_');
+                if (roleKey === 'receptionist') {
+                    canonicalModuleKeys.forEach((key) => {
+                        const allowed = ['dashboard', 'patients', 'appointments'].includes(key);
+                        permissions[key] = allowed;
+                        (legacyPermissionAliases[key] || []).forEach((alias) => { permissions[alias] = allowed; });
+                    });
+                }
                 if (permissions.clinical_workflows === undefined && ['super_admin', 'doctor', 'nurse'].includes(roleKey)) {
                     permissions.clinical_workflows = true;
                 }
@@ -232,10 +239,10 @@
                     radiology: false,
                     operations: false,
                     procurement: false,
-                    referrals: true,
+                    referrals: false,
                     workforce: false,
                     pharmacy: false,
-                    billing: true,
+                    billing: false,
                     insurance: false,
                     payments: false,
                     documents: false,
@@ -381,7 +388,7 @@
                     super_admin: ['*'],
                     doctor: ['view_patient', 'edit_patient', 'prescribe', 'order_lab', 'order_radiology', 'view_lab', 'view_radiology', 'view_appointments', 'edit_consultation'],
                     nurse: ['view_patient', 'edit_vitals', 'administer_medication', 'view_ward', 'edit_nursing_notes'],
-                    receptionist: ['register_patient', 'view_patient', 'schedule_appointment', 'view_billing'],
+                    receptionist: ['view_patient', 'schedule_appointment', 'refer_to_records'],
                     pharmacist: ['view_prescription', 'dispense', 'manage_inventory'],
                     laboratory_scientist: ['process_lab', 'enter_results', 'view_lab_orders'],
                     radiographer: ['process_imaging', 'upload_images', 'enter_report'],
@@ -397,6 +404,7 @@
                 // This control is deliberately evaluated here (rather than only in
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
+                if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments'].includes(moduleId);
 
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
@@ -410,7 +418,7 @@
                     super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
                     doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
-                    receptionist: ['dashboard', 'patients', 'appointments', 'billing'],
+                    receptionist: ['dashboard', 'patients', 'appointments'],
                     records_officer: ['dashboard', 'records'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],

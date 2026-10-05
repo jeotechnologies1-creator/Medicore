@@ -3,6 +3,7 @@
         // ==========================================
         const PatientsModule = () => {
             const { user } = useAuth();
+            const isReceptionist = user?.role === 'receptionist';
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
             const [showRegistration, setShowRegistration] = useState(false);
@@ -178,6 +179,9 @@
                     frequency: 'Daily',
                     indication: ''
                 });
+                const [recordsReferralReason, setRecordsReferralReason] = useState('');
+                const [recordsReferralMessage, setRecordsReferralMessage] = useState('');
+                const [sendingRecordsReferral, setSendingRecordsReferral] = useState(false);
                 const [encounterForm, setEncounterForm] = useState({
                     chiefComplaint: '',
                     diagnosis: '',
@@ -529,7 +533,10 @@
                     }
                 ];
 
-                const tabs = [
+                const tabs = isReceptionist ? [
+                    { id: 'overview', label: 'Overview' },
+                    { id: 'visits', label: 'Appointments' }
+                ] : [
                     { id: 'overview', label: 'Overview' },
                     { id: 'chart', label: 'Clinical Chart' },
                     { id: 'visits', label: 'Visits & Appointments' },
@@ -541,6 +548,33 @@
                     { id: 'documents', label: 'Documents' },
                 ];
 
+                const handleReferToRecords = async () => {
+                    const reason = recordsReferralReason.trim();
+                    if (!reason) {
+                        setRecordsReferralMessage('Enter a reason for the records referral.');
+                        return;
+                    }
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) {
+                        setRecordsReferralMessage('The records referral could not be sent because the database is unavailable.');
+                        return;
+                    }
+                    setSendingRecordsReferral(true);
+                    setRecordsReferralMessage('');
+                    const { error } = await client.from('patient_record_referrals').insert({
+                        patient_id: patient.id,
+                        referred_by_profile_id: user.id,
+                        reason
+                    });
+                    setSendingRecordsReferral(false);
+                    if (error) {
+                        setRecordsReferralMessage(`Referral not sent: ${error.message}`);
+                        return;
+                    }
+                    setRecordsReferralReason('');
+                    setRecordsReferralMessage('Referral sent to the Records team.');
+                };
+
                 return (
                     <div className="animate-fade-in">
                         <div className="flex items-center justify-between mb-6">
@@ -551,20 +585,42 @@
                                     <div className="flex items-center gap-3 mt-1">
                                         <span className="text-sm text-slate-500">{patient.patientNumber}</span>
                                         <Badge variant={patient.status === 'active' ? 'success' : 'default'}>{patient.status}</Badge>
-                                        <span className="text-sm text-slate-500">{calculateAge(patient.dateOfBirth)} years - {patient.gender}</span>
+                                        {!isReceptionist && <span className="text-sm text-slate-500">{calculateAge(patient.dateOfBirth)} years - {patient.gender}</span>}
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
+                            {!isReceptionist && <div className="flex gap-2">
                                 <Button variant="secondary" icon={Icons.Printer}>Print</Button>
                                 <Button variant="primary" icon={Icons.Edit}>Edit</Button>
-                            </div>
+                            </div>}
                         </div>
 
                         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                         <div className="mt-6">
-                            {activeTab === 'overview' && (
+                            {activeTab === 'overview' && isReceptionist && (
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                    <Card title="Patient overview">
+                                        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                            <div><dt className="text-slate-500">Patient ID</dt><dd className="font-medium text-slate-800">{patient.patientNumber}</dd></div>
+                                            <div><dt className="text-slate-500">Date of birth</dt><dd className="font-medium text-slate-800">{formatDate(patient.dateOfBirth)}</dd></div>
+                                            <div><dt className="text-slate-500">Phone</dt><dd className="font-medium text-slate-800">{patient.phone || 'Not recorded'}</dd></div>
+                                            <div><dt className="text-slate-500">Email</dt><dd className="font-medium text-slate-800">{patient.email || 'Not recorded'}</dd></div>
+                                            <div><dt className="text-slate-500">Address</dt><dd className="font-medium text-slate-800">{patient.address || 'Not recorded'}</dd></div>
+                                        </dl>
+                                    </Card>
+                                    <Card title="Refer to Records">
+                                        <div className="space-y-3">
+                                            <p className="text-sm text-slate-600">Send an administrative records request to the Records team.</p>
+                                            <TextArea label="Reason for referral" rows={3} value={recordsReferralReason} onChange={(event) => setRecordsReferralReason(event.target.value)} />
+                                            {recordsReferralMessage && <p className={'text-sm ' + (recordsReferralMessage === 'Referral sent to the Records team.' ? 'text-emerald-700' : 'text-red-600')}>{recordsReferralMessage}</p>}
+                                            <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingRecordsReferral}>{sendingRecordsReferral ? 'Sending referral...' : 'Refer patient to Records'}</Button>
+                                        </div>
+                                    </Card>
+                                </div>
+                            )}
+
+                            {activeTab === 'overview' && !isReceptionist && (
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <div className="lg:col-span-2 space-y-6">
                                         <Card title="Patient Information">
@@ -1128,9 +1184,9 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900">Patients</h2>
-                                    <p className="text-slate-500 mt-1">Manage patient records and registrations</p>
+                                    <p className="text-slate-500 mt-1">{isReceptionist ? 'Patient overview and appointment access' : 'Manage patient records and registrations'}</p>
                                 </div>
-                                <Button variant="primary" icon={Icons.UserPlus} onClick={() => setShowRegistration(true)}>Register Patient</Button>
+                                {!isReceptionist && <Button variant="primary" icon={Icons.UserPlus} onClick={() => setShowRegistration(true)}>Register Patient</Button>}
                             </div>
 
                             <Card>
@@ -1156,7 +1212,12 @@
                                 </div>
 
                                 <DataTable
-                                    columns={[
+                                    columns={isReceptionist ? [
+                                        { key: 'patientNumber', title: 'Patient ID', className: 'font-mono text-xs' },
+                                        { key: 'name', title: 'Name', render: (row) => <div className="flex items-center gap-3"><Avatar name={`${row.firstName} ${row.lastName}`} size="sm" /><span className="font-medium text-slate-900">{row.firstName} {row.lastName}</span></div> },
+                                        { key: 'phone', title: 'Contact' },
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
+                                    ] : [
                                         { key: 'patientNumber', title: 'Patient ID', className: 'font-mono text-xs' },
                                         { key: 'name', title: 'Name', render: (row) => (
                                             <div className="flex items-center gap-3">
@@ -1174,12 +1235,12 @@
                                     ]}
                                     data={filteredPatients}
                                     onRowClick={handlePatientClick}
-                                    actions={(row) => (
+                                    actions={!isReceptionist ? (row) => (
                                         <>
                                             <Button variant="ghost" size="sm" icon={Icons.QrCode}>ID</Button>
                                             <Button variant="ghost" size="sm" icon={Icons.Printer}>Print</Button>
                                         </>
-                                    )}
+                                    ) : undefined}
                                 />
                             </Card>
                         </div>
