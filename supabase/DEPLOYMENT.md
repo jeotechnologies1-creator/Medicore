@@ -29,9 +29,9 @@ The front-end calls the following database contracts:
 | Documents | `patient_documents` plus the private `patient-documents` Storage bucket from `production_hardening.sql` |
 | Portal messages and refill requests | `patient_messages`, `medication_refill_requests` from `patient_portal.sql` |
 | Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
-| Records Officer registry and read-only clinical chart access | `records` permission, `records_officer` profile role, and patient-record RLS from `role_authorization.sql` plus `safe_core_multibranch.sql` |
+| Records Officer registry, patient overview/visits/vitals, and read-only chart access | `dashboard`, `patients`, and `records` permissions, `records_officer` profile role, and patient-record RLS from `role_authorization.sql` plus `safe_core_multibranch.sql` |
 | Reception referrals to Records | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
-| Patient portal booking and Records scheduling | Patient-owned appointment request policies, Records-only scheduling of open requests, and `get_appointment_providers()` from `patient_appointment_coordination.sql` |
+| Patient portal booking and Records scheduling | Patient-owned requests, Records appointment booking/confirmation, `get_appointment_providers()`, and patient confirmation notifications from `patient_appointment_coordination.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 

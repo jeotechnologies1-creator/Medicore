@@ -663,12 +663,12 @@
                     discount: 0,
                     tax: 0,
                     total: Number(invoiceForm.total || 0),
-                    paid: Number(invoiceForm.paid || 0),
-                    balance: Math.max(0, Number(invoiceForm.total || 0) - Number(invoiceForm.paid || 0)),
+                    paid: 0,
+                    balance: Math.max(0, Number(invoiceForm.total || 0)),
                     department: invoiceForm.department.trim(),
                     service: invoiceForm.service.trim(),
                     paymentMethod: 'cash',
-                    status: Number(invoiceForm.paid || 0) >= Number(invoiceForm.total || 0) ? 'paid' : 'pending'
+                    status: 'pending'
                 };
 
                 const client = window.OneMedSupabase?.getClient?.();
@@ -676,7 +676,7 @@
                 const { data, error } = await client.from('billing').insert([{
                     patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date,
                     subtotal: payload.subtotal, discount: payload.discount, tax: payload.tax, total: payload.total,
-                    paid: payload.paid, balance: payload.balance, department: payload.department || null, service: payload.service || null, payment_method: payload.paymentMethod, status: payload.status
+                    paid: 0, balance: payload.balance, department: payload.department || null, service: payload.service || null, payment_method: null, status: 'pending'
                 }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
@@ -689,21 +689,13 @@
 
             const handleProcessPayment = async () => {
                 if (!paymentForm.invoiceId || !Number(paymentForm.amount || 0)) return;
-                const updated = invoices.map((invoice) => {
-                    if (invoice.id !== paymentForm.invoiceId) return invoice;
-                    const paidNow = Number(invoice.paid || 0) + Number(paymentForm.amount || 0);
-                    const total = Number(invoice.total || 0);
-                    const balance = Math.max(0, total - paidNow);
-                    const status = paidNow >= total ? 'paid' : balance > 0 ? 'partial' : 'paid';
-                    return { ...invoice, paid: paidNow, balance, status, paymentMethod: paymentForm.method || invoice.paymentMethod };
-                });
-                const changed = updated.find(invoice => invoice.id === paymentForm.invoiceId);
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !changed) return notifyPersistenceFailure('process payment');
-                const { error } = await client.from('billing').update({ paid: changed.paid, balance: changed.balance, status: changed.status, payment_method: changed.paymentMethod }).eq('id', changed.id);
+                const invoice = invoices.find(row => row.id === paymentForm.invoiceId);
+                const amount = Number(paymentForm.amount || 0);
+                if (!client || !invoice || amount <= 0 || amount > Number(invoice.balance || 0)) return notifyPersistenceFailure('submit payment for approval');
+                const { error } = await client.from('payment_submissions').insert({ billing_id: invoice.id, patient_id: invoice.patientId, amount, payment_method: paymentForm.method, reference: paymentForm.reference || null, status: 'pending' });
                 if (error) return notifyPersistenceFailure('process payment', error);
-                persistStoreTable('billing', updated);
-                setInvoices(updated);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
                 setShowPaymentModal(false);
                 setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             };
@@ -816,18 +808,19 @@
                     )}
 
                     {activeTab === 'payments' && (
-                        <Card title="Recent Payments">
+                        <Card title="Payments awaiting Accounts approval">
                             <DataTable
                                 columns={[
                                     { key: 'invoiceNumber', title: 'Invoice' },
-                                    { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
-                                        return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
-                                    }},
+                                    { key: 'patient', title: 'Patient', render: (row) => appData.patients.find(p => p.id === row.patientId)?.firstName + ' ' + (appData.patients.find(p => p.id === row.patientId)?.lastName || 'Unknown') },
+                                    { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
                                     { key: 'paymentMethod', title: 'Method' },
-                                    { key: 'date', title: 'Date', render: (row) => formatDate(row.date) }
+                                    { key: 'reference', title: 'Reference' },
+                                    { key: 'status', title: 'Status', render: row => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'}>{row.status}</Badge> },
+                                    { key: 'date', title: 'Date', render: (row) => formatDate(row.createdAt) },
+                                    { key: 'actions', title: 'Accounts review', render: row => row.status === 'pending' && ['accountant', 'super_admin'].includes(user?.role) ? <div className="flex gap-2"><Button size="sm" variant="primary" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'approved' }); if (error) notifyPersistenceFailure('approve payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Approve</Button><Button size="sm" variant="danger" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'rejected' }); if (error) notifyPersistenceFailure('reject payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Reject</Button></div> : null }
                                 ]}
-                                data={invoices.filter(b => parseFloat(b.paid || 0) > 0)}
+                                data={appData.paymentSubmissions || []}
                             />
                         </Card>
                     )}

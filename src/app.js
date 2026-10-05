@@ -68,6 +68,21 @@
             }, []);
 
             useEffect(() => {
+                if (!isAuthenticated || !user?.id) return undefined;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return undefined;
+                const channel = client.channel(`onemed-notifications-${user.id}`)
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+                        const notice = normalizeNotifications([payload.new])[0];
+                        const next = [notice, ...(appData.notifications || []).filter((item) => item.id !== notice.id)];
+                        appData.notifications = next;
+                        setNotifications(next);
+                    })
+                    .subscribe();
+                return () => { client.removeChannel(channel); };
+            }, [isAuthenticated, user?.id]);
+
+            useEffect(() => {
                 setIsAuthenticated(Boolean(user));
             }, [user]);
 

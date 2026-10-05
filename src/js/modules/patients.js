@@ -4,6 +4,8 @@
         const PatientsModule = () => {
             const { user } = useAuth();
             const isReceptionist = user?.role === 'receptionist';
+            const isRecordsOfficer = user?.role === 'records_officer';
+            const isAdministrativeViewer = isReceptionist || isRecordsOfficer;
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
             const [showRegistration, setShowRegistration] = useState(false);
@@ -533,9 +535,10 @@
                     }
                 ];
 
-                const tabs = isReceptionist ? [
+                const tabs = isAdministrativeViewer ? [
                     { id: 'overview', label: 'Overview' },
-                    { id: 'visits', label: 'Appointments' }
+                    { id: 'visits', label: 'Visits & Appointments' },
+                    ...(isRecordsOfficer ? [{ id: 'vitals', label: 'Vital Signs' }] : [])
                 ] : [
                     { id: 'overview', label: 'Overview' },
                     { id: 'chart', label: 'Clinical Chart' },
@@ -585,11 +588,11 @@
                                     <div className="flex items-center gap-3 mt-1">
                                         <span className="text-sm text-slate-500">{patient.patientNumber}</span>
                                         <Badge variant={patient.status === 'active' ? 'success' : 'default'}>{patient.status}</Badge>
-                                        {!isReceptionist && <span className="text-sm text-slate-500">{calculateAge(patient.dateOfBirth)} years - {patient.gender}</span>}
+                            {!isReceptionist && <span className="text-sm text-slate-500">{calculateAge(patient.dateOfBirth)} years - {patient.gender}</span>}
                                     </div>
                                 </div>
                             </div>
-                            {!isReceptionist && <div className="flex gap-2">
+                            {!isAdministrativeViewer && <div className="flex gap-2">
                                 <Button variant="secondary" icon={Icons.Printer}>Print</Button>
                                 <Button variant="primary" icon={Icons.Edit}>Edit</Button>
                             </div>}
@@ -598,7 +601,7 @@
                         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                         <div className="mt-6">
-                            {activeTab === 'overview' && isReceptionist && (
+                            {activeTab === 'overview' && isAdministrativeViewer && (
                                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                     <Card title="Patient overview">
                                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -609,18 +612,18 @@
                                             <div><dt className="text-slate-500">Address</dt><dd className="font-medium text-slate-800">{patient.address || 'Not recorded'}</dd></div>
                                         </dl>
                                     </Card>
-                                    <Card title="Refer to Records">
+                                    {isReceptionist && <Card title="Refer to Records">
                                         <div className="space-y-3">
                                             <p className="text-sm text-slate-600">Send an administrative records request to the Records team.</p>
                                             <TextArea label="Reason for referral" rows={3} value={recordsReferralReason} onChange={(event) => setRecordsReferralReason(event.target.value)} />
                                             {recordsReferralMessage && <p className={'text-sm ' + (recordsReferralMessage === 'Referral sent to the Records team.' ? 'text-emerald-700' : 'text-red-600')}>{recordsReferralMessage}</p>}
                                             <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingRecordsReferral}>{sendingRecordsReferral ? 'Sending referral...' : 'Refer patient to Records'}</Button>
                                         </div>
-                                    </Card>
+                                    </Card>}
                                 </div>
                             )}
 
-                            {activeTab === 'overview' && !isReceptionist && (
+                            {activeTab === 'overview' && !isAdministrativeViewer && (
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <div className="lg:col-span-2 space-y-6">
                                         <Card title="Patient Information">
@@ -1184,9 +1187,9 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <h2 className="text-2xl font-bold text-slate-900">Patients</h2>
-                                    <p className="text-slate-500 mt-1">{isReceptionist ? 'Patient overview and appointment access' : 'Manage patient records and registrations'}</p>
+                                    <p className="text-slate-500 mt-1">{isAdministrativeViewer ? 'Patient overview and appointment access' : 'Manage patient records and registrations'}</p>
                                 </div>
-                                {!isReceptionist && <Button variant="primary" icon={Icons.UserPlus} onClick={() => setShowRegistration(true)}>Register Patient</Button>}
+                                {!isAdministrativeViewer && <Button variant="primary" icon={Icons.UserPlus} onClick={() => setShowRegistration(true)}>Register Patient</Button>}
                             </div>
 
                             <Card>
@@ -1212,7 +1215,7 @@
                                 </div>
 
                                 <DataTable
-                                    columns={isReceptionist ? [
+                                    columns={isAdministrativeViewer ? [
                                         { key: 'patientNumber', title: 'Patient ID', className: 'font-mono text-xs' },
                                         { key: 'name', title: 'Name', render: (row) => <div className="flex items-center gap-3"><Avatar name={`${row.firstName} ${row.lastName}`} size="sm" /><span className="font-medium text-slate-900">{row.firstName} {row.lastName}</span></div> },
                                         { key: 'phone', title: 'Contact' },
@@ -1235,7 +1238,7 @@
                                     ]}
                                     data={filteredPatients}
                                     onRowClick={handlePatientClick}
-                                    actions={!isReceptionist ? (row) => (
+                                    actions={!isAdministrativeViewer ? (row) => (
                                         <>
                                             <Button variant="ghost" size="sm" icon={Icons.QrCode}>ID</Button>
                                             <Button variant="ghost" size="sm" icon={Icons.Printer}>Print</Button>

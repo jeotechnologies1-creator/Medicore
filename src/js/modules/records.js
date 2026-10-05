@@ -15,6 +15,9 @@ const RecordsModule = () => {
     const [appointmentProviders, setAppointmentProviders] = useState([]);
     const [appointmentAssignments, setAppointmentAssignments] = useState({});
     const [appointmentMessage, setAppointmentMessage] = useState('');
+    const [bookingForm, setBookingForm] = useState({ patientId: '', doctorId: '', date: '', time: '', department: '', appointmentType: 'consultation', notes: '' });
+    const [bookingMessage, setBookingMessage] = useState('');
+    const [bookingBusy, setBookingBusy] = useState(false);
     const patients = appData.patients || [];
 
     useEffect(() => {
@@ -92,14 +95,53 @@ const RecordsModule = () => {
         const client = window.OneMedSupabase?.getClient?.();
         if (!client) return setAppointmentMessage('The appointment request could not be updated because the database is unavailable.');
         setAppointmentMessage('');
-        const changes = action === 'scheduled'
-            ? { status: 'scheduled', doctor_id: assignment.doctorId, appointment_date: assignment.date, appointment_time: assignment.time }
-            : { status: 'declined' };
-        const { data, error } = await client.from('appointments').update(changes).eq('id', request.id).eq('status', 'requested').select().single();
-        if (error) return setAppointmentMessage(error.message);
+        let appointment;
+        if (action === 'scheduled') {
+            const { data, error } = await client.rpc('confirm_patient_appointment', {
+                p_appointment_id: request.id,
+                p_doctor_id: assignment.doctorId,
+                p_appointment_date: assignment.date,
+                p_appointment_time: assignment.time
+            });
+            if (error) return setAppointmentMessage(error.message);
+            appointment = data?.appointment;
+        } else {
+            const { data, error } = await client.from('appointments').update({ status: 'declined' }).eq('id', request.id).eq('status', 'requested').select().single();
+            if (error) return setAppointmentMessage(error.message);
+            appointment = data;
+        }
+        if (!appointment) return setAppointmentMessage('Appointment update returned no booking. Refresh and check the request status.');
         setAppointmentRequests((current) => current.filter((row) => row.id !== request.id));
-        appData.appointments = (appData.appointments || []).map((row) => row.id === request.id ? { ...row, ...normalizeAppointments([data])[0] } : row);
-        setAppointmentMessage(action === 'scheduled' ? 'Appointment confirmed. The patient will see the confirmed date and time in their portal.' : 'Appointment request declined.');
+        const mapped = normalizeAppointments([appointment])[0];
+        appData.appointments = (appData.appointments || []).map((row) => row.id === request.id ? { ...row, ...mapped } : row);
+        setAppointmentMessage(action === 'scheduled' ? 'Appointment confirmed and an in-app notification was sent to the patient.' : 'Appointment request declined.');
+    };
+
+    const bookForPatient = async () => {
+        if (!bookingForm.patientId || !bookingForm.doctorId || !bookingForm.date || !bookingForm.time || !bookingForm.department) {
+            setBookingMessage('Choose a patient, doctor, department, date, and time.');
+            return;
+        }
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return setBookingMessage('The appointment could not be booked because the database is unavailable.');
+        setBookingBusy(true);
+        setBookingMessage('');
+        const { data, error } = await client.rpc('book_patient_appointment', {
+            p_patient_id: bookingForm.patientId,
+            p_doctor_id: bookingForm.doctorId,
+            p_appointment_date: bookingForm.date,
+            p_appointment_time: bookingForm.time,
+            p_department: bookingForm.department,
+            p_appointment_type: bookingForm.appointmentType,
+            p_notes: bookingForm.notes || null
+        });
+        setBookingBusy(false);
+        if (error) return setBookingMessage(error.message);
+        if (!data?.appointment) return setBookingMessage('No appointment was returned.');
+        const mapped = normalizeAppointments([data.appointment])[0];
+        appData.appointments = [mapped, ...(appData.appointments || [])];
+        setBookingForm({ patientId: '', doctorId: '', date: '', time: '', department: '', appointmentType: 'consultation', notes: '' });
+        setBookingMessage('Appointment booked and an in-app notification was sent to the patient.');
     };
 
     const createDocumentLink = async (document) => {
@@ -213,6 +255,19 @@ const RecordsModule = () => {
                 <p className="mt-1 text-sm text-slate-500">Find a patient and review their read-only chart index.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Book an appointment for a patient" subtitle="Confirm the date and time with the doctor before booking. The patient must have an active portal account to receive the in-app notification.">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Select label="Patient" value={bookingForm.patientId} onChange={(event) => setBookingForm((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />
+                    <Select label="Doctor" value={bookingForm.doctorId} onChange={(event) => setBookingForm((current) => ({ ...current, doctorId: event.target.value }))} options={[{ value: '', label: appointmentProviders.length ? 'Select doctor...' : 'No active doctors available' }, ...appointmentProviders.map((provider) => ({ value: provider.id, label: `${provider.full_name}${provider.department ? ` · ${provider.department}` : ''}` }))]} />
+                    <Input label="Department" value={bookingForm.department} onChange={(event) => setBookingForm((current) => ({ ...current, department: event.target.value }))} />
+                    <Select label="Appointment type" value={bookingForm.appointmentType} onChange={(event) => setBookingForm((current) => ({ ...current, appointmentType: event.target.value }))} options={[{ value: 'consultation', label: 'Consultation' }, { value: 'follow_up', label: 'Follow-up' }, { value: 'review', label: 'Review' }, { value: 'procedure', label: 'Procedure' }]} />
+                    <Input label="Approved date" type="date" value={bookingForm.date} onChange={(event) => setBookingForm((current) => ({ ...current, date: event.target.value }))} />
+                    <Input label="Approved time" type="time" value={bookingForm.time} onChange={(event) => setBookingForm((current) => ({ ...current, time: event.target.value }))} />
+                    <div className="md:col-span-2"><Input label="Patient note (optional)" value={bookingForm.notes} onChange={(event) => setBookingForm((current) => ({ ...current, notes: event.target.value }))} /></div>
+                </div>
+                {bookingMessage && <p className={'mt-3 text-sm ' + (bookingMessage.includes('notification was sent') ? 'text-emerald-700' : 'text-red-600')}>{bookingMessage}</p>}
+                <div className="mt-4 flex justify-end"><Button variant="primary" onClick={bookForPatient} disabled={bookingBusy}>{bookingBusy ? 'Booking appointment...' : 'Book and notify patient'}</Button></div>
+            </Card>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient appointment requests" subtitle="Check the requested department with a doctor, then enter the agreed appointment date and time.">
                 {appointmentMessage && <p className="mb-3 text-sm text-slate-700" role="status">{appointmentMessage}</p>}
                 {appointmentRequests.length ? <div className="space-y-4">

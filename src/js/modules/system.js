@@ -487,9 +487,11 @@
                     ...row,
                     permissions: permissionDepartments.reduce((permissions, department) => {
                         const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
-                        const defaultAllowed = isSuperAdmin || (roleKey === 'records_officer' && ['dashboard', 'records'].includes(department.key));
+                        const isRecordsOfficer = roleKey === 'records_officer';
+                        const defaultAllowed = isSuperAdmin || (isRecordsOfficer && ['dashboard', 'records', 'patients'].includes(department.key));
                         const receptionistAllowed = ['dashboard', 'patients', 'appointments'].includes(department.key);
-                        return { ...permissions, [department.key]: isReceptionist ? receptionistAllowed : value === undefined ? defaultAllowed : Boolean(value) };
+                        const recordsOfficerAllowed = ['dashboard', 'records', 'patients'].includes(department.key);
+                        return { ...permissions, [department.key]: isReceptionist ? receptionistAllowed : isRecordsOfficer ? recordsOfficerAllowed : value === undefined ? defaultAllowed : Boolean(value) };
                     }, { ...(row.permissions || {}) })
                 };
             });
@@ -654,7 +656,8 @@
                     role: 'Records Officer',
                     permissions: {
                         dashboard: true,
-                        records: true
+                        records: true,
+                        patients: true
                     }
                 }
             ];
@@ -1127,7 +1130,7 @@
                                                 type="checkbox"
                                                 checked={Boolean(row.permissions?.[department.key])}
                                                 onChange={() => togglePermission(row.role, department.key)}
-                                                disabled={String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'receptionist'}
+                                                disabled={['receptionist', 'records_officer'].includes(String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_'))}
                                                 className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500 disabled:cursor-not-allowed disabled:opacity-40"
                                                 aria-label={`${row.role}: ${department.label}`}
                                             />

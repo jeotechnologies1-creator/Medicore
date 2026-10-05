@@ -182,6 +182,12 @@
             status: row.status || 'pending'
         }));
 
+        const normalizePaymentSubmissions = (rows = []) => rows.map((row) => ({
+            ...row, patientId: row.patient_id || row.patientId, invoiceId: row.billing_id || row.invoiceId,
+            invoiceNumber: row.invoice_number || row.invoiceNumber, paymentMethod: row.payment_method || row.paymentMethod,
+            createdAt: row.created_at || row.createdAt
+        }));
+
         const normalizeAdmissions = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -233,6 +239,7 @@
             title: row.title,
             message: row.message,
             read: Boolean(row.read),
+            timestamp: row.created_at || row.timestamp,
             priority: row.priority || 'medium'
         }));
 
@@ -497,7 +504,7 @@
                 };
             }
 
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: [] };
+            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], paymentSubmissions: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: [] };
             const officeLookups = [
                 { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
                 { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
@@ -507,6 +514,7 @@
                 { dbTable: 'prescriptions', appTable: 'prescriptions', mapper: normalizePrescriptions },
                 { dbTable: 'pharmacy_inventory', appTable: 'pharmacyInventory', mapper: normalizeInventory },
                 { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
+                { dbTable: 'payment_submissions', appTable: 'paymentSubmissions', mapper: normalizePaymentSubmissions },
                 { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
                 { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
                 { dbTable: 'encounters', appTable: 'encounters', mapper: normalizeEncounters },

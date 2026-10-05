@@ -79,8 +79,11 @@
                     permissions.clinical_workflows = true;
                 }
                 if (roleKey === 'records_officer') {
-                    if (permissions.dashboard === undefined) permissions.dashboard = true;
-                    if (permissions.records === undefined) permissions.records = true;
+                    canonicalModuleKeys.forEach((key) => {
+                        const allowed = ['dashboard', 'records', 'patients'].includes(key);
+                        permissions[key] = allowed;
+                        (legacyPermissionAliases[key] || []).forEach((alias) => { permissions[alias] = allowed; });
+                    });
                 }
 
                 // Older matrices did not include every department. Preserve an
@@ -262,7 +265,8 @@
                 role: 'Records Officer',
                 permissions: {
                     dashboard: true,
-                    records: true
+                    records: true,
+                    patients: true
                 }
             }
         ];
@@ -405,6 +409,7 @@
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
                 if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments'].includes(moduleId);
+                if (normalizedRole === 'records_officer') return ['dashboard', 'records', 'patients'].includes(moduleId);
 
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
@@ -419,7 +424,7 @@
                     doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments'],
-                    records_officer: ['dashboard', 'records'],
+                    records_officer: ['dashboard', 'records', 'patients'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],
                     radiographer: ['dashboard', 'radiology', 'upload'],

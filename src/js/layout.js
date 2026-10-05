@@ -61,6 +61,7 @@
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                     ],
                     records_officer: [
+                        { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'records', label: 'Records', icon: Icons.FolderOpen },
                     ],
                     laboratory_scientist: [
