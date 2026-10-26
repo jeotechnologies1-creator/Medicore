@@ -18,6 +18,11 @@
             const [bankAccounts, setBankAccounts] = useState([]);
             const [appointmentRequests, setAppointmentRequests] = useState([]);
             const [appointmentMessage, setAppointmentMessage] = useState('');
+            const [paymentGateways, setPaymentGateways] = useState([]);
+            const [providerPayments, setProviderPayments] = useState([]);
+            const [checkoutMessage, setCheckoutMessage] = useState('');
+            const [checkoutUrl, setCheckoutUrl] = useState('');
+            const [messageError, setMessageError] = useState('');
 
             useEffect(() => {
                 let active = true;
@@ -30,6 +35,12 @@
                 client?.rpc('get_portal_payment_accounts').then(({ data, error }) => {
                     if (active && !error) setBankAccounts(Array.isArray(data) ? data : []);
                 }).catch(() => {});
+                client?.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active').then(({ data }) => {
+                    if (active) setPaymentGateways(data || []);
+                });
+                client?.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false }).then(({ data }) => {
+                    if (active) setProviderPayments(data || []);
+                });
                 return () => { active = false; };
             }, [patient?.id]);
 
@@ -66,12 +77,46 @@
 
             const handleSendMessage = async () => {
                 if (!messageDraft.trim()) return;
+                if (/\b(appointment|book|doctor|schedule)\b/i.test(messageDraft)) {
+                    setAppointmentDraft((current) => ({ ...current, reason: messageDraft.trim() }));
+                    setAppointmentMessage('I can help you request an appointment. Choose a department and preferred date below; the request will go to HIM to confirm with the doctor.');
+                    setMessageDraft(''); setActiveTab('appointments');
+                    return;
+                }
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !patient?.id) return;
+                setMessageError('');
                 const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
-                if (error || !data?.[0]) return;
+                if (error || !data?.[0]) { setMessageError(error?.message || 'Your message could not be sent.'); return; }
                 setPortalMessages((current) => [...current, { id: data[0].id, sender: data[0].sender_name, direction: data[0].direction, text: data[0].message, sentAt: data[0].sent_at }]);
                 setMessageDraft('');
+            };
+
+            const refreshPayments = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                const [{ data: gateways }, { data: transactions }] = await Promise.all([
+                    client.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active'),
+                    client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false })
+                ]);
+                setPaymentGateways(gateways || []); setProviderPayments(transactions || []);
+            };
+
+            const startCheckout = async (invoice) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                const gateway = paymentGateways[0];
+                if (!client || !gateway) { setCheckoutMessage('Online payment is not configured for this facility. Please use the listed bank transfer instructions.'); return; }
+                setCheckoutUrl('');
+                setCheckoutMessage('Creating secure checkout…');
+                const key = globalThis.crypto?.randomUUID?.() || `portal-${invoice.id}-${Date.now()}`;
+                const { data: transactionId, error } = await client.rpc('request_patient_payment_checkout', {
+                    p_billing_id: invoice.id, p_connection_id: gateway.id, p_amount: Number(invoice.balance), p_idempotency_key: key, p_currency: 'NGN'
+                });
+                if (error || !transactionId) { setCheckoutMessage(error?.message || 'Checkout could not be started.'); return; }
+                await refreshPayments();
+                const { data: transaction } = await client.from('payment_provider_transactions').select('checkout_url,status').eq('id', transactionId).maybeSingle();
+                setCheckoutUrl(transaction?.checkout_url?.startsWith('https://') ? transaction.checkout_url : '');
+                setCheckoutMessage(transaction?.checkout_url ? 'Provider checkout is ready. Payment will show as confirmed after provider notification and Accounts review.' : 'Checkout request queued. Refresh this page shortly for the provider checkout link.');
             };
 
             const handleBookAppointment = async () => {
@@ -86,7 +131,10 @@
                     return;
                 }
                 setAppointmentRequests((current) => [...current, ...normalizeAppointments([data])]);
+                const { data: routedMessage, error: routingError } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: `Appointment request ${data.id}: ${appointmentDraft.department}, preferred ${appointmentDraft.date}${appointmentDraft.time ? ` at ${appointmentDraft.time}` : ''}. Visit: ${appointmentDraft.visitType || 'appointment'}.${appointmentDraft.reason ? ` Reason: ${appointmentDraft.reason}` : ''}` }).select().single();
+                if (routedMessage) setPortalMessages((current) => [...current, { id: routedMessage.id, sender: routedMessage.sender_name, direction: routedMessage.direction, text: routedMessage.message, sentAt: routedMessage.sent_at }]);
                 setAppointmentMessage('Request sent. The Health Information Management (HIM) team will confirm the date and time after checking with the doctor.');
+                if (routingError) setAppointmentMessage('Request sent and visible in the appointment queue. The chat notification could not be added; HIM can still manage the appointment request.');
                 setAppointmentDraft({
                     department: '',
                     date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -252,21 +300,33 @@
                                         { key: 'total', title: 'Total', render: (row) => formatCurrency(row.total) },
                                         { key: 'balance', title: 'Balance', render: (row) => formatCurrency(row.balance) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'paid' ? 'success' : 'warning'}>{row.status}</Badge> },
-                                        { key: 'action', title: 'Payment account', render: (row) => {
+                                            { key: 'action', title: 'Pay this invoice', render: (row) => {
                                             if (Number(row.balance || 0) <= 0) return <span className="text-emerald-700 text-xs">No balance due</span>;
+                                            const transaction = providerPayments.find((item) => item.billing_id === row.id && ['creating','pending','review_pending','posted'].includes(item.status));
+                                            if (transaction?.status === 'posted') return <span className="text-emerald-700 text-xs">Payment recorded</span>;
+                                            if (transaction?.status === 'review_pending') return <span className="text-amber-700 text-xs">Payment received · Accounts review pending</span>;
+                                            if (transaction?.checkout_url?.startsWith('https://')) return <a className="text-medical-700 underline text-sm" href={transaction.checkout_url} target="_blank" rel="noopener noreferrer">Continue checkout</a>;
+                                            if (paymentGateways.length) return <Button size="sm" variant="primary" onClick={() => startCheckout(row)}>{transaction ? 'Checkout preparing…' : 'Pay online'}</Button>;
                                             const account = paymentAccountFor(row);
                                             return account ? <div className="text-xs text-slate-600"><span className="font-medium">{account.bankName}</span><br />{account.accountName}<br />{account.accountNumber}<br /><span>Use {row.invoiceNumber} as reference</span></div> : <span className="text-amber-700 text-xs">No account configured for this service</span>;
                                         } }
                                     ]}
                                     data={appData.billing.filter(b => b.patientId === patient.id)}
                                 />
-                                <p className="mt-3 text-xs text-slate-500">After making a bank transfer, share your receipt with the cashier for confirmation. Portal instructions do not confirm or automatically reconcile a payment.</p>
+                                {checkoutMessage && <p role="status" className="mt-3 text-sm text-slate-700">{checkoutMessage}{checkoutUrl && <> <a className="font-medium text-medical-700 underline" href={checkoutUrl} target="_blank" rel="noopener noreferrer">Continue to secure checkout</a></>}</p>}
+                                <div className="mt-3 flex items-center justify-between"><p className="text-xs text-slate-500">Provider payments remain pending until the provider webhook is received and Accounts reviews the payment.</p><Button size="sm" variant="ghost" onClick={refreshPayments}>Refresh payment status</Button></div>
                             </Card>
                         )}
 
                         {activeTab === 'messages' && (
-                            <Card title="Messages">
+                            <Card title="Patient chat" subtitle="The portal assistant can guide appointment requests. Messages are routed to the Health Information Management (HIM) team for follow up.">
                                 <div className="space-y-4">
+                                    <div className="flex justify-end"><Button size="sm" variant="ghost" onClick={async () => { const client = window.OneMedSupabase?.getClient?.(); if (!client) return; const { data, error } = await client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at'); if (!error) setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at }))); }}>Refresh messages</Button></div>
+                                    <div className="rounded-lg border border-medical-100 bg-medical-50 p-3 text-sm text-medical-900">
+                                        <p className="font-medium">OneMed assistant</p>
+                                        <p className="mt-1">Hi {patient.firstName}. I can help you request an appointment or send a message to the HIM team. Appointment requests are reviewed by HIM; your appointment is confirmed only after they check with the doctor.</p>
+                                        <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => setActiveTab('appointments')}>Request an appointment</Button><Button size="sm" variant="secondary" onClick={() => setMessageDraft('Please help me with: ')}>Ask the HIM team</Button></div>
+                                    </div>
                                     {portalMessages.map((message) => (
                                         <div key={message.id} className={`flex gap-3 p-3 rounded-lg ${message.direction === 'outgoing' ? 'bg-medical-50 ml-8' : 'bg-slate-50 mr-8'}`}>
                                             <Avatar name={message.sender} size="sm" />
@@ -279,11 +339,12 @@
                                             </div>
                                         </div>
                                     ))}
+                                    {messageError && <p role="alert" className="text-sm text-red-700">{messageError}</p>}
                                     <div className="flex gap-3">
                                         <textarea
                                             value={messageDraft}
                                             onChange={(e) => setMessageDraft(e.target.value)}
-                                            placeholder="Type your message..."
+                                            placeholder="Message the HIM team..."
                                             className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm resize-none"
                                             rows={3}
                                         />

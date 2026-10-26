@@ -15,6 +15,9 @@ const RecordsModule = () => {
     const [appointmentProviders, setAppointmentProviders] = useState([]);
     const [appointmentAssignments, setAppointmentAssignments] = useState({});
     const [appointmentMessage, setAppointmentMessage] = useState('');
+    const [portalInbox, setPortalInbox] = useState([]);
+    const [portalReplyDrafts, setPortalReplyDrafts] = useState({});
+    const [portalInboxMessage, setPortalInboxMessage] = useState('');
     const [bookingForm, setBookingForm] = useState({ patientId: '', doctorId: '', date: '', time: '', department: '', appointmentType: 'consultation', notes: '' });
     const [bookingMessage, setBookingMessage] = useState('');
     const [bookingBusy, setBookingBusy] = useState(false);
@@ -53,7 +56,23 @@ const RecordsModule = () => {
             if (error) setFamilyMessage(`Family cards could not be loaded: ${error.message}`);
             else setFamilyCards(data || []);
         });
+        client.from('patient_messages').select('*').order('sent_at', { ascending: false }).limit(500).then(({ data, error }) => {
+            if (error) setPortalInboxMessage(error.message);
+            else setPortalInbox(data || []);
+        });
     }, [user?.role]);
+
+    const replyToPortalMessage = async (message) => {
+        const text = String(portalReplyDrafts[message.patient_id] || '').trim();
+        if (!text) return;
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return setPortalInboxMessage('The database is unavailable.');
+        const { data, error } = await client.from('patient_messages').insert({ patient_id: message.patient_id, sender_profile_id: user.id, sender_name: user.name || user.fullName || 'HIM team', direction: 'incoming', message: text }).select().single();
+        if (error) return setPortalInboxMessage(error.message);
+        setPortalInbox((current) => [data, ...current]);
+        setPortalReplyDrafts((current) => ({ ...current, [message.patient_id]: '' }));
+        setPortalInboxMessage('Reply sent to the patient portal.');
+    };
 
     const filteredPatients = patients.filter((patient) => {
         const search = query.trim().toLocaleLowerCase();
@@ -363,6 +382,20 @@ const RecordsModule = () => {
                         </div>;
                     })}
                 </div> : <p className="text-sm text-slate-500">There are no appointment requests waiting for scheduling.</p>}
+            </Card>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient portal chat inbox" subtitle="Messages from patients at facilities where you have the portal.message.read and portal.message.reply permissions.">
+                <div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={async () => { const client = window.OneMedSupabase?.getClient?.(); if (!client) return setPortalInboxMessage('The database is unavailable.'); const { data, error } = await client.from('patient_messages').select('*').order('sent_at', { ascending: false }).limit(500); if (error) setPortalInboxMessage(error.message); else { setPortalInbox(data || []); setPortalInboxMessage('Inbox refreshed.'); } }}>Refresh inbox</Button></div>
+                {portalInboxMessage && <p role="status" className="mb-3 text-sm text-slate-600">{portalInboxMessage}</p>}
+                {portalInbox.length ? <div className="space-y-4">{[...new Map(portalInbox.map((message) => [message.patient_id, message.patient_id])).keys()].map((patientId) => {
+                    const thread = portalInbox.filter((message) => message.patient_id === patientId).sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
+                    const patient = patients.find((item) => item.id === patientId);
+                    const latest = thread[thread.length - 1];
+                    return <section key={patientId} className="rounded-xl border border-slate-200 p-4">
+                        <div className="mb-3 flex items-center justify-between"><p className="font-semibold text-slate-800">{patient ? `${patient.firstName} ${patient.lastName}` : `Patient ${patientId}`}</p><span className="text-xs text-slate-500">{thread.length} messages</span></div>
+                        <div className="max-h-64 space-y-2 overflow-y-auto">{thread.map((message) => <div key={message.id} className={`rounded-lg p-3 text-sm ${message.direction === 'outgoing' ? 'bg-slate-50' : 'bg-medical-50'}`}><div className="flex justify-between gap-2"><span className="font-medium">{message.sender_name}</span><time className="text-xs text-slate-500">{new Date(message.sent_at).toLocaleString()}</time></div><p className="mt-1 whitespace-pre-wrap">{message.message}</p></div>)}</div>
+                        <div className="mt-3 flex gap-2"><textarea value={portalReplyDrafts[patientId] || ''} onChange={(event) => setPortalReplyDrafts((current) => ({ ...current, [patientId]: event.target.value }))} rows={2} placeholder={`Reply to ${patient?.firstName || 'patient'}...`} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" /><Button size="sm" variant="primary" onClick={() => replyToPortalMessage(latest)}>Reply</Button></div>
+                    </section>;
+                })}</div> : <p className="text-sm text-slate-500">No portal messages are available to your HIM account.</p>}
             </Card>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient referrals to Health Information Management (HIM)" subtitle="Administrative requests sent by reception.">
                 {referralError && <p className="mb-3 text-sm text-red-600">{referralError}</p>}

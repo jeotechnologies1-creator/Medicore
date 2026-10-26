@@ -24,6 +24,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 20. `finance_posting_refunds.sql`
 21. `clinical_department_rls.sql`
 22. `external_finance_integrations.sql`
+23. `patient_portal_chat_payments.sql`
 
 The front-end calls the following database contracts:
 
@@ -34,7 +35,7 @@ The front-end calls the following database contracts:
 | Laboratory and radiology results | `lab_orders`, `radiology_orders`, `quality_safety_upgrade.sql` |
 | Medication dispensing | `pharmacy_inventory`, `prescriptions`, `dispense_prescription(uuid)` from `atomic_pharmacy_dispensing.sql` |
 | Documents | `patient_documents` plus the private `patient-documents` Storage bucket from `production_hardening.sql` |
-| Portal messages and refill requests | `patient_messages`, `medication_refill_requests` from `patient_portal.sql` |
+| Patient portal assistant, HIM chat inbox, appointment request routing, and patient checkout | `patient_messages` plus facility scoped `portal.message.*` and `portal.appointment.manage` grants, and `request_patient_payment_checkout(...)` from `patient_portal_chat_payments.sql` |
 | Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
 | HIM patient registry, emergency intake, and chart access | `records_officer` profile role, encounter intake, identity verification, and patient-record RLS from `role_authorization.sql`, `safe_core_multibranch.sql`, `hospital_workflows.sql`, and `workflow_completion.sql` |
 | Reception referrals to HIM | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
@@ -49,6 +50,7 @@ The front-end calls the following database contracts:
 | Payment idempotency, posting, and refund approval | `submit_payment_for_approval`, `review_payment_submission`, `request_billing_refund`, and `review_billing_refund` from `finance_posting_refunds.sql` |
 | Facility and department authorization | Restrictive clinical and finance RLS checks in `clinical_department_rls.sql` and `finance_posting_refunds.sql`; staff need an active membership in the matching facility and unit |
 | External payer, payment gateway, and GL | `external_finance_integrations.sql` adds claims, checkout intents, a durable outbox/inbox, normalized webhooks, remittance review, balanced journals, and a provider-neutral Edge adapter |
+| HIM access administration | Organization Structure → “Health Information Management (HIM) access” edits facility scoped `records_officer` grants; staff also need an active facility membership. Patient checkout still requires an active payment gateway connection and uses the existing provider webhook and Accounts review path. |
 
 ## Required non-SQL deployment
 

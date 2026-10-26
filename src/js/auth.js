@@ -78,12 +78,9 @@
                 if (permissions.clinical_workflows === undefined && ['super_admin', 'doctor', 'nurse'].includes(roleKey)) {
                     permissions.clinical_workflows = true;
                 }
-                if (roleKey === 'records_officer') {
-                    canonicalModuleKeys.forEach((key) => {
-                        const allowed = ['dashboard', 'records'].includes(key);
-                        permissions[key] = allowed;
-                        (legacyPermissionAliases[key] || []).forEach((alias) => { permissions[alias] = allowed; });
-                    });
+                if (roleKey === 'records_officer' || roleKey === 'health_information_management_officer') {
+                    if (permissions.dashboard === undefined) permissions.dashboard = true;
+                    if (permissions.records === undefined) permissions.records = true;
                 }
 
                 // Older matrices did not include every department. Preserve an
@@ -385,7 +382,8 @@
             }, []);
 
             const normalizeRoleKey = (role) => {
-                return String(role || 'patient').trim().toLowerCase().replace(/\s+/g, '_');
+                const key = String(role || 'patient').trim().toLowerCase().replace(/\s+/g, '_');
+                return key === 'health_information_management_officer' ? 'records_officer' : key;
             };
 
             const getStoredRoleMatrix = () => normalizeRoleMatrix(roleMatrix);
@@ -423,8 +421,6 @@
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
                 if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(moduleId);
-                if (normalizedRole === 'records_officer') return ['dashboard', 'records', 'patients', 'clinical_workflows'].includes(moduleId);
-
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
                 if (match && match.permissions) {

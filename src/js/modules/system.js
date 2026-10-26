@@ -1135,7 +1135,7 @@
                                                 type="checkbox"
                                                 checked={Boolean(row.permissions?.[department.key])}
                                                 onChange={() => togglePermission(row.role, department.key)}
-                                                disabled={['receptionist', 'records_officer'].includes(String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_'))}
+                                                disabled={String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'receptionist'}
                                                 className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500 disabled:cursor-not-allowed disabled:opacity-40"
                                                 aria-label={`${row.role}: ${department.label}`}
                                             />
@@ -1350,6 +1350,8 @@
             const [units, setUnits] = useState([]);
             const [positions, setPositions] = useState([]);
             const [memberships, setMemberships] = useState([]);
+            const [permissionCatalog, setPermissionCatalog] = useState([]);
+            const [roleGrants, setRoleGrants] = useState([]);
             const [unitForm, setUnitForm] = useState({ name: '', code: '', unitType: 'department', parentUnitId: '', facilityId: '', description: '' });
             const [positionForm, setPositionForm] = useState({ title: '', code: '', organizationUnitId: '', reportsToPositionId: '', description: '' });
             const [membershipForm, setMembershipForm] = useState({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: new Date().toISOString().slice(0, 10), justification: '' });
@@ -1363,15 +1365,17 @@
 
             const refresh = async () => {
                 if (!client) return setLoadError('Supabase is not configured. Connect the database to manage the organization chart.');
-                const [unitResult, positionResult, membershipResult, facilityResult] = await Promise.all([
+                const [unitResult, positionResult, membershipResult, facilityResult, permissionResult, grantResult] = await Promise.all([
                     client.from('organization_units').select('*').order('sort_order').order('name'),
                     client.from('job_positions').select('*').order('title'),
                     client.from('staff_organization_memberships').select('*').order('created_at', { ascending: false }),
-                    client.from('facilities').select('id,name').order('name')
+                    client.from('facilities').select('id,name').order('name'),
+                    client.from('permission_catalog').select('permission_key,description,sensitive').order('permission_key'),
+                    client.from('role_permission_grants').select('role,permission_key,scope')
                 ]);
-                const failure = unitResult.error || positionResult.error || membershipResult.error || facilityResult.error;
+                const failure = unitResult.error || positionResult.error || membershipResult.error || facilityResult.error || permissionResult.error || grantResult.error;
                 if (failure) { setLoadError(failure.message); return; }
-                setUnits(unitResult.data || []); setPositions(positionResult.data || []); setMemberships(membershipResult.data || []); setFacilities(facilityResult.data || []); setLoadError('');
+                setUnits(unitResult.data || []); setPositions(positionResult.data || []); setMemberships(membershipResult.data || []); setFacilities(facilityResult.data || []); setPermissionCatalog(permissionResult.data || []); setRoleGrants(grantResult.data || []); setLoadError('');
             };
 
             useEffect(() => { refresh(); }, []);
@@ -1410,6 +1414,16 @@
             const endMembership = async (membership) => {
                 const { error } = await client.from('staff_organization_memberships').update({ status: 'ended', ends_on: new Date().toISOString().slice(0, 10) }).eq('id', membership.id);
                 if (error) return setMessage(error.message);
+                await refresh();
+            };
+
+            const toggleHimGrant = async (permissionKey) => {
+                const enabled = !roleGrants.some((grant) => grant.role === 'records_officer' && grant.permission_key === permissionKey && grant.scope === 'facility');
+                setBusy(true); setMessage('');
+                const { error } = await client.rpc('set_role_permission_grant', { p_role: 'records_officer', p_permission_key: permissionKey, p_scope: 'facility', p_enabled: enabled });
+                setBusy(false);
+                if (error) return setMessage(error.message);
+                setMessage(`${permissionKey} ${enabled ? 'granted to' : 'removed from'} HIM staff at their assigned facility.`);
                 await refresh();
             };
 
@@ -1455,6 +1469,15 @@
                 ]} data={units} /></Card>
                 <Card title="Job positions"><DataTable columns={[{ key: 'title', title: 'Position' }, { key: 'code', title: 'Code' }, { key: 'organization_unit_id', title: 'Unit', render: (row) => unitName(row.organization_unit_id) }, { key: 'reports_to_position_id', title: 'Reports to', render: (row) => positions.find((position) => position.id === row.reports_to_position_id)?.title || '—' }, { key: 'status', title: 'Status' }]} data={positions} /></Card>
                 <Card title="Staff memberships"><DataTable columns={[{ key: 'profile_id', title: 'Staff member', render: (row) => staffName(row.profile_id) }, { key: 'organization_unit_id', title: 'Unit', render: (row) => unitName(row.organization_unit_id) }, { key: 'job_position_id', title: 'Position', render: (row) => positions.find((position) => position.id === row.job_position_id)?.title || '—' }, { key: 'membership_type', title: 'Assignment' }, { key: 'starts_on', title: 'Start date' }, { key: 'status', title: 'Status' }, { key: 'action', title: 'Action', render: (row) => row.status === 'active' ? <Button size="sm" variant="ghost" disabled={!isAdmin} onClick={() => endMembership(row)}>End membership</Button> : '—' }]} data={memberships} /></Card>
+                <Card title="Health Information Management (HIM) access" subtitle="Choose which facility scoped permissions the records_officer role receives. Staff must also have an active membership at the facility. Changes are enforced by database policies.">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{permissionCatalog.map((permission) => {
+                        const granted = roleGrants.some((grant) => grant.role === 'records_officer' && grant.permission_key === permission.permission_key && grant.scope === 'facility');
+                        return <label key={permission.permission_key} className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+                            <input type="checkbox" checked={granted} disabled={!isAdmin || busy} onChange={() => toggleHimGrant(permission.permission_key)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500" />
+                            <span><span className="font-medium text-slate-800">{permission.permission_key}</span><span className="mt-1 block text-xs text-slate-500">{permission.description}{permission.sensitive ? ' · Sensitive' : ''}</span></span>
+                        </label>;
+                    })}</div>
+                </Card>
             </div>;
         };
 
