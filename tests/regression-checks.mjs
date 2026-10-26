@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -32,7 +32,9 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('src/js/modules/operations.js'),
     read('supabase/clinical_department_rls.sql'),
     read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
-    read('supabase/atomic_pharmacy_dispensing.sql')
+    read('supabase/atomic_pharmacy_dispensing.sql'),
+    read('src/styles.css'),
+    read('src/js/ui.js')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -79,7 +81,8 @@ assert.match(safeCore, /create policy "authorized users log patient access" on p
 assert.match(safeCore, /revoke update, delete, truncate, references, trigger on public\.patient_access_logs from authenticated/, 'Authenticated clients must not alter or delete access logs.');
 assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after its schema changes.');
 assert.match(app, /records: \(\) => <RecordsModule \/>/, 'The Records screen must be registered as a separate module.');
-assert.match(auth, /normalizedRole === 'records_officer'.*clinical_workflows/, 'HIM staff must be able to register encounters.');
+assert.match(auth, /match && match\.permissions/, 'Module access must honor the saved role permission matrix.');
+assert.doesNotMatch(auth, /normalizedRole === 'records_officer'\) return/, 'HIM module access must remain configurable instead of being hardcoded.');
 assert.match(system, /role: 'Health Information Management Officer',[\s\S]*?records: true/, 'The administrator permission matrix must enable HIM for its staff role.');
 assert.match(layout, /records_officer:[\s\S]*?id: 'records', label: 'Health Information Management \(HIM\)'/, 'Records Officers must have a Health Information Management navigation item.');
 assert.match(people, /'records_officer'/, 'Administrators must be able to select and manage Records Officers.');
@@ -166,5 +169,15 @@ assert.doesNotMatch(billingUi, /handleAdvanceClaim/, 'Billing must not manually 
 assert.match(deploymentDocs, /MEDICORE_CONNECTORS_JSON/, 'Deployment docs must describe connector configuration and secret handling.');
 assert.match(financeTest, /provider webhook event IDs are idempotent/, 'Database integration tests must verify webhook deduplication.');
 assert.match(financeTest, /balanced journal entries/, 'Database integration tests must verify double-entry ledger balance.');
+assert.match(app, /mobileOpen=\{sidebarOpen\}/, 'The mobile navigation drawer must be controlled by app state.');
+assert.match(layout, /aria-expanded=\{menuOpen\}/, 'The mobile menu control must expose its expanded state.');
+assert.match(styles, /@media \(max-width: 1023px\)[\s\S]*?\.mobile-drawer\.is-open/, 'Tablet and mobile widths must use a navigable drawer.');
+assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?data-label/, 'Narrow-screen tables must expose responsive row labels.');
+assert.match(styles, /prefers-reduced-motion: reduce/, 'Motion must respect the reduced-motion preference.');
+assert.match(styles, /@supports \(backdrop-filter: blur\(1px\)\)/, 'Glass surfaces must be progressively enhanced.');
+assert.match(auth, /autoComplete="current-password"/, 'The login must support password managers.');
+assert.match(auth, /aria-label=\{showPassword \? 'Hide password' : 'Show password'\}/, 'Password visibility must have an accessible control name.');
+assert.match(ui, /aria-modal="true"/, 'Dialogs must expose modal semantics.');
+assert.match(ui, /handleDialogKeys/, 'Dialogs must keep keyboard focus within the open dialog.');
 
 console.log('Regression checks passed.');

@@ -482,20 +482,21 @@
             };
 
             return (
-                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-medical-50 via-white to-emerald-50">
-                    <div className="w-full max-w-md mx-4">
+                <main className="login-page min-h-screen flex items-center justify-center px-4 py-8">
+                    <div className="login-content w-full max-w-md">
                         <div className="text-center mb-8">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-medical-600 text-white mb-4 shadow-lg shadow-medical-200">
+                            <div className="login-brand-mark inline-flex items-center justify-center w-16 h-16 rounded-2xl text-white mb-4">
                                 <Icons.HeartPulse size={32} />
                             </div>
+                            <p className="login-eyebrow">Secure care operations</p>
                             <h1 className="text-3xl font-bold text-slate-900">OneMed EMR</h1>
-                            <p className="text-slate-500 mt-2">Hospital Management System</p>
+                            <p className="text-slate-600 mt-2">Hospital Management System</p>
                         </div>
                         
-                        <Card>
+                        <Card className="login-card">
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 {error && (
-                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
+                                    <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-800">
                                         <Icons.AlertCircle size={16} />
                                         {error}
                                     </div>
@@ -503,17 +504,22 @@
                                 <Input
                                     label="Email"
                                     placeholder="Enter your email"
+                                    type="email"
+                                    autoComplete="username"
+                                    inputMode="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     icon={Icons.Mail}
                                     required
                                 />
-                                <div className="-mt-2 text-xs text-slate-500">Use the email and password for your Supabase Auth account.</div>
+                                <div className="-mt-2 text-xs text-slate-600">Use the email and password for your hospital account.</div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                                    <label htmlFor="onemed-login-password" className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
                                     <div className="relative">
                                         <input
+                                            id="onemed-login-password"
                                             type={showPassword ? 'text' : 'password'}
+                                            autoComplete="current-password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             placeholder="Enter your password"
@@ -523,15 +529,17 @@
                                         <button
                                             type="button"
                                             onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                            aria-pressed={showPassword}
+                                            className="password-toggle absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
                                         >
                                             <Icons.Eye size={18} />
                                         </button>
                                     </div>
                                 </div>
-                                <Button type="submit" variant="primary" size="lg" className="w-full justify-center" disabled={loading}>
+                                <Button type="submit" variant="primary" size="lg" className="w-full justify-center" disabled={loading} aria-busy={loading}>
                                     {loading ? (
-                                        <span className="flex items-center gap-2">
+                                        <span className="flex items-center gap-2" role="status" aria-live="polite">
                                             <Icons.RefreshCw size={18} className="animate-spin" />
                                             Signing in...
                                         </span>
@@ -541,6 +549,6 @@
                         </Card>
 
                     </div>
-                </div>
+                </main>
             );
         };

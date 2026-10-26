@@ -1,7 +1,7 @@
         // ==========================================
         // UI COMPONENTS
         // ==========================================
-        const Button = ({ children, variant = 'primary', size = 'md', className = '', onClick, disabled, type = 'button', icon: Icon }) => {
+        const Button = ({ children, variant = 'primary', size = 'md', className = '', onClick, disabled, type = 'button', icon: Icon, ...props }) => {
             // Do not render controls that have no behavior. This prevents demo-only
             // buttons from appearing actionable in the clinical application.
             if (type === 'button' && typeof onClick !== 'function') return null;
@@ -27,6 +27,7 @@
                     onClick={onClick}
                     disabled={disabled}
                     className={'inline-flex items-center gap-2 rounded-lg border font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ' + variants[variant] + ' ' + sizes[size] + ' ' + className}
+                    {...props}
                 >
                     {Icon && <Icon size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16} />}
                     {children}
@@ -53,7 +54,7 @@
         const Card = ({ children, className = '', title, subtitle, action, noPadding = false }) => (
             <div className={'luxury-card bg-white rounded-2xl border border-slate-200 shadow-sm hover-lift ' + className}>
                 {(title || subtitle || action) && (
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div className="card-header px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <div>
                             {title && <h3 className="text-lg font-semibold text-slate-900">{title}</h3>}
                             {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
@@ -65,32 +66,44 @@
             </div>
         );
 
-        const Input = ({ label, type = 'text', placeholder, value, onChange, className = '', required, icon: Icon, error, ...props }) => (
+        const Input = ({ label, type = 'text', placeholder, value, onChange, className = '', required, icon: Icon, error, ...props }) => {
+            const generatedId = React.useId();
+            const inputId = props.id || `field-${generatedId.replaceAll(':', '')}`;
+            return (
             <div className={className}>
-                {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
+                {label && <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
                 <div className="relative">
                     {Icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Icon size={18} /></div>}
                     <input
+                        id={inputId}
                         type={type}
                         value={value}
                         onChange={onChange}
                         placeholder={placeholder}
                         className={'w-full rounded-lg border ' + (error ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : 'border-slate-300 focus:border-medical-500 focus:ring-medical-200') + ' focus:ring-2 focus:ring-opacity-50 outline-none transition-all ' + (Icon ? 'pl-10' : 'pl-4') + ' pr-4 py-2.5 text-sm ' + (error ? 'text-red-900 placeholder-red-300' : 'text-slate-900 placeholder-slate-400')}
                         required={required}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? `${inputId}-error` : undefined}
                         {...props}
                     />
                 </div>
-                {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                {error && <p id={`${inputId}-error`} role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
             </div>
-        );
+            );
+        };
 
-        const Select = ({ label, value, onChange, options, className = '', required, error, disabled = false, ...props }) => (
+        const Select = ({ label, value, onChange, options, className = '', required, error, disabled = false, ...props }) => {
+            const generatedId = React.useId();
+            const selectId = props.id || `field-${generatedId.replaceAll(':', '')}`;
+            return (
             <div className={className}>
-                {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
+                {label && <label htmlFor={selectId} className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
                 <select
+                    id={selectId}
                     value={value}
                     onChange={onChange}
                     aria-invalid={Boolean(error)}
+                    aria-describedby={error ? `${selectId}-error` : undefined}
                     className={'w-full rounded-lg border focus:ring-2 focus:ring-opacity-50 outline-none transition-all pl-4 pr-8 py-2.5 text-sm text-slate-900 bg-white ' + (error ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : 'border-slate-300 focus:border-medical-500 focus:ring-medical-200')}
                     required={required}
                     disabled={disabled}
@@ -100,35 +113,65 @@
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                 </select>
-                {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+                {error && <p id={`${selectId}-error`} role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
             </div>
-        );
+            );
+        };
 
-        const TextArea = ({ label, placeholder, value, onChange, className = '', rows = 3, required, disabled = false, ...props }) => (
+        const TextArea = ({ label, placeholder, value, onChange, className = '', rows = 3, required, disabled = false, error, ...props }) => {
+            const generatedId = React.useId();
+            const textareaId = props.id || `field-${generatedId.replaceAll(':', '')}`;
+            return (
             <div className={className}>
-                {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
+                {label && <label htmlFor={textareaId} className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
                 <textarea
+                    id={textareaId}
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
                     rows={rows}
-                    className="w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 resize-vertical"
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? `${textareaId}-error` : undefined}
+                    className={'w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 resize-vertical ' + (error ? 'border-red-400' : '')}
                     required={required}
                     disabled={disabled}
                     {...props}
                 />
+                {error && <p id={`${textareaId}-error`} role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
             </div>
-        );
+            );
+        };
 
         const Modal = ({ isOpen, onClose, title, children, size = 'md', footer }) => {
+            const modalTitleId = `onemed-modal-title-${React.useId().replaceAll(':', '')}`;
+            const dialogRef = React.useRef(null);
+            const closeHandlerRef = React.useRef(onClose);
+            closeHandlerRef.current = onClose;
+            useEffect(() => {
+                if (!isOpen) return undefined;
+                const previousFocus = document.activeElement;
+                const focusable = () => Array.from(dialogRef.current?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || []).filter((item) => item.getClientRects().length > 0);
+                focusable()[0]?.focus();
+                const handleDialogKeys = (event) => {
+                    if (event.key === 'Escape') { closeHandlerRef.current?.(); return; }
+                    if (event.key !== 'Tab') return;
+                    const items = focusable();
+                    if (!items.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+                    const first = items[0]; const last = items[items.length - 1];
+                    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+                };
+                window.addEventListener('keydown', handleDialogKeys);
+                return () => { window.removeEventListener('keydown', handleDialogKeys); previousFocus?.focus?.(); };
+            }, [isOpen]);
             if (!isOpen) return null;
             const sizes = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl', full: 'max-w-full mx-4' };
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay" onClick={onClose}>
-                    <div className={'bg-white rounded-2xl shadow-2xl w-full ' + sizes[size] + ' max-h-[90vh] overflow-hidden animate-fade-in'} onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+                    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={modalTitleId} className={'bg-white rounded-2xl shadow-2xl w-full ' + sizes[size] + ' max-h-[90vh] overflow-hidden animate-fade-in'} onClick={e => e.stopPropagation()}>
                         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-                            <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 transition-colors">
+                            <h3 id={modalTitleId} className="text-lg font-semibold text-slate-900">{title}</h3>
+                            <button type="button" onClick={onClose} aria-label="Close dialog" className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
                                 <Icons.X size={20} className="text-slate-500" />
                             </button>
                         </div>
@@ -141,11 +184,14 @@
 
         const Tabs = ({ tabs, activeTab, onChange, className = '' }) => (
             <div className={'border-b border-slate-200 ' + className}>
-                <div className="flex gap-1">
+                <div className="flex gap-1" role="tablist" aria-label="Page sections">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
+                            type="button"
                             onClick={() => onChange(tab.id)}
+                            role="tab"
+                            aria-selected={activeTab === tab.id}
                             className={'px-4 py-3 text-sm font-medium transition-colors relative ' + (activeTab === tab.id ? 'text-medical-600 tab-active' : 'text-slate-500 hover:text-slate-700')}
                         >
                             {tab.label}
@@ -179,7 +225,7 @@
             }
             return (
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="data-table w-full">
                         <thead>
                             <tr className="border-b border-slate-200">
                                 {columns.map((col) => (
@@ -198,12 +244,12 @@
                                     className={(onRowClick ? 'cursor-pointer hover:bg-slate-50' : '') + ' transition-colors'}
                                 >
                                     {columns.map((col) => (
-                                        <td key={col.key} className={'px-4 py-3 text-sm text-slate-700 ' + (col.className || '')}>
+                                        <td key={col.key} data-label={col.title} className={'px-4 py-3 text-sm text-slate-700 ' + (col.className || '')}>
                                             {col.render ? col.render(row, idx) : row[col.key]}
                                         </td>
                                     ))}
                                     {actions && (
-                                        <td className="px-4 py-3 text-right">
+                                        <td data-label="Actions" className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 {actions(row)}
                                             </div>
@@ -280,20 +326,21 @@
             );
         };
 
-        const SearchBar = ({ value, onChange, placeholder = 'Search...', className = '' }) => (
+        const SearchBar = ({ value, onChange, placeholder = 'Search...', className = '', ariaLabel = 'Search records' }) => (
             <div className={'relative ' + className}>
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                     <Icons.Search size={18} />
                 </div>
                 <input
                     type="text"
+                    aria-label={ariaLabel}
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
                     className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all text-sm"
                 />
                 {value && (
-                    <button onClick={() => onChange({ target: { value: '' } })} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <button type="button" onClick={() => onChange({ target: { value: '' } })} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                         <Icons.X size={16} />
                     </button>
                 )}
@@ -312,11 +359,11 @@
                 error: 'bg-red-600'
             };
             return (
-                <div className={'fixed bottom-4 right-4 ' + colors[type] + ' text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 toast z-50'}>
+                <div role={type === 'error' ? 'alert' : 'status'} aria-live={type === 'error' ? 'assertive' : 'polite'} className={'fixed bottom-4 right-4 ' + colors[type] + ' text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 toast z-50'}>
                     {type === 'success' && <Icons.CheckCircle size={20} />}
                     {type === 'error' && <Icons.AlertCircle size={20} />}
                     <span className="text-sm font-medium">{message}</span>
-                    <button onClick={onClose} className="ml-2 hover:opacity-80"><Icons.X size={16} /></button>
+                    <button type="button" onClick={onClose} aria-label="Dismiss notification" className="ml-2 hover:opacity-80"><Icons.X size={16} /></button>
                 </div>
             );
         };

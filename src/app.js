@@ -24,6 +24,7 @@
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+            const [sidebarOpen, setSidebarOpen] = useState(false);
             const [notifications, setNotifications] = useState(appData.notifications || []);
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
@@ -51,7 +52,19 @@
                 logout();
                 setIsAuthenticated(false);
                 setActiveModule('dashboard');
+                setSidebarOpen(false);
             };
+
+            const closeSidebar = () => {
+                setSidebarOpen(false);
+                window.requestAnimationFrame(() => document.getElementById('onemed-open-menu')?.focus());
+            };
+
+            useEffect(() => {
+                const closeOnEscape = (event) => { if (event.key === 'Escape') closeSidebar(); };
+                window.addEventListener('keydown', closeOnEscape);
+                return () => window.removeEventListener('keydown', closeOnEscape);
+            }, []);
 
             useEffect(() => {
                 const handleNavigation = (event) => {
@@ -273,13 +286,16 @@
             return (
                 <div className={`theme-shell theme-${theme}`}>
                     <div className="app-shell flex h-screen">
+                        {sidebarOpen && <button tabIndex={-1} aria-hidden="true" className="mobile-nav-backdrop" aria-label="Close navigation menu" onClick={closeSidebar} />}
                         <Sidebar 
                             activeModule={activeModule} 
-                            onModuleChange={setActiveModule}
+                            onModuleChange={(moduleId) => { setActiveModule(moduleId); closeSidebar(); }}
                             collapsed={sidebarCollapsed}
                             onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                             onLogout={handleLogout}
                             theme={theme}
+                            mobileOpen={sidebarOpen}
+                            onClose={closeSidebar}
                         />
                         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                             <Header 
@@ -290,6 +306,9 @@
                                 onLogout={handleLogout}
                                 theme={theme}
                                 onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+                                activeModule={activeModule}
+                                onMenuClick={() => setSidebarOpen(true)}
+                                menuOpen={sidebarOpen}
                             />
                             <main className="flex-1 overflow-y-auto app-main">
                                 {dataLoad.loading && (

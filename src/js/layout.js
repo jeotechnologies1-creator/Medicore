@@ -1,8 +1,23 @@
         // ==========================================
         // SIDEBAR NAVIGATION
         // ==========================================
-        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout, theme }) => {
+        const Sidebar = ({ activeModule, onModuleChange, collapsed, onToggle, onLogout, theme, mobileOpen = false, onClose }) => {
             const { user, hasModuleAccess } = useAuth();
+            const showCollapsed = collapsed && !mobileOpen;
+            const sidebarRef = React.useRef(null);
+            useEffect(() => {
+                if (!mobileOpen) return undefined;
+                sidebarRef.current?.querySelector('button')?.focus();
+                const trapFocus = (event) => {
+                    if (event.key !== 'Tab' || !window.matchMedia('(max-width: 1023px)').matches) return;
+                    const items = Array.from(sidebarRef.current?.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || []).filter((item) => item.getClientRects().length > 0);
+                    if (!items.length) return;
+                    if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+                    else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+                };
+                window.addEventListener('keydown', trapFocus);
+                return () => window.removeEventListener('keydown', trapFocus);
+            }, [mobileOpen]);
             
             const getMenuItems = () => {
                 const common = [
@@ -124,58 +139,62 @@
             const menuItems = getMenuItems();
 
             return (
-                <div className={(collapsed ? 'w-16' : 'w-64') + ' sidebar-shell flex flex-col transition-all duration-300 h-screen sticky top-0 z-40'}>
-                    <div className="h-16 flex items-center px-4 border-b border-slate-100 sidebar-brand">
-                        <div className={'flex items-center gap-3 ' + (collapsed ? 'justify-center w-full' : '')}>
+                <aside ref={sidebarRef} id="onemed-main-navigation" className={(showCollapsed ? 'w-16' : 'w-64') + ' sidebar-shell flex flex-col transition-all duration-300 h-screen sticky top-0 z-40 mobile-drawer ' + (mobileOpen ? 'is-open' : '')} aria-label="Main navigation">
+                    <div className="h-16 flex items-center justify-between px-4 border-b border-slate-100 sidebar-brand">
+                        <div className={'flex items-center gap-3 ' + (showCollapsed ? 'justify-center w-full' : '')}>
                             <div className="w-10 h-10 rounded-xl bg-medical-600 flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-medical-500/20">
                                 <Icons.HeartPulse size={22} />
                             </div>
-                            {!collapsed && (
+                            {!showCollapsed && (
                                 <div>
                                     <h1 className="font-bold text-slate-900 text-lg leading-tight">OneMed</h1>
                                     <p className="text-xs text-slate-400">EMR System</p>
                                 </div>
                             )}
                         </div>
+                        <button type="button" className="mobile-nav-close" onClick={onClose} aria-label="Close navigation menu"><Icons.X size={20} /></button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto sidebar-scroll py-4 px-3 space-y-1">
+                    <nav className="flex-1 overflow-y-auto sidebar-scroll py-4 px-3 space-y-1" aria-label="Hospital modules">
                         {menuItems.map((item) => (
                             <button
                                 key={item.id}
                                 onClick={() => onModuleChange(item.id)}
-                                className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (collapsed ? 'justify-center' : '')}
-                                title={collapsed ? item.label : ''}
+                                aria-current={activeModule === item.id ? 'page' : undefined}
+                                className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (showCollapsed ? 'justify-center' : '')}
+                                title={showCollapsed ? item.label : ''}
                             >
                                 <item.icon size={20} className={activeModule === item.id ? 'text-medical-600' : 'text-slate-400'} />
-                                {!collapsed && <span>{item.label}</span>}
+                                {!showCollapsed && <span>{item.label}</span>}
                             </button>
                         ))}
-                    </div>
+                    </nav>
 
                     <div className="p-4 border-t border-slate-100">
                         <button
                             onClick={onToggle}
-                            className={'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-50 transition-all ' + (collapsed ? 'justify-center' : '')}
+                            aria-label={showCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+                            className={'desktop-sidebar-toggle w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-50 transition-all ' + (showCollapsed ? 'justify-center' : '')}
                         >
-                            {collapsed ? <Icons.PanelLeft size={18} /> : <><Icons.PanelLeft size={18} className="rotate-180" /> <span>Collapse</span></>}
+                            {showCollapsed ? <Icons.PanelLeft size={18} /> : <><Icons.PanelLeft size={18} className="rotate-180" /> <span>Collapse</span></>}
                         </button>
                         <button
+                            type="button"
                             onClick={onLogout}
-                            className={'w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all ' + (collapsed ? 'justify-center' : '')}
+                            className={'w-full flex items-center gap-3 px-3 py-2 mt-1 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-all ' + (showCollapsed ? 'justify-center' : '')}
                         >
                             <Icons.LogOut size={18} />
-                            {!collapsed && <span>Sign Out</span>}
+                            {!showCollapsed && <span>Sign Out</span>}
                         </button>
                     </div>
-                </div>
+                </aside>
             );
         };
 
         // ==========================================
         // HEADER
         // ==========================================
-        const Header = ({ onSearch, notifications, onNotificationClick, onMarkAllNotificationsRead, onNavigate, onLogout, theme, onToggleTheme }) => {
+        const Header = ({ onSearch, notifications, onNotificationClick, onMarkAllNotificationsRead, onNavigate, onLogout, theme, onToggleTheme, onMenuClick, activeModule, menuOpen = false }) => {
             const { user } = useAuth();
             const [showNotifications, setShowNotifications] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -189,7 +208,9 @@
 
             return (
                 <header className="luxury-header sticky top-0 z-30 px-6 flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
+                    <div className="header-main flex items-center gap-4 flex-1 min-w-0">
+                        <button type="button" id="onemed-open-menu" className="mobile-menu-button" onClick={onMenuClick} aria-label="Open navigation menu" aria-controls="onemed-main-navigation" aria-expanded={menuOpen}><Icons.Menu size={20} /></button>
+                        <div className="header-page-title" aria-live="polite">{String(activeModule || 'dashboard').replaceAll('_', ' ')}</div>
                         <div className="brand-lockup hidden lg:flex items-center gap-3 pr-4 border-r border-white/10">
                             <div className="brand-mark">
                                 <Icons.HeartPulse size={18} />
@@ -199,7 +220,7 @@
                                 <h1 className="text-base font-semibold text-white">OneMed</h1>
                             </div>
                         </div>
-                        <div className="w-full max-w-xl">
+                        <div className="header-search-wrap w-full max-w-xl min-w-0">
                             <SearchBar
                                 value={searchQuery}
                                 onChange={handleSearch}
@@ -214,7 +235,8 @@
                             type="button"
                             onClick={onToggleTheme}
                             className="theme-toggle"
-                            aria-label="Toggle dark mode"
+                            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+                            aria-pressed={theme === 'dark'}
                         >
                             <span className={`theme-toggle-thumb ${theme === 'dark' ? 'right-1' : 'left-1'}`} />
                             <span className="theme-toggle-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
@@ -222,12 +244,15 @@
 
                         <div className="relative">
                             <button
+                                type="button"
                                 onClick={() => setShowNotifications(!showNotifications)}
                                 className="relative p-2.5 rounded-xl header-icon-button transition-colors"
+                                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+                                aria-expanded={showNotifications}
                             >
                                 <Icons.Bell size={18} />
                                 {unreadCount > 0 && (
-                                    <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center notification-badge">
+                                <span className="absolute top-1 right-1 min-w-5 h-5 px-1 bg-red-600 text-white text-[10px] rounded-full flex items-center justify-center notification-badge">
                                         {unreadCount}
                                     </span>
                                 )}
@@ -261,8 +286,11 @@
 
                         <div className="relative">
                             <button
+                                type="button"
                                 onClick={() => setShowProfile(!showProfile)}
                                 className="flex items-center gap-3 p-1.5 rounded-xl header-profile-button transition-colors"
+                                aria-label="Open profile menu"
+                                aria-expanded={showProfile}
                             >
                                 <Avatar name={user?.name} size="sm" />
                                 <div className="hidden md:block text-left">
