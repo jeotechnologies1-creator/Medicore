@@ -173,6 +173,9 @@ assert.match(app, /mobileOpen=\{sidebarOpen\}/, 'The mobile navigation drawer mu
 assert.match(layout, /aria-expanded=\{menuOpen\}/, 'The mobile menu control must expose its expanded state.');
 assert.match(styles, /@media \(max-width: 1023px\)[\s\S]*?\.mobile-drawer\.is-open/, 'Tablet and mobile widths must use a navigable drawer.');
 assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?data-label/, 'Narrow-screen tables must expose responsive row labels.');
+assert.match(styles, /app-main \.truncate[\s\S]*?text-overflow: clip/, 'Clinical and billing copy must not be hidden behind truncation utilities.');
+assert.match(styles, /-webkit-overflow-scrolling: touch[\s\S]*?scroll-behavior: smooth/, 'Horizontal data regions must support smooth touch and programmatic scrolling.');
+assert.match(styles, /overflow-wrap: anywhere/, 'Long names and identifiers must wrap instead of widening the viewport.');
 assert.match(styles, /prefers-reduced-motion: reduce/, 'Motion must respect the reduced-motion preference.');
 assert.match(styles, /@supports \(backdrop-filter: blur\(1px\)\)/, 'Glass surfaces must be progressively enhanced.');
 assert.match(auth, /autoComplete="current-password"/, 'The login must support password managers.');
