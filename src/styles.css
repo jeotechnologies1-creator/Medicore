@@ -242,6 +242,9 @@
             backdrop-filter: blur(18px);
             box-shadow: inset -1px 0 0 rgba(255,255,255,0.18);
         }
+        .sidebar-scroll [data-nav-item="records"] { align-items: flex-start; }
+        .sidebar-scroll [data-nav-item="records"] > svg { flex: 0 0 20px; margin-top: 0.1rem; }
+        .sidebar-scroll [data-nav-item="records"] > span { line-height: 1.35; }
 
         body.theme-dark .sidebar-shell {
             background: rgba(15, 23, 42, 0.82);
