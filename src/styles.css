@@ -459,13 +459,13 @@
             .app-main { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: visible; flex: 1 0 auto; }
         }
         @media (max-width: 639px) {
-            .luxury-header { min-height: 64px; height: auto; flex-wrap: wrap; padding: 0.65rem max(0.75rem, env(safe-area-inset-right)) 0.65rem max(0.75rem, env(safe-area-inset-left)); gap: 0.5rem; }
+            .luxury-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "menu title actions" "search search search"; align-items: center; min-height: 64px; height: auto; padding: 0.65rem max(0.75rem, env(safe-area-inset-right)) 0.65rem max(0.75rem, env(safe-area-inset-left)); gap: 0.5rem; }
             .header-main { display: contents; }
-            .header-search-wrap { order: 2; flex: 1 0 100%; width: 100%; max-width: none; }
+            .header-search-wrap { grid-area: search; min-width: 0; width: 100%; max-width: none; }
             .header-search-wrap input { min-height: 2.65rem; padding-right: 0.5rem; font-size: 0.82rem; }
-            .header-main .header-page-title { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
-            .mobile-menu-button { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; }
-            .luxury-header > .flex.items-center.gap-3 { order: 1; gap: 0.35rem; margin-left: auto; }
+            .header-main .header-page-title { display: block; grid-area: title; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
+            .mobile-menu-button { grid-area: menu; width: 2.75rem; height: 2.75rem; min-height: 2.75rem; }
+            .luxury-header > .flex.items-center.gap-3 { grid-area: actions; justify-self: end; gap: 0.35rem; margin-left: 0; }
             .theme-toggle { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; padding: 0; justify-content: center; }
             .theme-toggle-thumb { display: none; }
             .theme-toggle-label { font-size: 0.58rem; letter-spacing: 0.03em; }
