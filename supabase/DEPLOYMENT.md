@@ -23,6 +23,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 19. `organization_permissions.sql`
 20. `finance_posting_refunds.sql`
 21. `clinical_department_rls.sql`
+22. `external_finance_integrations.sql`
 
 The front-end calls the following database contracts:
 
@@ -47,6 +48,7 @@ The front-end calls the following database contracts:
 | Organization chart and scoped permission assignments | `organization_units`, `job_positions`, `staff_organization_memberships`, `permission_catalog`, and permission-grant tables from `organization_permissions.sql` |
 | Payment idempotency, posting, and refund approval | `submit_payment_for_approval`, `review_payment_submission`, `request_billing_refund`, and `review_billing_refund` from `finance_posting_refunds.sql` |
 | Facility and department authorization | Restrictive clinical and finance RLS checks in `clinical_department_rls.sql` and `finance_posting_refunds.sql`; staff need an active membership in the matching facility and unit |
+| External payer, payment gateway, and GL | `external_finance_integrations.sql` adds claims, checkout intents, a durable outbox/inbox, normalized webhooks, remittance review, balanced journals, and a provider-neutral Edge adapter |
 
 ## Required non-SQL deployment
 
@@ -54,9 +56,15 @@ Deploy the staff provisioning endpoint after the SQL migration succeeds:
 
 ```sh
 supabase functions deploy create-staff
+supabase functions deploy integration-dispatch
+supabase functions deploy integration-webhook
 ```
 
-`create-staff` is the only front-end-invoked function that is not a Postgres function. It uses `SUPABASE_SERVICE_ROLE_KEY` in the Supabase Edge Function environment. Never expose that key in the front end.
+`create-staff` is called by the staff administration screen. The finance integration functions run server-side and must keep `SUPABASE_SERVICE_ROLE_KEY` in Edge Function secrets. Never expose that key in the front end.
+
+The finance integration functions run only with the server-side service-role key. Configure connector secrets with `supabase secrets set`; never put credentials in `integration_connections.config` or browser code. Create one active connection row for each facility/provider in the Supabase SQL editor, using only non-secret settings, for example `insert into public.integration_connections(facility_id,integration_type,provider_code,status) values ('<facility-uuid>','payment_gateway','example_gateway','active');`. `MEDICORE_CONNECTORS_JSON` maps each `provider_code` to a base URL, secret variable name, and optional checkout return URL, for example `{"example_gateway":{"baseUrl":"https://sandbox.example.invalid/api/","tokenEnv":"EXAMPLE_GATEWAY_TOKEN","returnUrl":"https://hospital.example/checkout/return"}}`. The dispatcher uses fixed routes for `payment.intent.create`, `payer.claim.submit`, and `ledger.journal.posted`; each provider must accept the canonical JSON body and the `Idempotency-Key` header or be wrapped with a vendor-specific adapter. A gateway intent response can include `{ "id": "provider-reference", "checkout_url": "https://..." }`; the URL is stored only when HTTPS. Configure `MEDICORE_WEBHOOK_SECRET_<CONNECTION_UUID_WITHOUT_DASHES_UPPERCASE>` per connection. Webhooks must send `x-medicore-connection`, `x-provider-signature: sha256=<HMAC-SHA256-of-raw-body>`, and JSON `{ "event_id": "...", "event_type": "payment.succeeded|payment.failed|payer.claim.accepted|payer.claim.adjudicated|payer.remittance", "data": { ... } }`. Payment events identify `transaction_id`; payer events identify `claim_id`, adjudications also include `amount_approved`, and remittances include `amount`. The inbox deduplicates provider event IDs; payment successes create a pending payment submission and still require independent Accounts review. Schedule `integration-dispatch` with a server-side Supabase service-role bearer token to drain/retry outbox events.
+
+These contracts are vendor-neutral. No payer, gateway, or GL vendor credentials/API contract is configured in this repository; live connectivity requires mapping each vendor’s auth, fields, signature scheme, and response semantics to the canonical contract above. Do not configure production connections until that mapping has been validated against each vendor sandbox.
 
 The staff form creates active `records_officer`, `surgeon`, `specialist`, and `theatre_staff` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql`; `workflow_completion.sql` adds the theatre role values. HIM staff can register and link patient records, while clinical records and private documents retain their role-scoped write rules.
 

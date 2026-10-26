@@ -38,6 +38,7 @@ Run the SQL files in this order in the Supabase SQL editor:
 20. `supabase/organization_permissions.sql`
 21. `supabase/finance_posting_refunds.sql`
 22. `supabase/clinical_department_rls.sql`
+23. `supabase/external_finance_integrations.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -51,7 +52,7 @@ OneMed has no seed script and never persists clinical records in browser storage
 
 `organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. `clinical_department_rls.sql` intersects existing clinical role policies with active facility and department membership permissions. Configure organization-unit codes or names to match department values stored on clinical records; untagged records use a staff member's primary unit, or their only active unit. Apply after `finance_posting_refunds.sql` and verify with the local RLS suite before deployment.
 
-`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. A recorded reversal is not a bank transfer; external payment execution and general-ledger integration still require an approved provider and reconciliation.
+`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. `external_finance_integrations.sql` adds provider-neutral payer claim submission, gateway checkout, signed webhook ingestion, retryable outbox processing, remittance review, and immutable balanced general-ledger journals. Configure the `integration-dispatch` and `integration-webhook` Edge Functions with server-side secrets using the contract in `supabase/DEPLOYMENT.md`. Vendor-specific sandbox mappings and credentials are required before live external connectivity; no vendor is preconfigured.
 
 For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 

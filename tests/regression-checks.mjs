@@ -129,9 +129,42 @@ assert.match(financeTest, /payment posting/, 'Database integration tests must ve
 assert.match(clinicalRls, /as restrictive for select/, 'Department permission must restrict existing permissive clinical read policies.');
 assert.match(clinicalRls, /has_clinical_department_permission/, 'Clinical RLS must enforce department membership and scoped grants.');
 assert.match(clinicalRls, /'care_plan_goals','careplan.manage'/, 'Child care-plan rows must inherit patient and department scope.');
+for (const table of ['encounters', 'lab_orders', 'radiology_orders', 'prescriptions', 'vital_signs', 'consultations', 'patient_documents', 'immunizations', 'medication_administrations', 'patient_allergies', 'patient_conditions', 'medication_orders', 'care_plans', 'care_plan_goals', 'clinical_tasks', 'patient_consents', 'clinical_alerts', 'encounter_workflow_events', 'result_acknowledgements', 'medication_reconciliations', 'admissions', 'surgeries']) {
+    assert.match(clinicalRls, new RegExp(`\\('${table}','`), `${table} must be included in department-scoped clinical RLS.`);
+}
 assert.equal(clinicalMigration, clinicalRls, 'Department authorization must be present in the ordered Supabase migrations.');
 assert.match(financeTest, /denied outside their assigned department/, 'Database tests must assert cross-department clinical denial.');
 assert.match(pharmacy, /has_clinical_department_permission\(prescription_row\.patient_id/, 'Pharmacy dispensing RPC must enforce department permission explicitly.');
 assert.match(financeTest, /failed multi-item dispense rolls back earlier stock changes/, 'Database tests must check atomic rollback for multi-item dispensing.');
+
+const [integrations, integrationWorker, integrationWebhook, integrationMigration, deploymentDocs, billingUi] = await Promise.all([
+    read('supabase/external_finance_integrations.sql'),
+    read('supabase/functions/integration-dispatch/index.ts'),
+    read('supabase/functions/integration-webhook/index.ts'),
+    read('supabase/migrations/20261026000022_external_finance_integrations.sql'),
+    read('supabase/DEPLOYMENT.md'),
+    read('src/js/modules/operations.js')
+]);
+assert.equal(integrationMigration, integrations, 'External finance contracts must be included in the ordered migration chain.');
+assert.match(integrations, /has_finance_department_permission\(patient_id,'insurance\.submit'\)/, 'Finance integration table access must use facility and department permission checks.');
+assert.match(integrations, /submit_insurance_claim/, 'Payer claims must be validated and queued through a database workflow.');
+assert.match(integrations, /request_payment_checkout/, 'Gateway intents must be validated and idempotent.');
+assert.match(integrations, /process_finance_integration_event/, 'Normalized external events must enter through the deduplicating inbox.');
+assert.match(integrations, /prevent_journal_mutation/, 'Posted general-ledger entries must be immutable.');
+assert.match(integrations, /claim_integration_outbox/, 'Connector delivery must use a leased durable outbox.');
+assert.match(integrations, /payment\.posted/, 'Approved payments must create a general-ledger event.');
+assert.match(integrations, /payer.remittance/, 'Payer remittances must be reviewed before invoice posting.');
+assert.match(integrationWorker, /Idempotency-Key|idempotency-key/, 'Outbound connector calls must carry stable idempotency keys.');
+assert.match(integrationWorker, /routes: Record<string, string>/, 'Connector URLs must not be chosen by untrusted webhook or database payloads.');
+assert.match(integrationWebhook, /HMAC/, 'Provider webhooks must be authenticated with HMAC signatures.');
+assert.match(integrationWebhook, /process_finance_integration_event/, 'Verified webhooks must call the server-side normalized event handler.');
+assert.match(billingUi, /request_payment_checkout/, 'Billing must expose the secured external gateway checkout.');
+assert.match(billingUi, /submit_insurance_claim/, 'Billing must submit claims through the payer workflow.');
+assert.match(billingUi, /review_payer_remittance/, 'Accounts must review and post incoming payer remittances.');
+assert.match(billingUi, /Posted general-ledger journal/, 'Authorized finance users must be able to inspect posted ledger entries.');
+assert.doesNotMatch(billingUi, /handleAdvanceClaim/, 'Billing must not manually advance payer claim status.');
+assert.match(deploymentDocs, /MEDICORE_CONNECTORS_JSON/, 'Deployment docs must describe connector configuration and secret handling.');
+assert.match(financeTest, /provider webhook event IDs are idempotent/, 'Database integration tests must verify webhook deduplication.');
+assert.match(financeTest, /balanced journal entries/, 'Database integration tests must verify double-entry ledger balance.');
 
 console.log('Regression checks passed.');

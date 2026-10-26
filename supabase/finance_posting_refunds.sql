@@ -119,6 +119,10 @@ create policy "finance and patient read payment reversals" on public.payment_rev
 create or replace function public.stamp_payment_submission_actor() returns trigger language plpgsql security definer set search_path=public as $$
 declare actor uuid;
 begin
+  if current_setting('onemed.integration_writer',true)='yes' then
+    if tg_op='INSERT' and new.status='pending' and new.submitted_by is not null then return new; end if;
+    raise exception 'Invalid integration payment submission.';
+  end if;
   select id into actor from public.profiles where auth_user_id=auth.uid() and status::text='active' limit 1;
   if actor is null then raise exception 'An active staff profile is required to submit a payment.'; end if;
   if tg_op='INSERT' then

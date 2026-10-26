@@ -637,8 +637,13 @@
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
             const [paymentForm, setPaymentForm] = useState(() => ({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }));
             const [bankAccounts, setBankAccounts] = useState([]);
-            const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+            const [claimForm, setClaimForm] = useState({ patientId: '', invoiceId: '', membershipId: '', connectionId: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0 });
             const [insuranceMemberships, setInsuranceMemberships] = useState([]);
+            const [integrationConnections, setIntegrationConnections] = useState([]);
+            const [providerTransactions, setProviderTransactions] = useState([]);
+            const [payerRemittances, setPayerRemittances] = useState([]);
+            const [ledgerEntries, setLedgerEntries] = useState([]);
+            const [integrationMessage, setIntegrationMessage] = useState('');
             const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
             const [membershipMessage, setMembershipMessage] = useState('');
             const [verificationReferences, setVerificationReferences] = useState({});
@@ -665,6 +670,28 @@
                 window.OneMedSupabase?.getClient?.()?.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
                     if (error) setMembershipMessage(`Membership records unavailable: ${error.message}`);
                     else setInsuranceMemberships(data || []);
+                });
+            }, [activeTab]);
+
+            useEffect(() => {
+                if (!['insurance', 'payments', 'memberships', 'ledger'].includes(activeTab)) return;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('integration_connections').select('id,facility_id,integration_type,provider_code,status').eq('status', 'active').then(({ data, error }) => {
+                    if (!error) setIntegrationConnections(data || []);
+                });
+                if (activeTab === 'payments') client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,external_reference,checkout_url,created_at').order('created_at', { ascending: false }).then(({ data, error }) => {
+                    if (!error) setProviderTransactions(data || []);
+                });
+                if (activeTab === 'insurance') client.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+                    if (!error) setInsuranceMemberships(data || []);
+                });
+                if (activeTab === 'insurance') client.from('payer_remittances').select('*').order('received_at', { ascending: false }).then(({ data, error }) => {
+                    if (!error) setPayerRemittances(data || []);
+                });
+                if (activeTab === 'ledger') client.from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }).then(({ data, error }) => {
+                    if (!error) setLedgerEntries(data || []);
+                    else setIntegrationMessage(error.message);
                 });
             }, [activeTab]);
 
@@ -699,12 +726,23 @@
                 setRefundMessage(`Refund request ${decision}.`);
             };
 
+            const reviewPayerRemittance = async (remittance, decision) => {
+                const client = window.OneMedSupabase.getClient();
+                const { error } = await client.rpc('review_payer_remittance', { p_remittance_id: remittance.id, p_decision: decision });
+                if (error) return setIntegrationMessage(error.message);
+                const { data } = await client.from('payer_remittances').select('*').order('received_at', { ascending: false });
+                setPayerRemittances(data || []);
+                setIntegrationMessage(`Payer remittance ${decision}.`);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
                 { id: 'payments', label: 'Payments' },
                 { id: 'insurance', label: 'Insurance Claims' }
                 ,{ id: 'memberships', label: 'Schemes & Eligibility' }
                 ,{ id: 'refunds', label: 'Refunds' }
+                ,{ id: 'ledger', label: 'General Ledger' }
             ];
 
             const createInsuranceMembership = async () => {
@@ -767,6 +805,18 @@
                 const invoice = invoices.find(row => row.id === paymentForm.invoiceId);
                 const amount = Number(paymentForm.amount || 0);
                 if (!client || !invoice || amount <= 0 || amount > Number(invoice.balance || 0)) return notifyPersistenceFailure('submit payment for approval');
+                if (paymentForm.method === 'Online Gateway Checkout') {
+                    const facilityId = appData.patients.find((patient) => patient.id === invoice.patientId)?.home_facility_id;
+                    const connection = integrationConnections.find((item) => item.integration_type === 'payment_gateway' && item.facility_id === facilityId);
+                    if (!connection) return setIntegrationMessage('No active payment gateway is available for this account.');
+                    const { data, error } = await client.rpc('request_payment_checkout', { p_billing_id: invoice.id, p_connection_id: connection.id, p_amount: amount, p_idempotency_key: paymentForm.idempotencyKey, p_currency: 'NGN' });
+                    if (error) return setIntegrationMessage(error.message);
+                    setIntegrationMessage(`Checkout intent ${data} queued with ${connection.provider_code}. Payment remains pending until the provider confirms it and Accounts reviews it.`);
+                    const { data: transactions } = await client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,external_reference,checkout_url,created_at').order('created_at', { ascending: false });
+                    setProviderTransactions(transactions || []);
+                    setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() });
+                    return;
+                }
                 const { error } = await client.rpc('submit_payment_for_approval', { p_billing_id: invoice.id, p_amount: amount, p_payment_method: paymentForm.method, p_reference: paymentForm.reference || null, p_idempotency_key: paymentForm.idempotencyKey });
                 if (error) return notifyPersistenceFailure('process payment', error);
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
@@ -774,52 +824,54 @@
                 setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() });
             };
 
-            const handleAdvanceClaim = async (claimId) => {
-                const queue = ['pending', 'under_review', 'approved', 'paid'];
-                const nextClaims = (appData.insuranceClaims || []).map((claim) => {
-                    if (claim.id !== claimId) return claim;
-                    const currentIndex = queue.indexOf(claim.status || 'pending');
-                    const nextStatus = queue[Math.min(queue.length - 1, currentIndex + 1)] || 'pending';
-                    return { ...claim, status: nextStatus, amountApproved: Number(claim.amountApproved || 0) || Number(claim.amountClaimed || 0) };
-                });
-                const changed = nextClaims.find(claim => claim.id === claimId);
+            const submitClaimToPayer = async (claim, connectionId = null) => {
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !changed) return notifyPersistenceFailure('advance insurance claim');
-                const { error } = await client.from('insurance_claims').update({ status: changed.status, amount_approved: changed.amountApproved }).eq('id', claimId);
-                if (error) return notifyPersistenceFailure('advance insurance claim', error);
-                persistStoreTable('insuranceClaims', nextClaims);
-                appData.insuranceClaims = nextClaims;
+                const facilityId = appData.patients.find((patient) => patient.id === claim.patientId)?.home_facility_id;
+                const connection = integrationConnections.find((item) => item.id === connectionId && item.facility_id === facilityId) || integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === claim.provider && item.facility_id === facilityId);
+                if (!client || !connection) return setIntegrationMessage('No matching active payer connection is configured for this claim.');
+                const { error } = await client.rpc('submit_insurance_claim', { p_claim_id: claim.id, p_connection_id: connection.id });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage(`Claim ${claim.claimNumber || claim.claim_number} queued for ${connection.provider_code}. Status and approved amounts update only from payer responses and reviewed remittances.`);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 
             const handleSubmitInsuranceClaim = async () => {
-                if (!claimForm.patientId) return;
+                if (!claimForm.patientId || !claimForm.invoiceId || !claimForm.connectionId || !Number(claimForm.amountClaimed || 0)) return setIntegrationMessage('Select a patient, open invoice, payer, and positive claim amount.');
+                const chosenInvoice = invoices.find((invoice) => invoice.id === claimForm.invoiceId);
+                if (!chosenInvoice || claimForm.patientId !== chosenInvoice.patientId || Number(claimForm.amountClaimed) > Number(chosenInvoice.balance || 0)) return setIntegrationMessage('Claim amount must fit the selected patient’s outstanding invoice balance.');
                 const nextClaim = {
-                    id: 'claim_' + Date.now(),
                     patientId: claimForm.patientId,
+                    invoiceId: claimForm.invoiceId,
+                    membershipId: claimForm.membershipId || null,
                     claimNumber: claimForm.claimNumber || 'CLM-' + Date.now(),
-                    provider: claimForm.provider,
+                    provider: integrationConnections.find((item) => item.id === claimForm.connectionId)?.provider_code || '',
                     amountClaimed: Number(claimForm.amountClaimed || 0),
-                    amountApproved: Number(claimForm.amountApproved || 0),
-                    status: Number(claimForm.amountApproved || 0) > 0 ? 'under_review' : 'pending'
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('submit insurance claim');
-                const { data, error } = await client.from('insurance_claims').insert({ patient_id: nextClaim.patientId, claim_number: nextClaim.claimNumber, provider: nextClaim.provider, amount_claimed: nextClaim.amountClaimed, amount_approved: nextClaim.amountApproved, status: nextClaim.status }).select();
+                const { data, error } = await client.from('insurance_claims').insert({ patient_id: nextClaim.patientId, billing_id: nextClaim.invoiceId, membership_id: nextClaim.membershipId, claim_number: nextClaim.claimNumber, provider: nextClaim.provider, amount_claimed: nextClaim.amountClaimed, amount_approved: 0, status: 'pending', idempotency_key: `claim-${window.crypto?.randomUUID?.() || Date.now()}` }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('submit insurance claim', error);
                 const savedClaim = normalizeInsuranceClaims(data)[0];
+                const { error: submitError } = await client.rpc('submit_insurance_claim', { p_claim_id: savedClaim.id, p_connection_id: claimForm.connectionId });
+                if (submitError) {
+                    setIntegrationMessage(`Claim was saved but not queued: ${submitError.message}`);
+                    window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+                    return;
+                }
                 const next = [...(appData.insuranceClaims || []), savedClaim];
                 persistStoreTable('insuranceClaims', next);
                 appData.insuranceClaims = next;
                 setShowInsuranceModal(false);
-                setClaimForm({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+                setClaimForm({ patientId: '', invoiceId: '', membershipId: '', connectionId: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0 });
+                setIntegrationMessage('Claim queued with the payer; watch the queue for its response.');
             };
 
             const totalRevenue = invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0);
             const totalCollected = invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0);
             const totalOutstanding = invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0);
             const insuranceClaims = appData.insuranceClaims || [];
-            const pendingClaims = insuranceClaims.filter(c => c.status === 'pending' || c.status === 'under_review').length;
-            const approvedClaims = insuranceClaims.filter(c => c.status === 'approved' || c.status === 'paid').length;
+            const pendingClaims = insuranceClaims.filter(c => ['pending', 'queued', 'submitted', 'accepted', 'under_review'].includes(c.status)).length;
+            const approvedClaims = insuranceClaims.filter(c => ['adjudicated', 'approved', 'paid'].includes(c.status)).length;
             const deniedClaims = insuranceClaims.filter(c => c.status === 'denied').length;
             const claimApprovalRate = insuranceClaims.length ? Math.round((approvedClaims / insuranceClaims.length) * 100) : 0;
             const allowedInsurance = insuranceClaims.reduce((s, claim) => s + Number(claim.amountApproved || 0), 0);
@@ -882,6 +934,8 @@
                     )}
 
                     {activeTab === 'payments' && (
+                        <div className="space-y-4">
+                        {integrationMessage && <p role="status" className="rounded-lg bg-medical-50 p-3 text-sm text-medical-900">{integrationMessage}</p>}
                         <Card title="Payments awaiting Accounts approval">
                             <DataTable
                                 columns={[
@@ -897,6 +951,15 @@
                                 data={(appData.paymentSubmissions || []).map(payment => ({ ...payment, invoiceNumber: invoices.find(invoice => invoice.id === payment.invoiceId)?.invoiceNumber || 'Invoice unavailable' }))}
                             />
                         </Card>
+                        <Card title="External payment checkouts"><DataTable columns={[
+                            { key: 'created_at', title: 'Created', render: (row) => formatDateTime(row.created_at) },
+                            { key: 'invoice', title: 'Invoice', render: (row) => invoices.find((invoice) => invoice.id === row.billing_id)?.invoiceNumber || 'Invoice unavailable' },
+                            { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
+                            { key: 'external_reference', title: 'Provider reference' },
+                            { key: 'checkout_url', title: 'Checkout', render: (row) => row.checkout_url?.startsWith('https://') ? <a className="text-medical-700 underline" href={row.checkout_url} target="_blank" rel="noopener noreferrer">Open secure checkout</a> : 'Awaiting provider URL' },
+                            { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'posted' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'}>{row.status}</Badge> }
+                        ]} data={providerTransactions} /></Card>
+                        </div>
                     )}
 
                     {activeTab === 'refunds' && <div className="space-y-6">
@@ -922,6 +985,7 @@
 
                     {activeTab === 'insurance' && (
                         <div className="space-y-6">
+                            {integrationMessage && <p role="status" className="rounded-lg bg-medical-50 p-3 text-sm text-medical-900">{integrationMessage}</p>}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="rounded-2xl border border-medical-200 bg-medical-50 p-4">
                                     <p className="text-xs uppercase tracking-wide text-medical-600">Approval rate</p>
@@ -943,7 +1007,7 @@
 
                             <Card title="Claims queue">
                                 <div className="mb-4 flex flex-wrap gap-2">
-                                    {['all', 'pending', 'under_review', 'approved', 'paid', 'denied'].map((status) => (
+                                    {['all', 'pending', 'queued', 'accepted', 'adjudicated', 'denied'].map((status) => (
                                         <button
                                             key={status}
                                             onClick={() => setInsuranceFilter(status)}
@@ -961,16 +1025,37 @@
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'provider', title: 'Provider' },
-                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' || row.status === 'paid' ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={['adjudicated','approved','paid'].includes(row.status) ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
                                     ]}
                                     data={(insuranceClaims || []).filter((claim) => insuranceFilter === 'all' || claim.status === insuranceFilter)}
-                                    actions={(row) => (
-                                        <Button variant="secondary" size="sm" onClick={() => handleAdvanceClaim(row.id)}>Advance</Button>
-                                    )}
+                                    actions={(row) => row.status === 'pending' ? <Button variant="secondary" size="sm" onClick={() => submitClaimToPayer(row)}>Submit to payer</Button> : <span className="text-xs text-slate-500">Updated by payer response</span>}
                                 />
+                            </Card>
+                            <Card title="Payer remittance reconciliation" subtitle="Payer receipts stay pending until Accounts validates them against an adjudicated claim.">
+                                <DataTable columns={[
+                                    { key: 'claim_id', title: 'Claim', render: (row) => insuranceClaims.find((claim) => claim.id === row.claim_id)?.claimNumber || row.claim_id },
+                                    { key: 'external_event_id', title: 'Payer reference' },
+                                    { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'posted' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'}>{row.status}</Badge> },
+                                    { key: 'received_at', title: 'Received', render: (row) => formatDateTime(row.received_at) },
+                                    { key: 'review', title: 'Accounts review', render: (row) => row.status === 'pending_review' && ['accountant','super_admin'].includes(user?.role) ? <div className="flex gap-2"><Button size="sm" variant="primary" onClick={() => reviewPayerRemittance(row,'posted')}>Post</Button><Button size="sm" variant="danger" onClick={() => reviewPayerRemittance(row,'rejected')}>Reject</Button></div> : null }
+                                ]} data={payerRemittances} />
                             </Card>
                         </div>
                     )}
+
+                    {activeTab === 'ledger' && <div className="space-y-4">
+                        {integrationMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{integrationMessage}</p>}
+                        <Card title="Posted general-ledger journal" subtitle="Entries are immutable and delivered to each active facility ledger connector.">
+                            <DataTable columns={[
+                                { key: 'posted_at', title: 'Posted', render: (row) => formatDateTime(row.posted_at) },
+                                { key: 'event_type', title: 'Event' },
+                                { key: 'memo', title: 'Memo' },
+                                { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
+                                { key: 'lines', title: 'Debit / credit lines', render: (row) => <div className="space-y-1">{(row.journal_lines || []).map((line, index) => <div key={index} className="text-xs">{line.account?.account_code} {line.account?.account_name}: Dr {formatCurrency(line.debit)} / Cr {formatCurrency(line.credit)}</div>)}</div> }
+                            ]} data={ledgerEntries} />
+                        </Card>
+                    </div>}
 
                     {activeTab === 'memberships' && (
                         <div className="space-y-6">
@@ -1068,12 +1153,13 @@
                         footer={
                             <div className="flex justify-end gap-3">
                                 <Button variant="ghost" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.CheckCircle} onClick={handleProcessPayment}>Submit for approval</Button>
+                                <Button variant="primary" icon={Icons.CheckCircle} onClick={handleProcessPayment}>{paymentForm.method === 'Online Gateway Checkout' ? 'Start checkout' : 'Submit for approval'}</Button>
                             </div>
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Payment method" value={paymentForm.method} onChange={(e) => setPaymentForm(prev => ({ ...prev, method: e.target.value }))} options={[{ value: 'Card', label: 'Card' }, { value: 'Cash', label: 'Cash' }, { value: 'Bank Transfer', label: 'Bank Transfer' }, { value: 'Insurance', label: 'Insurance' }]} />
+                            <Select label="Payment method" value={paymentForm.method} onChange={(e) => setPaymentForm(prev => ({ ...prev, method: e.target.value }))} options={[{ value: 'Card', label: 'Card receipt for Accounts review' }, { value: 'Online Gateway Checkout', label: 'Online gateway checkout' }, { value: 'Cash', label: 'Cash' }, { value: 'Bank Transfer', label: 'Bank Transfer' }, { value: 'Insurance', label: 'Insurance' }]} />
+                            {paymentForm.method === 'Online Gateway Checkout' && <p className="rounded-lg border border-medical-200 bg-medical-50 p-3 text-sm text-medical-900">An active gateway intent will be created. Payment is recorded only after a verified provider response and Accounts review.</p>}
                             {paymentForm.method === 'Bank Transfer' && (
                                 <div className="rounded-lg border border-medical-200 bg-medical-50 p-3 text-sm text-medical-900">
                                     <p className="font-medium">Pay into a verified hospital account</p>
@@ -1098,11 +1184,13 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Input label="Provider" value={claimForm.provider} onChange={(e) => setClaimForm(prev => ({ ...prev, provider: e.target.value }))} />
+                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value, invoiceId: '', membershipId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Outstanding invoice" value={claimForm.invoiceId} onChange={(e) => setClaimForm(prev => ({ ...prev, invoiceId: e.target.value }))} options={[{ value: '', label: 'Select invoice...' }, ...invoices.filter((invoice) => invoice.patientId === claimForm.patientId && Number(invoice.balance || 0) > 0).map((invoice) => ({ value: invoice.id, label: `${invoice.invoiceNumber} · ${formatCurrency(invoice.balance)} due` }))]} />
+                            <Select label="Verified insurance membership" value={claimForm.membershipId} onChange={(e) => setClaimForm(prev => ({ ...prev, membershipId: e.target.value }))} options={[{ value: '', label: 'No membership / choose later' }, ...insuranceMemberships.filter((membership) => membership.patient_id === claimForm.patientId && membership.coverage_status === 'active' && membership.verification_status === 'verified_manual').map((membership) => ({ value: membership.id, label: `${membership.provider} · ${membership.policy_number}` }))]} />
+                            <Select label="Payer connection" value={claimForm.connectionId} onChange={(e) => setClaimForm(prev => ({ ...prev, connectionId: e.target.value }))} options={[{ value: '', label: 'Select payer...' }, ...integrationConnections.filter((connection) => connection.integration_type === 'payer' && connection.facility_id === appData.patients.find((patient) => patient.id === claimForm.patientId)?.home_facility_id).map((connection) => ({ value: connection.id, label: connection.provider_code }))]} />
                             <Input label="Claim Number" value={claimForm.claimNumber} onChange={(e) => setClaimForm(prev => ({ ...prev, claimNumber: e.target.value }))} />
                             <Input label="Amount Claimed" type="number" value={claimForm.amountClaimed} onChange={(e) => setClaimForm(prev => ({ ...prev, amountClaimed: e.target.value }))} />
-                            <Input label="Amount Approved" type="number" value={claimForm.amountApproved} onChange={(e) => setClaimForm(prev => ({ ...prev, amountApproved: e.target.value }))} />
+                            <p className="text-sm text-slate-600">Payer decisions and approved amounts come from verified payer responses. Remittances remain pending until Accounts reconciliation.</p>
                         </div>
                     </Modal>
 
