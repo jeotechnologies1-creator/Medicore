@@ -444,8 +444,8 @@
         @media (max-width: 1023px) {
             html, body, #root, .theme-shell { width: 100%; max-width: 100%; overflow-x: clip; }
             .mobile-nav-backdrop { display: block; position: fixed; inset: 0; z-index: var(--z-overlay); border: 0; background: rgba(9, 24, 39, 0.54); backdrop-filter: blur(3px); }
-            .mobile-drawer { position: fixed; inset: 0 auto 0 0; z-index: var(--z-drawer); width: min(19rem, calc(100vw - 3rem)); max-width: 88vw; height: 100vh; height: 100dvh; transform: translateX(-105%); visibility: hidden; transition: transform var(--motion-normal) ease, visibility var(--motion-normal); box-shadow: 18px 0 48px rgba(5, 20, 34, 0.2); }
-            .mobile-drawer.is-open { transform: translateX(0); visibility: visible; }
+            .mobile-drawer { position: fixed !important; inset: 0 auto 0 0; z-index: var(--z-drawer); width: min(17rem, 78vw) !important; max-width: 78vw; height: 100vh; height: 100dvh; flex: none; transform: translateX(-105%); visibility: hidden; pointer-events: none; transition: transform var(--motion-normal) ease, visibility var(--motion-normal); box-shadow: 18px 0 48px rgba(5, 20, 34, 0.2); }
+            .mobile-drawer.is-open { transform: translateX(0); visibility: visible; pointer-events: auto; }
             .mobile-nav-close { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; color: var(--text); }
             .desktop-sidebar-toggle { display: none !important; }
             .sidebar-brand { flex: 0 0 4rem; }
