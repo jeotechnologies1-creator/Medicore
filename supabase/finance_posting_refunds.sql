@@ -1,6 +1,51 @@
 -- Idempotent payment posting and two-person refund review.
 -- Apply after organization_permissions.sql.
 
+insert into public.permission_catalog(permission_key,description,sensitive) values
+  ('payment.approve','Approve posted payments',true),('refund.approve','Approve payment reversals',true)
+on conflict(permission_key) do update set description=excluded.description,sensitive=excluded.sensitive;
+insert into public.role_permission_grants(role,permission_key,scope) values
+  ('accountant','payment.record','facility'),('receptionist','payment.record','facility'),
+  ('accountant','payment.approve','facility'),('accountant','refund.approve','facility')
+on conflict do nothing;
+
+create or replace function public.has_finance_department_permission(target_patient_id uuid,requested_permission text)
+returns boolean language plpgsql stable security definer set search_path=public as $$
+declare actor_id uuid; actor_role text; target_facility uuid;
+begin
+  select id,role::text,facility_id into actor_id,actor_role,target_facility from public.profiles
+  where auth_user_id=auth.uid() and status::text='active' limit 1;
+  if actor_id is null then return false; end if;
+  if actor_role='super_admin' then return true; end if;
+  select coalesce(p.home_facility_id,target_facility) into target_facility from public.patients p where p.id=target_patient_id;
+  if target_facility is null then return false; end if;
+  return exists(select 1 from public.staff_organization_memberships m
+    join public.organization_units u on u.id=m.organization_unit_id and u.status='active'
+    where m.profile_id=actor_id and m.status='active' and m.starts_on<=current_date
+      and (m.ends_on is null or m.ends_on>=current_date)
+      and (u.facility_id=target_facility or u.facility_id is null)
+      and public.has_org_permission(requested_permission,target_facility,u.id));
+end;
+$$;
+revoke all on function public.has_finance_department_permission(uuid,text) from public,anon;
+grant execute on function public.has_finance_department_permission(uuid,text) to authenticated;
+
+drop policy if exists "department finance read billing" on public.billing;
+drop policy if exists "department finance manage billing" on public.billing;
+create policy "department finance read billing" on public.billing as restrictive for select to authenticated using (
+  public.has_finance_department_permission(patient_id,'payment.record')
+  or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.patient_id=billing.patient_id)
+);
+create policy "department finance manage billing" on public.billing as restrictive for all to authenticated
+  using (public.has_finance_department_permission(patient_id,'payment.record') or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.patient_id=billing.patient_id))
+  with check (public.has_finance_department_permission(patient_id,'payment.record') or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.patient_id=billing.patient_id));
+drop policy if exists "department finance read payment submissions" on public.payment_submissions;
+create policy "department finance read payment submissions" on public.payment_submissions as restrictive for select to authenticated using (
+  public.has_finance_department_permission(patient_id,'payment.record')
+  or public.has_finance_department_permission(patient_id,'payment.approve')
+  or submitted_by=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active' limit 1)
+);
+
 alter table public.payment_submissions add column if not exists idempotency_key text;
 update public.payment_submissions set idempotency_key='legacy-'||id::text where idempotency_key is null;
 alter table public.payment_submissions alter column idempotency_key set not null;
@@ -52,18 +97,23 @@ revoke insert on public.refund_requests from authenticated;
 revoke insert on public.payment_submissions from authenticated;
 revoke update,delete on public.payment_postings,public.refund_requests,public.payment_reversals from authenticated;
 drop policy if exists "finance and patient read payment postings" on public.payment_postings;
-create policy "finance and patient read payment postings" on public.payment_postings for select using (public.has_any_role(array['super_admin','accountant']) or public.can_access_patient(patient_id));
+create policy "finance and patient read payment postings" on public.payment_postings for select using (
+  public.has_finance_department_permission(patient_id,'payment.record')
+  or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.patient_id=payment_postings.patient_id)
+);
 drop policy if exists "finance and patient read refund requests" on public.refund_requests;
 create policy "finance and patient read refund requests" on public.refund_requests for select using (
-  public.has_any_role(array['super_admin','accountant','receptionist']) or exists(select 1 from public.payment_postings p where p.id=payment_posting_id and public.can_access_patient(p.patient_id))
+  exists(select 1 from public.payment_postings p where p.id=payment_posting_id and public.has_finance_department_permission(p.patient_id,'payment.record'))
+  or exists(select 1 from public.payment_postings p join public.profiles profile on profile.patient_id=p.patient_id where p.id=payment_posting_id and profile.auth_user_id=auth.uid())
 );
 drop policy if exists "staff request refunds" on public.refund_requests;
 create policy "staff request refunds" on public.refund_requests for insert with check (
-  public.has_any_role(array['super_admin','accountant','receptionist']) and requested_by=(select id from public.profiles where auth_user_id=auth.uid() limit 1) and status='pending'
+  public.has_finance_department_permission((select p.patient_id from public.payment_postings p where p.id=payment_posting_id),'payment.record') and requested_by=(select id from public.profiles where auth_user_id=auth.uid() limit 1) and status='pending'
 );
 drop policy if exists "finance and patient read payment reversals" on public.payment_reversals;
 create policy "finance and patient read payment reversals" on public.payment_reversals for select using (
-  public.has_any_role(array['super_admin','accountant']) or exists(select 1 from public.payment_postings p where p.id=payment_posting_id and public.can_access_patient(p.patient_id))
+  exists(select 1 from public.payment_postings p where p.id=payment_posting_id and public.has_finance_department_permission(p.patient_id,'payment.record'))
+  or exists(select 1 from public.payment_postings p join public.profiles profile on profile.patient_id=p.patient_id where p.id=payment_posting_id and profile.auth_user_id=auth.uid())
 );
 
 create or replace function public.stamp_payment_submission_actor() returns trigger language plpgsql security definer set search_path=public as $$
@@ -85,11 +135,13 @@ create trigger stamp_payment_submission_actor before insert or update on public.
 
 create or replace function public.submit_payment_for_approval(p_billing_id uuid,p_amount numeric,p_payment_method text,p_reference text,p_idempotency_key text) returns uuid
 language plpgsql security definer set search_path=public as $$
-declare invoice_row public.billing%rowtype; actor_profile uuid; saved public.payment_submissions%rowtype;
+declare invoice_row public.billing%rowtype; actor_profile uuid; target_patient_id uuid; saved public.payment_submissions%rowtype;
 begin
   if not public.has_any_role(array['super_admin','accountant','receptionist']) then raise exception 'Payment submission access denied.'; end if;
   if p_amount<=0 or nullif(trim(p_payment_method),'') is null or nullif(trim(p_idempotency_key),'') is null then raise exception 'Amount, payment method, and idempotency key are required.'; end if;
   select id into actor_profile from public.profiles where auth_user_id=auth.uid() and status::text='active' limit 1;
+  select patient_id into target_patient_id from public.billing where id=p_billing_id;
+  if not found or not public.has_finance_department_permission(target_patient_id,'payment.record') then raise exception 'Payment submission facility access denied.'; end if;
   select * into saved from public.payment_submissions where idempotency_key=trim(p_idempotency_key);
   if found then
     if saved.submitted_by<>actor_profile or saved.billing_id<>p_billing_id or saved.amount<>p_amount or saved.payment_method<>trim(p_payment_method) or saved.reference is distinct from nullif(trim(p_reference),'') then
@@ -121,6 +173,7 @@ begin
   select id into actor_profile from public.profiles where auth_user_id=auth.uid() and status::text='active' limit 1;
   select * into payment_row from public.payment_submissions where id=p_payment_id for update;
   if not found or payment_row.status<>'pending' then raise exception 'Payment is not awaiting review.'; end if;
+  if not public.has_finance_department_permission(payment_row.patient_id,'payment.approve') then raise exception 'Payment approval facility access denied.'; end if;
   if payment_row.submitted_by=actor_profile then raise exception 'The submitter cannot review their own payment.'; end if;
   if p_decision='approved' then
     select * into invoice_row from public.billing where id=payment_row.billing_id for update;
@@ -147,6 +200,7 @@ begin
   select id into actor_profile from public.profiles where auth_user_id=auth.uid() and status::text='active' limit 1;
   select * into posting from public.payment_postings where id=p_payment_posting_id for update;
   if not found then raise exception 'Payment posting not found.'; end if;
+  if not public.has_finance_department_permission(posting.patient_id,'payment.record') then raise exception 'Refund request facility access denied.'; end if;
   select coalesce(sum(amount),0) into reserved from public.payment_reversals where payment_posting_id=posting.id;
   select reserved+coalesce(sum(amount),0) into reserved from public.refund_requests where payment_posting_id=posting.id and status='pending';
   if reserved+p_amount>posting.amount then raise exception 'Refund request exceeds the remaining posted payment.'; end if;
@@ -168,6 +222,7 @@ begin
   if not found or request_row.status<>'pending' then raise exception 'Refund request is not pending review.'; end if;
   if request_row.requested_by=actor_profile then raise exception 'The requester cannot review their own refund.'; end if;
   select * into posting from public.payment_postings where id=request_row.payment_posting_id for update;
+  if not found or not public.has_finance_department_permission(posting.patient_id,'refund.approve') then raise exception 'Refund approval facility access denied.'; end if;
   if p_decision='approved' then
     select * into invoice_row from public.billing where id=posting.billing_id for update;
     if invoice_row.id is null then raise exception 'Refund invoice was not found.'; end if;

@@ -37,6 +37,7 @@ Run the SQL files in this order in the Supabase SQL editor:
 19. `supabase/workflow_completion.sql`
 20. `supabase/organization_permissions.sql`
 21. `supabase/finance_posting_refunds.sql`
+22. `supabase/clinical_department_rls.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -48,7 +49,7 @@ OneMed has no seed script and never persists clinical records in browser storage
 
 `workflow_completion.sql` adds family cards, per-patient insurance memberships and manual eligibility history, encounter-linked diagnostic/surgical/inpatient records, and transactional bed allocation/disposition operations. Beds are allocated under a row lock to prevent simultaneous assignment. Apply this migration after `hospital_workflows.sql` and test database permissions in staging before clinical use.
 
-`organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. Memberships do not automatically grant clinical access. Apply after `workflow_completion.sql`; legacy clinical policies still require complete scoped-permission integration and staging tests.
+`organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. `clinical_department_rls.sql` intersects existing clinical role policies with active facility and department membership permissions. Configure organization-unit codes or names to match department values stored on clinical records; untagged records use a staff member's primary unit, or their only active unit. Apply after `finance_posting_refunds.sql` and verify with the local RLS suite before deployment.
 
 `finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. A recorded reversal is not a bank transfer; external payment execution and general-ledger integration still require an approved provider and reconciliation.
 

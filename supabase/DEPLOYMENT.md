@@ -22,6 +22,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 18. `workflow_completion.sql`
 19. `organization_permissions.sql`
 20. `finance_posting_refunds.sql`
+21. `clinical_department_rls.sql`
 
 The front-end calls the following database contracts:
 
@@ -45,6 +46,7 @@ The front-end calls the following database contracts:
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
 | Organization chart and scoped permission assignments | `organization_units`, `job_positions`, `staff_organization_memberships`, `permission_catalog`, and permission-grant tables from `organization_permissions.sql` |
 | Payment idempotency, posting, and refund approval | `submit_payment_for_approval`, `review_payment_submission`, `request_billing_refund`, and `review_billing_refund` from `finance_posting_refunds.sql` |
+| Facility and department authorization | Restrictive clinical and finance RLS checks in `clinical_department_rls.sql` and `finance_posting_refunds.sql`; staff need an active membership in the matching facility and unit |
 
 ## Required non-SQL deployment
 

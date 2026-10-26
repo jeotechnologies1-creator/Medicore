@@ -34,6 +34,9 @@ begin
   for update;
 
   if not found then raise exception 'Prescription not found'; end if;
+  if not public.has_clinical_department_permission(prescription_row.patient_id,null,'medication.dispense',false) then
+    raise exception 'Pharmacy department access denied';
+  end if;
   if prescription_row.status <> 'active' then raise exception 'Only active prescriptions may be dispensed'; end if;
   if jsonb_typeof(prescription_row.medications) <> 'array' or jsonb_array_length(prescription_row.medications) = 0 then
     raise exception 'Prescription has no medications to dispense';

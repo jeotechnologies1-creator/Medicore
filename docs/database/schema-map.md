@@ -45,5 +45,6 @@
 - Historical schema has overlapping insurance, medication, and organization concepts. Avoid destructive consolidation until application queries and existing rows are reconciled.
 - Migrations are ordered SQL scripts, not a generated migration ledger with per-environment state in this repo. Several historical policy scripts are not idempotent; apply to a clone/staging database and maintain a tested recovery plan.
 - Role authorization and later workflow migrations replace earlier permissive policies. Do not skip or reorder them.
+- `clinical_department_rls.sql` adds restrictive department-scope checks across clinical records, linked care-plan goals, encounter workflow events, and result acknowledgements. The unit code or name must match the clinical record's department value where one is present.
 - Every new patient-linked table needs RLS, grants, indexes/FKs, audit behavior and a patient merge strategy. Identity-merge code must be updated transactionally whenever patient-linked tables are added.
 - No deployed schema, row counts, migration history, or SQL lint result was available in this audit.

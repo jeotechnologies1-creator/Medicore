@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -29,7 +29,10 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('supabase/tests/core_workflows.test.sql'),
     read('supabase/finance_posting_refunds.sql'),
     read('supabase/tests/core_workflows.test.sql'),
-    read('src/js/modules/operations.js')
+    read('src/js/modules/operations.js'),
+    read('supabase/clinical_department_rls.sql'),
+    read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
+    read('supabase/atomic_pharmacy_dispensing.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -123,5 +126,12 @@ assert.match(finance, /payment_reversals/, 'Refund approvals must produce immuta
 assert.match(operations, /submit_payment_for_approval/, 'Billing UI must use the idempotent payment RPC.');
 assert.match(operations, /review_billing_refund/, 'Accounts users must have a persisted refund review workflow.');
 assert.match(financeTest, /payment posting/, 'Database integration tests must verify payment posting.');
+assert.match(clinicalRls, /as restrictive for select/, 'Department permission must restrict existing permissive clinical read policies.');
+assert.match(clinicalRls, /has_clinical_department_permission/, 'Clinical RLS must enforce department membership and scoped grants.');
+assert.match(clinicalRls, /'care_plan_goals','careplan.manage'/, 'Child care-plan rows must inherit patient and department scope.');
+assert.equal(clinicalMigration, clinicalRls, 'Department authorization must be present in the ordered Supabase migrations.');
+assert.match(financeTest, /denied outside their assigned department/, 'Database tests must assert cross-department clinical denial.');
+assert.match(pharmacy, /has_clinical_department_permission\(prescription_row\.patient_id/, 'Pharmacy dispensing RPC must enforce department permission explicitly.');
+assert.match(financeTest, /failed multi-item dispense rolls back earlier stock changes/, 'Database tests must check atomic rollback for multi-item dispensing.');
 
 console.log('Regression checks passed.');

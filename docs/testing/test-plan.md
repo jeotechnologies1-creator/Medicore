@@ -6,7 +6,7 @@
 
 `package.json` has no build, lint, typecheck, browser, SQL, or integration-test scripts. No database URL/credentials or running local Supabase database were available, so no SQL migration execution, RLS session test, or end-to-end browser test was run. The Supabase CLI schema-lint help invocation was blocked when the CLI attempted to write telemetry outside the workspace.
 
-An initial `supabase test db` pgTAP suite now checks organization tables, permission scoping, membership isolation, denied non-admin writes, and a cashier-to-Accounts payment approval/posting path. It still must be run against the local stack after all migrations apply.
+An initial `supabase test db` pgTAP suite checks organization tables, department and facility allow/deny rules, membership isolation, denied non-admin writes, cashier-to-Accounts payment approval/posting, independent refund review, over-refund denial, and invoice balance reversal. Add authorization assertions whenever a role grant or clinical table is added. The suite still must be run against the local stack after all migrations apply.
 
 ## Required suites before release
 

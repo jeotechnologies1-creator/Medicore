@@ -118,6 +118,7 @@ declare request_id uuid; ward_row public.wards%rowtype;
 begin
   if not public.has_any_role(array['super_admin','doctor']) then raise exception 'Only a treating clinician may request inpatient admission.'; end if;
   if p_patient_id is null or nullif(trim(p_diagnosis),'') is null then raise exception 'Patient and clinical admission indication are required.'; end if;
+  if not public.has_clinical_department_permission(p_patient_id,null,'admission.request',false) then raise exception 'Admission request department access denied.'; end if;
   if public.has_any_role(array['doctor']) and p_doctor_id is distinct from (select id from public.profiles where auth_user_id=auth.uid() limit 1) then raise exception 'The admission request must record the authenticated clinician.'; end if;
   if p_ward_id is not null then select * into ward_row from public.wards where id=p_ward_id and status='active'; if not found then raise exception 'Requested ward is unavailable.'; end if; end if;
   insert into public.admissions(patient_id, encounter_id, requested_ward_id, ward, doctor_id, diagnosis, acuity, admission_priority, status)
@@ -135,6 +136,7 @@ begin
   if not public.has_any_role(array['super_admin','nurse']) then raise exception 'Only ward staff may allocate an inpatient bed.'; end if;
   select * into admission_row from public.admissions where id=p_admission_id for update;
   if not found or admission_row.status <> 'awaiting_bed' then raise exception 'Admission request is no longer awaiting a bed.'; end if;
+  if not public.has_clinical_department_permission(admission_row.patient_id,null,'admission.manage',false) then raise exception 'Ward allocation department access denied.'; end if;
   select * into bed_row from public.beds where id=p_bed_id for update;
   if not found or bed_row.status <> 'available' then raise exception 'The selected bed is not available.'; end if;
   if admission_row.requested_ward_id is not null and bed_row.ward_id <> admission_row.requested_ward_id then raise exception 'The selected bed is not in the requested ward.'; end if;
@@ -179,6 +181,7 @@ begin
   if p_disposition='discharged' and not public.has_any_role(array['super_admin','doctor']) then raise exception 'Only the treating clinician may authorize discharge.'; end if;
   select * into admission_row from public.admissions where id = p_admission_id for update;
   if not found or admission_row.status <> 'active' then raise exception 'This admission is not active.'; end if;
+  if not public.has_clinical_department_permission(admission_row.patient_id,null,'admission.manage',false) then raise exception 'Admission disposition department access denied.'; end if;
   update public.admissions set status = p_disposition, discharge_date = current_date, discharged_at = now(), discharged_by = (select id from public.profiles where auth_user_id = auth.uid() limit 1), discharge_summary = trim(p_summary), discharge_instructions = nullif(trim(p_instructions), '') where id = p_admission_id;
   if admission_row.bed_id is not null then
     select * into bed_row from public.beds where id = admission_row.bed_id for update;
