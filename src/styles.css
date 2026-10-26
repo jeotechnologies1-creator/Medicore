@@ -242,10 +242,6 @@
             backdrop-filter: blur(18px);
             box-shadow: inset -1px 0 0 rgba(255,255,255,0.18);
         }
-        .sidebar-scroll [data-nav-item="records"][data-nav-collapsed="false"] { display: grid !important; grid-template-columns: 20px minmax(0, 1fr); column-gap: 0.75rem !important; justify-content: initial !important; align-items: flex-start; }
-        .sidebar-scroll [data-nav-item="records"][data-nav-collapsed="false"] > svg { width: 20px; margin-top: 0.1rem; }
-        .sidebar-scroll [data-nav-item="records"][data-nav-collapsed="false"] > span { min-width: 0; line-height: 1.35; }
-
         body.theme-dark .sidebar-shell {
             background: rgba(15, 23, 42, 0.82);
         }
