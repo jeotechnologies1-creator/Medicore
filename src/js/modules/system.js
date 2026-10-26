@@ -653,11 +653,12 @@
                     }
                 },
                 {
-                    role: 'Records Officer',
+                    role: 'Health Information Management Officer',
                     permissions: {
                         dashboard: true,
                         records: true,
-                        patients: true
+                        patients: true,
+                        clinical_workflows: true
                     }
                 }
             ];

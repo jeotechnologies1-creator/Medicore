@@ -32,12 +32,15 @@ Run the SQL files in this order in the Supabase SQL editor:
 14. `supabase/safe_core_multibranch.sql`
 15. `supabase/receptionist_records_referrals.sql`
 16. `supabase/patient_appointment_coordination.sql`
+17. `supabase/hospital_workflows.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
 OneMed has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
 
 The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
+
+`hospital_workflows.sql` adds emergency and Brought In Dead (BID/BOD) intake fields and an append-only encounter workflow history. HIM and reception can open an encounter at its initial arrived state; death-related cases remain pending an authorized clinical assessment. Apply it after the authorization migration.
 
 ## Required production setup
 

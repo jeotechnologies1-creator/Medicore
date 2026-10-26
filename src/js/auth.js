@@ -262,11 +262,12 @@
                 }
             },
             {
-                role: 'Records Officer',
+                role: 'Health Information Management Officer',
                 permissions: {
                     dashboard: true,
                     records: true,
-                    patients: true
+                    patients: true,
+                    clinical_workflows: true
                 }
             }
         ];
@@ -409,7 +410,7 @@
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
                 if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments'].includes(moduleId);
-                if (normalizedRole === 'records_officer') return ['dashboard', 'records', 'patients'].includes(moduleId);
+                if (normalizedRole === 'records_officer') return ['dashboard', 'records', 'patients', 'clinical_workflows'].includes(moduleId);
 
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);

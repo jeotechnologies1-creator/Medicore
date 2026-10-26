@@ -1,6 +1,6 @@
 // ==========================================
-// MEDICAL RECORDS MODULE
-// Read-only chart index for Records Officers.
+// HEALTH INFORMATION MANAGEMENT (HIM) MODULE
+// Read-only chart index for Health Information Management staff.
 // ==========================================
 const RecordsModule = () => {
     const { user } = useAuth();
@@ -315,7 +315,7 @@ const RecordsModule = () => {
                             {referral.status === 'pending' && <Button size="sm" variant="secondary" onClick={() => markReferralReviewed(referral)}>Mark reviewed</Button>}
                         </div>
                     </div>)}
-                </div> : <p className="text-sm text-slate-500">No patient referrals have been sent to Records.</p>}
+                </div> : <p className="text-sm text-slate-500">No patient referrals have been sent to HIM.</p>}
             </Card>}
             <Card title="Patient index" subtitle={`${filteredPatients.length} of ${patients.length} records`}>
                 <div className="mb-4 max-w-lg">

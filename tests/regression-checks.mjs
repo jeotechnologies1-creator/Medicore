@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -21,7 +21,8 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('src/js/layout.js'),
     read('src/js/modules/people.js'),
     read('supabase/functions/create-staff/index.ts'),
-    read('supabase/legacy_role_enum_compatibility.sql')
+    read('supabase/legacy_role_enum_compatibility.sql'),
+    read('supabase/hospital_workflows.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -68,9 +69,9 @@ assert.match(safeCore, /create policy "authorized users log patient access" on p
 assert.match(safeCore, /revoke update, delete, truncate, references, trigger on public\.patient_access_logs from authenticated/, 'Authenticated clients must not alter or delete access logs.');
 assert.match(safeCore, /notify pgrst, 'reload schema'/, 'Migration must refresh the PostgREST schema cache after its schema changes.');
 assert.match(app, /records: \(\) => <RecordsModule \/>/, 'The Records screen must be registered as a separate module.');
-assert.match(auth, /records_officer: \['dashboard', 'records'\]/, 'Records Officers must default to the Records module only.');
-assert.match(system, /role: 'Records Officer',[\s\S]*?records: true/, 'The administrator permission matrix must enable Records for its staff role.');
-assert.match(layout, /records_officer:[\s\S]*?id: 'records', label: 'Records'/, 'Records Officers must have a Records navigation item.');
+assert.match(auth, /normalizedRole === 'records_officer'.*clinical_workflows/, 'HIM staff must be able to register encounters.');
+assert.match(system, /role: 'Health Information Management Officer',[\s\S]*?records: true/, 'The administrator permission matrix must enable HIM for its staff role.');
+assert.match(layout, /records_officer:[\s\S]*?id: 'records', label: 'Health Information Management \(HIM\)'/, 'Records Officers must have a Health Information Management navigation item.');
 assert.match(people, /'records_officer'/, 'Administrators must be able to select and manage Records Officers.');
 assert.match(staffFunction, /requesterProfile\?\.status !== 'active'/, 'Staff creation must require an active administrator.');
 assert.match(staffFunction, /'records_officer'/, 'The staff provisioning endpoint must accept the Records Officer role.');
@@ -78,6 +79,10 @@ assert.match(staffFunction, /status: 'active'/, 'New Records Officer accounts mu
 assert.match(authorization, /role::text in \([^\n]*'records_officer'/, 'The profile role constraint must accept Records Officers.');
 assert.match(legacyRoles, /'accountant','records_officer','patient'/, 'Legacy role enums must be upgraded before Records Officers are created.');
 assert.match(authorization, /or public\.has_any_role\(array\['records_officer'\]\)/, 'Records Officers must have read-only clinical chart access.');
+assert.match(hospitalWorkflows, /HIM register encounters/, 'HIM staff must be able to open an encounter in its initial state.');
+assert.match(hospitalWorkflows, /prevent_encounter_workflow_event_mutation/, 'Encounter workflow history must be append-only.');
+assert.match(hospitalWorkflows, /guard_death_assessment_authority/, 'BID/BOD assessment changes must be restricted to authorized clinicians.');
+assert.match(hospitalWorkflows, /death_assessment_status = 'assessment_required'/, 'BID/BOD registration must not mark death as confirmed.');
 assert.match(safeCore, /create policy "records officers read patient documents" on storage\.objects for select/, 'Records Officers must be able to read private chart attachments.');
 assert.doesNotMatch(safeCore, /records officers read patient documents" on storage\.objects for (insert|update|delete)/, 'Records Officers must not upload, update, or delete chart attachments.');
 assert.match(records, /purpose: 'records_module'/, 'Opening a chart in Records must be audited.');

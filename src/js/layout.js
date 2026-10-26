@@ -61,7 +61,8 @@
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                     ],
                     records_officer: [
-                        { id: 'records', label: 'Records', icon: Icons.FolderOpen },
+                        { id: 'records', label: 'Health Information Management (HIM)', icon: Icons.FolderOpen },
+                        { id: 'clinical_workflows', label: 'Encounter Registration', icon: Icons.ClipboardList },
                     ],
                     laboratory_scientist: [
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },
