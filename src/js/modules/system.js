@@ -444,7 +444,7 @@
             const permissionDepartments = [
                 { key: 'dashboard', label: 'Dashboard' },
                 { key: 'patients', label: 'Patients' },
-                { key: 'records', label: 'Records' },
+                { key: 'records', label: 'Health Information Management (HIM)' },
                 { key: 'appointments', label: 'Appointments' },
                 { key: 'doctors', label: 'Doctors' },
                 { key: 'laboratory', label: 'Laboratory' },
@@ -488,9 +488,9 @@
                     permissions: permissionDepartments.reduce((permissions, department) => {
                         const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
                         const isRecordsOfficer = roleKey === 'records_officer';
-                        const defaultAllowed = isSuperAdmin || (isRecordsOfficer && ['dashboard', 'records', 'patients'].includes(department.key));
+                        const defaultAllowed = isSuperAdmin || (isRecordsOfficer && ['dashboard', 'records'].includes(department.key));
                         const receptionistAllowed = ['dashboard', 'patients', 'appointments'].includes(department.key);
-                        const recordsOfficerAllowed = ['dashboard', 'records', 'patients'].includes(department.key);
+                        const recordsOfficerAllowed = ['dashboard', 'records'].includes(department.key);
                         return { ...permissions, [department.key]: isReceptionist ? receptionistAllowed : isRecordsOfficer ? recordsOfficerAllowed : value === undefined ? defaultAllowed : Boolean(value) };
                     }, { ...(row.permissions || {}) })
                 };

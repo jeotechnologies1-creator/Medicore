@@ -251,7 +251,7 @@ const RecordsModule = () => {
     return (
         <div className="p-6 space-y-6 animate-fade-in">
             <div>
-                <h2 className="text-2xl font-bold text-slate-900">Medical Records</h2>
+                <h2 className="text-2xl font-bold text-slate-900">Health Information Management (HIM)</h2>
                 <p className="mt-1 text-sm text-slate-500">Find a patient and review their read-only chart index.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
@@ -301,7 +301,7 @@ const RecordsModule = () => {
                     })}
                 </div> : <p className="text-sm text-slate-500">There are no appointment requests waiting for scheduling.</p>}
             </Card>}
-            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient referrals to Records" subtitle="Administrative requests sent by reception.">
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Patient referrals to Health Information Management (HIM)" subtitle="Administrative requests sent by reception.">
                 {referralError && <p className="mb-3 text-sm text-red-600">{referralError}</p>}
                 {referrals.length ? <div className="divide-y divide-slate-100">
                     {referrals.map((referral) => <div key={referral.id} className="flex flex-wrap items-center justify-between gap-3 py-3">

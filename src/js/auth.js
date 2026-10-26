@@ -80,7 +80,7 @@
                 }
                 if (roleKey === 'records_officer') {
                     canonicalModuleKeys.forEach((key) => {
-                        const allowed = ['dashboard', 'records', 'patients'].includes(key);
+                        const allowed = ['dashboard', 'records'].includes(key);
                         permissions[key] = allowed;
                         (legacyPermissionAliases[key] || []).forEach((alias) => { permissions[alias] = allowed; });
                     });
@@ -424,7 +424,7 @@
                     doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments'],
-                    records_officer: ['dashboard', 'records', 'patients'],
+                    records_officer: ['dashboard', 'records'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],
                     radiographer: ['dashboard', 'radiology', 'upload'],

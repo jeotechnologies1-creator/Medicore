@@ -575,7 +575,7 @@
                         return;
                     }
                     setRecordsReferralReason('');
-                    setRecordsReferralMessage('Referral sent to the Records team.');
+                    setRecordsReferralMessage('Referral sent to the Health Information Management (HIM) team.');
                 };
 
                 return (
@@ -612,12 +612,12 @@
                                             <div><dt className="text-slate-500">Address</dt><dd className="font-medium text-slate-800">{patient.address || 'Not recorded'}</dd></div>
                                         </dl>
                                     </Card>
-                                    {isReceptionist && <Card title="Refer to Records">
+                                    {isReceptionist && <Card title="Refer to Health Information Management (HIM)">
                                         <div className="space-y-3">
-                                            <p className="text-sm text-slate-600">Send an administrative records request to the Records team.</p>
+                                            <p className="text-sm text-slate-600">Send an administrative records request to the Health Information Management (HIM) team.</p>
                                             <TextArea label="Reason for referral" rows={3} value={recordsReferralReason} onChange={(event) => setRecordsReferralReason(event.target.value)} />
-                                            {recordsReferralMessage && <p className={'text-sm ' + (recordsReferralMessage === 'Referral sent to the Records team.' ? 'text-emerald-700' : 'text-red-600')}>{recordsReferralMessage}</p>}
-                                            <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingRecordsReferral}>{sendingRecordsReferral ? 'Sending referral...' : 'Refer patient to Records'}</Button>
+                                            {recordsReferralMessage && <p className={'text-sm ' + (recordsReferralMessage === 'Referral sent to the Health Information Management (HIM) team.' ? 'text-emerald-700' : 'text-red-600')}>{recordsReferralMessage}</p>}
+                                            <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingRecordsReferral}>{sendingRecordsReferral ? 'Sending referral...' : 'Refer patient to HIM'}</Button>
                                         </div>
                                     </Card>}
                                 </div>

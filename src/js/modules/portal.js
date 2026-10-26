@@ -86,7 +86,7 @@
                     return;
                 }
                 setAppointmentRequests((current) => [...current, ...normalizeAppointments([data])]);
-                setAppointmentMessage('Request sent. The Records team will confirm the date and time after checking with the doctor.');
+                setAppointmentMessage('Request sent. The Health Information Management (HIM) team will confirm the date and time after checking with the doctor.');
                 setAppointmentDraft({
                     department: '',
                     date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -206,7 +206,7 @@
                                         <Select label="Visit type" value={appointmentDraft.visitType} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, visitType: e.target.value }))} options={[{ value: '', label: 'Select visit type' }, { value: 'follow_up', label: 'Follow-up' }, { value: 'consultation', label: 'Consultation' }, { value: 'review', label: 'Review' }, { value: 'procedure', label: 'Procedure' }]} />
                                         <Input label="Reason" value={appointmentDraft.reason} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, reason: e.target.value }))} />
                                         {appointmentMessage && <p className={'text-sm ' + (appointmentMessage.startsWith('Request sent') ? 'text-emerald-700' : 'text-red-600')}>{appointmentMessage}</p>}
-                                        <p className="text-xs text-slate-500">Your preferred date is a request. The Records team will check the doctor’s availability and confirm the date and time here.</p>
+                                        <p className="text-xs text-slate-500">Your preferred date is a request. The Health Information Management (HIM) team will check the doctor’s availability and confirm the date and time here.</p>
                                         <Button variant="primary" icon={Icons.Calendar} onClick={handleBookAppointment}>Send appointment request</Button>
                                     </div>
                                 </Card>
