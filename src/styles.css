@@ -442,6 +442,7 @@
         }
 
         @media (max-width: 1023px) {
+            html, body, #root, .theme-shell { width: 100%; max-width: 100%; overflow-x: clip; }
             .mobile-nav-backdrop { display: block; position: fixed; inset: 0; z-index: var(--z-overlay); border: 0; background: rgba(9, 24, 39, 0.54); backdrop-filter: blur(3px); }
             .mobile-drawer { position: fixed; inset: 0 auto 0 0; z-index: var(--z-drawer); width: min(19rem, calc(100vw - 3rem)); max-width: 88vw; height: 100vh; height: 100dvh; transform: translateX(-105%); visibility: hidden; transition: transform var(--motion-normal) ease, visibility var(--motion-normal); box-shadow: 18px 0 48px rgba(5, 20, 34, 0.2); }
             .mobile-drawer.is-open { transform: translateX(0); visibility: visible; }
@@ -452,9 +453,9 @@
             .header-page-title { display: block; color: #fff; font-size: 0.82rem; font-weight: 650; text-transform: capitalize; white-space: nowrap; }
             .mobile-menu-button { display: inline-grid; flex: 0 0 auto; place-items: center; width: 2.75rem; height: 2.75rem; border: 1px solid rgba(203, 213, 225, 0.28); border-radius: 0.75rem; color: #fff; background: rgba(148, 163, 184, 0.12); }
             .brand-lockup { display: none !important; }
-            .app-shell { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
-            .app-shell > div.flex-1 { min-height: 100vh; min-height: 100dvh; overflow: visible; }
-            .app-main { overflow: visible; flex: 1 0 auto; }
+            .app-shell { display: block; width: 100%; max-width: 100%; height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+            .app-shell > div.flex-1 { display: flex; width: 100%; max-width: 100%; min-width: 0; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+            .app-main { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; overflow: visible; flex: 1 0 auto; }
         }
         @media (max-width: 639px) {
             .luxury-header { min-height: 64px; height: auto; flex-wrap: wrap; padding: 0.65rem max(0.75rem, env(safe-area-inset-right)) 0.65rem max(0.75rem, env(safe-area-inset-left)); gap: 0.5rem; }
@@ -484,9 +485,9 @@
             .app-main .grid[class*="grid-cols-["] > * { min-width: 0; }
             .app-main .flex-wrap { row-gap: 0.625rem; }
             .app-main .flex:not(.flex-col) { min-width: 0; }
-            .app-main h1 { font-size: clamp(1.25rem, 6vw, 1.75rem); line-height: 1.2; }
-            .app-main h2 { font-size: clamp(1.125rem, 5vw, 1.5rem); line-height: 1.25; }
-            .app-main h3 { line-height: 1.3; }
+            .app-main h1 { font-size: clamp(1.25rem, 6vw, 1.75rem); line-height: 1.2; overflow-wrap: normal; }
+            .app-main h2 { font-size: clamp(1.125rem, 5vw, 1.5rem); line-height: 1.25; overflow-wrap: normal; }
+            .app-main h3 { line-height: 1.3; overflow-wrap: normal; }
             .app-main .overflow-x-auto { overflow-x: auto; }
             .data-table { min-width: 40rem; }
             .data-table th, .data-table td { padding: 0.7rem 0.65rem; }
