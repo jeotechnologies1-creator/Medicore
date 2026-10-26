@@ -5,7 +5,7 @@
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
-            'hr', 'offices', 'reports', 'audit', 'settings'
+            'hr', 'offices', 'organization', 'reports', 'audit', 'settings'
         ];
 
         const legacyPermissionAliases = {
@@ -131,6 +131,7 @@
                     inventory: true,
                     hr: true,
                     offices: true,
+                    organization: true,
                     reports: true,
                     audit: true,
                     settings: true
@@ -433,7 +434,7 @@
                 }
 
                 const fallback = {
-                    super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
+                    super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'],
                     doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'admissions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments'],

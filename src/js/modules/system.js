@@ -467,6 +467,7 @@
                 { key: 'inventory', label: 'Inventory' },
                 { key: 'hr', label: 'HR & Staff' },
                 { key: 'offices', label: 'Medical Offices' },
+                { key: 'organization', label: 'Organization' },
                 { key: 'reports', label: 'Reports' },
                 { key: 'audit', label: 'Audit Logs' },
                 { key: 'settings', label: 'Settings' }
@@ -1342,6 +1343,119 @@
                     </div>
                 </div>
             );
+        };
+
+        const OrganizationModule = () => {
+            const { user } = useAuth();
+            const [units, setUnits] = useState([]);
+            const [positions, setPositions] = useState([]);
+            const [memberships, setMemberships] = useState([]);
+            const [unitForm, setUnitForm] = useState({ name: '', code: '', unitType: 'department', parentUnitId: '', facilityId: '', description: '' });
+            const [positionForm, setPositionForm] = useState({ title: '', code: '', organizationUnitId: '', reportsToPositionId: '', description: '' });
+            const [membershipForm, setMembershipForm] = useState({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: new Date().toISOString().slice(0, 10), justification: '' });
+            const [facilities, setFacilities] = useState([]);
+            const [busy, setBusy] = useState(false);
+            const [message, setMessage] = useState('');
+            const [loadError, setLoadError] = useState('');
+            const client = window.OneMedSupabase?.getClient?.();
+            const isAdmin = user?.role === 'super_admin';
+            const staff = (appData.users || []).filter((person) => person.status === 'active' && person.role !== 'patient');
+
+            const refresh = async () => {
+                if (!client) return setLoadError('Supabase is not configured. Connect the database to manage the organization chart.');
+                const [unitResult, positionResult, membershipResult, facilityResult] = await Promise.all([
+                    client.from('organization_units').select('*').order('sort_order').order('name'),
+                    client.from('job_positions').select('*').order('title'),
+                    client.from('staff_organization_memberships').select('*').order('created_at', { ascending: false }),
+                    client.from('facilities').select('id,name').order('name')
+                ]);
+                const failure = unitResult.error || positionResult.error || membershipResult.error || facilityResult.error;
+                if (failure) { setLoadError(failure.message); return; }
+                setUnits(unitResult.data || []); setPositions(positionResult.data || []); setMemberships(membershipResult.data || []); setFacilities(facilityResult.data || []); setLoadError('');
+            };
+
+            useEffect(() => { refresh(); }, []);
+
+            const saveUnit = async () => {
+                const name = unitForm.name.trim(); const code = unitForm.code.trim().toUpperCase();
+                if (!name || !/^[A-Z0-9][A-Z0-9_-]{1,29}$/.test(code)) return setMessage('Enter a name and a code with 2–30 letters, digits, underscores, or hyphens.');
+                setBusy(true); setMessage('');
+                const { error } = await client.from('organization_units').insert({ name, code, unit_type: unitForm.unitType, parent_unit_id: unitForm.parentUnitId || null, facility_id: unitForm.facilityId || null, description: unitForm.description.trim() || null, created_by: user.id, updated_by: user.id });
+                setBusy(false);
+                if (error) return setMessage(error.message);
+                setUnitForm({ name: '', code: '', unitType: 'department', parentUnitId: '', facilityId: '', description: '' });
+                setMessage('Organization unit created.'); await refresh();
+            };
+
+            const changeUnitStatus = async (unit) => {
+                const { error } = await client.from('organization_units').update({ status: unit.status === 'active' ? 'inactive' : 'active', updated_by: user.id, updated_at: new Date().toISOString() }).eq('id', unit.id);
+                if (error) return setMessage(error.message);
+                await refresh();
+            };
+
+            const savePosition = async () => {
+                if (!positionForm.organizationUnitId || !positionForm.title.trim() || !positionForm.code.trim()) return setMessage('Position, code, and organization unit are required.');
+                setBusy(true); const { error } = await client.from('job_positions').insert({ organization_unit_id: positionForm.organizationUnitId, reports_to_position_id: positionForm.reportsToPositionId || null, title: positionForm.title.trim(), code: positionForm.code.trim().toUpperCase(), description: positionForm.description.trim() || null, created_by: user.id, updated_by: user.id }); setBusy(false);
+                if (error) return setMessage(error.message);
+                setPositionForm({ title: '', code: '', organizationUnitId: '', reportsToPositionId: '', description: '' }); setMessage('Job position created.'); await refresh();
+            };
+
+            const saveMembership = async () => {
+                if (!membershipForm.profileId || !membershipForm.organizationUnitId || !membershipForm.justification.trim()) return setMessage('Staff member, department, and assignment justification are required.');
+                setBusy(true); const { error } = await client.from('staff_organization_memberships').insert({ profile_id: membershipForm.profileId, organization_unit_id: membershipForm.organizationUnitId, job_position_id: membershipForm.jobPositionId || null, membership_type: membershipForm.membershipType, starts_on: membershipForm.startsOn, justification: membershipForm.justification.trim(), assigned_by: user.id, is_primary: !memberships.some((entry) => entry.profile_id === membershipForm.profileId && entry.is_primary && entry.status === 'active') }); setBusy(false);
+                if (error) return setMessage(error.message);
+                setMembershipForm({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: new Date().toISOString().slice(0, 10), justification: '' }); setMessage('Staff assignment recorded. Application role and access were not changed.'); await refresh();
+            };
+
+            const endMembership = async (membership) => {
+                const { error } = await client.from('staff_organization_memberships').update({ status: 'ended', ends_on: new Date().toISOString().slice(0, 10) }).eq('id', membership.id);
+                if (error) return setMessage(error.message);
+                await refresh();
+            };
+
+            const unitName = (id) => units.find((unit) => unit.id === id)?.name || '—';
+            const staffName = (id) => staff.find((person) => person.id === id)?.name || staff.find((person) => person.id === id)?.fullName || 'Staff profile';
+            const unitOptions = units.filter((unit) => unit.status === 'active').map((unit) => ({ value: unit.id, label: `${unit.name} (${unit.unit_type})` }));
+
+            return <div className="p-6 space-y-6 animate-fade-in">
+                <div><h2 className="text-2xl font-bold text-slate-900">Organization Structure</h2><p className="mt-1 text-sm text-slate-500">Configure the facility hierarchy, reporting positions, and effective-dated staff memberships.</p></div>
+                {loadError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{loadError}</div>}
+                {message && <div role="status" className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{message}</div>}
+                {!isAdmin && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Organization changes require an authorized administrator. Access is also enforced by database policies.</div>}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <Card title="Add organization unit"><div className="space-y-3">
+                        <Input label="Unit name" value={unitForm.name} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, name: event.target.value })} />
+                        <Input label="Code" value={unitForm.code} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, code: event.target.value })} />
+                        <Select label="Unit type" value={unitForm.unitType} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, unitType: event.target.value })} options={['governance','executive','department','unit','service_line','support'].map((value) => ({ value, label: value.replaceAll('_', ' ') }))} />
+                        <Select label="Parent unit" value={unitForm.parentUnitId} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, parentUnitId: event.target.value })} options={[{ value: '', label: 'Top level' }, ...unitOptions]} />
+                        {facilities.length > 0 && <Select label="Facility scope" value={unitForm.facilityId} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, facilityId: event.target.value })} options={[{ value: '', label: 'Organization-wide' }, ...facilities.map((facility) => ({ value: facility.id, label: facility.name }))]} />}
+                        <TextArea label="Description" value={unitForm.description} disabled={!isAdmin} onChange={(event) => setUnitForm({ ...unitForm, description: event.target.value })} />
+                        <Button variant="primary" disabled={!isAdmin || busy} onClick={saveUnit}>Create unit</Button>
+                    </div></Card>
+                    <Card title="Create reporting position"><div className="space-y-3">
+                        <Input label="Position title" value={positionForm.title} disabled={!isAdmin} onChange={(event) => setPositionForm({ ...positionForm, title: event.target.value })} />
+                        <Input label="Position code" value={positionForm.code} disabled={!isAdmin} onChange={(event) => setPositionForm({ ...positionForm, code: event.target.value })} />
+                        <Select label="Organization unit" value={positionForm.organizationUnitId} disabled={!isAdmin} onChange={(event) => setPositionForm({ ...positionForm, organizationUnitId: event.target.value })} options={[{ value: '', label: 'Select unit' }, ...unitOptions]} />
+                        <Select label="Reports to" value={positionForm.reportsToPositionId} disabled={!isAdmin} onChange={(event) => setPositionForm({ ...positionForm, reportsToPositionId: event.target.value })} options={[{ value: '', label: 'No position' }, ...positions.map((position) => ({ value: position.id, label: `${position.title} — ${unitName(position.organization_unit_id)}` }))]} />
+                        <TextArea label="Description" value={positionForm.description} disabled={!isAdmin} onChange={(event) => setPositionForm({ ...positionForm, description: event.target.value })} />
+                        <Button variant="primary" disabled={!isAdmin || busy} onClick={savePosition}>Create position</Button>
+                    </div></Card>
+                    <Card title="Assign staff membership"><div className="space-y-3">
+                        <Select label="Staff member" value={membershipForm.profileId} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, profileId: event.target.value })} options={[{ value: '', label: 'Select staff' }, ...staff.map((person) => ({ value: person.id, label: `${person.name || person.fullName || person.email} — ${person.role}` }))]} />
+                        <Select label="Organization unit" value={membershipForm.organizationUnitId} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, organizationUnitId: event.target.value, jobPositionId: '' })} options={[{ value: '', label: 'Select unit' }, ...unitOptions]} />
+                        <Select label="Position" value={membershipForm.jobPositionId} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, jobPositionId: event.target.value })} options={[{ value: '', label: 'No position selected' }, ...positions.filter((position) => position.organization_unit_id === membershipForm.organizationUnitId).map((position) => ({ value: position.id, label: position.title }))]} />
+                        <Select label="Membership type" value={membershipForm.membershipType} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, membershipType: event.target.value })} options={['staff','lead','acting','observer'].map((value) => ({ value, label: value }))} />
+                        <Input label="Starts on" type="date" value={membershipForm.startsOn} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, startsOn: event.target.value })} />
+                        <TextArea label="Assignment justification" value={membershipForm.justification} disabled={!isAdmin} onChange={(event) => setMembershipForm({ ...membershipForm, justification: event.target.value })} />
+                        <Button variant="primary" disabled={!isAdmin || busy} onClick={saveMembership}>Assign staff</Button>
+                    </div></Card>
+                </div>
+                <Card title="Organization units and reporting structure"><DataTable columns={[
+                    { key: 'name', title: 'Unit' }, { key: 'code', title: 'Code' }, { key: 'unit_type', title: 'Type' }, { key: 'parent_unit_id', title: 'Reports within', render: (row) => unitName(row.parent_unit_id) }, { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'warning'}>{row.status}</Badge> }, { key: 'action', title: 'Action', render: (row) => <Button size="sm" variant="ghost" disabled={!isAdmin} onClick={() => changeUnitStatus(row)}>{row.status === 'active' ? 'Deactivate' : 'Activate'}</Button> }
+                ]} data={units} /></Card>
+                <Card title="Job positions"><DataTable columns={[{ key: 'title', title: 'Position' }, { key: 'code', title: 'Code' }, { key: 'organization_unit_id', title: 'Unit', render: (row) => unitName(row.organization_unit_id) }, { key: 'reports_to_position_id', title: 'Reports to', render: (row) => positions.find((position) => position.id === row.reports_to_position_id)?.title || '—' }, { key: 'status', title: 'Status' }]} data={positions} /></Card>
+                <Card title="Staff memberships"><DataTable columns={[{ key: 'profile_id', title: 'Staff member', render: (row) => staffName(row.profile_id) }, { key: 'organization_unit_id', title: 'Unit', render: (row) => unitName(row.organization_unit_id) }, { key: 'job_position_id', title: 'Position', render: (row) => positions.find((position) => position.id === row.job_position_id)?.title || '—' }, { key: 'membership_type', title: 'Assignment' }, { key: 'starts_on', title: 'Start date' }, { key: 'status', title: 'Status' }, { key: 'action', title: 'Action', render: (row) => row.status === 'active' ? <Button size="sm" variant="ghost" disabled={!isAdmin} onClick={() => endMembership(row)}>End membership</Button> : '—' }]} data={memberships} /></Card>
+            </div>;
         };
 
         // ==========================================

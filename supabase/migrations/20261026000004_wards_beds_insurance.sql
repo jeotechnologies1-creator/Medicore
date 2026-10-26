@@ -1,0 +1,1 @@
+../wards_beds_insurance.sql

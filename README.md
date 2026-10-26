@@ -35,6 +35,8 @@ Run the SQL files in this order in the Supabase SQL editor:
 17. `supabase/accounts_payment_approval.sql`
 18. `supabase/hospital_workflows.sql`
 19. `supabase/workflow_completion.sql`
+20. `supabase/organization_permissions.sql`
+21. `supabase/finance_posting_refunds.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -45,6 +47,12 @@ OneMed has no seed script and never persists clinical records in browser storage
 `hospital_workflows.sql` adds emergency and Brought In Dead (BID/BOD) intake fields and an append-only encounter workflow history. HIM and reception can open an encounter at its initial arrived state; death-related cases remain pending an authorized clinical assessment. Apply it after the authorization migration.
 
 `workflow_completion.sql` adds family cards, per-patient insurance memberships and manual eligibility history, encounter-linked diagnostic/surgical/inpatient records, and transactional bed allocation/disposition operations. Beds are allocated under a row lock to prevent simultaneous assignment. Apply this migration after `hospital_workflows.sql` and test database permissions in staging before clinical use.
+
+`organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. Memberships do not automatically grant clinical access. Apply after `workflow_completion.sql`; legacy clinical policies still require complete scoped-permission integration and staging tests.
+
+`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. A recorded reversal is not a bank transfer; external payment execution and general-ledger integration still require an approved provider and reconciliation.
+
+For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 
 ## Required production setup
 
@@ -75,3 +83,7 @@ This is a clinical application, so it should also have a privacy review, a reten
 Maintain an approved read-only/downtime procedure outside this repository: paper or approved offline forms, a unique downtime encounter identifier, a named recovery owner, a reconciliation queue, and a tested restoration drill. Never enter live patient data until the procedure, backups, recovery-time target, and restoration testing are approved by clinical governance.
 
 See [EMR_GO_LIVE_CHECKLIST.md](EMR_GO_LIVE_CHECKLIST.md) for the interoperability, safety, security, and operational controls required before go-live.
+
+## Architecture and workflow documentation
+
+The repository audit, current module status, target organogram, schema map, patient journey, departmental handoffs, role/security model, integration catalogue, implementation roadmap, test plan, and operations runbook are maintained under [`docs/`](docs/architecture/repository-audit.md). Status labels in those documents distinguish implemented, partial, planned, and unverified capabilities; they do not certify deployment readiness.

@@ -34,6 +34,7 @@
                         { id: 'inventory', label: 'Inventory', icon: Icons.Package },
                         { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
                         { id: 'offices', label: 'Medical Offices', icon: Icons.Building2 },
+                        { id: 'organization', label: 'Organization', icon: Icons.Building2 },
                         { id: 'reports', label: 'Reports', icon: Icons.BarChart3 },
                         { id: 'audit', label: 'Audit Logs', icon: Icons.Shield },
                         { id: 'settings', label: 'Settings', icon: Icons.Settings },

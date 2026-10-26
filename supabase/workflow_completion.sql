@@ -28,7 +28,9 @@ alter table public.family_card_members enable row level security;
 revoke all on public.family_cards, public.family_card_members from anon;
 grant select, insert, update on public.family_cards, public.family_card_members to authenticated;
 drop policy if exists "HIM manage family cards" on public.family_cards;
+drop policy if exists "HIM read family cards" on public.family_cards;
 drop policy if exists "HIM manage family members" on public.family_card_members;
+drop policy if exists "HIM read family members" on public.family_card_members;
 create policy "HIM read family cards" on public.family_cards for select using (public.has_any_role(array['super_admin','records_officer','receptionist']));
 create policy "HIM manage family cards" on public.family_cards for all using (public.has_any_role(array['super_admin','records_officer'])) with check (public.has_any_role(array['super_admin','records_officer']));
 create policy "HIM read family members" on public.family_card_members for select using (public.has_any_role(array['super_admin','records_officer','receptionist']));
@@ -90,6 +92,7 @@ create table if not exists public.insurance_eligibility_checks (
 alter table public.insurance_eligibility_checks enable row level security;
 revoke all on public.insurance_eligibility_checks from anon;
 grant select, insert on public.insurance_eligibility_checks to authenticated;
+drop policy if exists "insurance staff manage eligibility checks" on public.insurance_eligibility_checks;
 create policy "insurance staff manage eligibility checks" on public.insurance_eligibility_checks for all
   using (public.has_any_role(array['super_admin','accountant','records_officer']))
   with check (public.has_any_role(array['super_admin','accountant','records_officer']));

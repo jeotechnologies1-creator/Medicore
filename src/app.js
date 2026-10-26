@@ -237,6 +237,7 @@
                 audit: () => <AuditModule />,
                 settings: () => <SettingsModule />,
                 offices: () => <MedicalOfficesModule />,
+                organization: () => <OrganizationModule />,
                 hr: () => <HRStaffModule />,
                 portal: () => <PatientPortalModule />,
                 ward: () => <AdmissionsModule />,

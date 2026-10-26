@@ -84,7 +84,7 @@
             </div>
         );
 
-        const Select = ({ label, value, onChange, options, className = '', required, error }) => (
+        const Select = ({ label, value, onChange, options, className = '', required, error, disabled = false, ...props }) => (
             <div className={className}>
                 {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
                 <select
@@ -93,6 +93,8 @@
                     aria-invalid={Boolean(error)}
                     className={'w-full rounded-lg border focus:ring-2 focus:ring-opacity-50 outline-none transition-all pl-4 pr-8 py-2.5 text-sm text-slate-900 bg-white ' + (error ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : 'border-slate-300 focus:border-medical-500 focus:ring-medical-200')}
                     required={required}
+                    disabled={disabled}
+                    {...props}
                 >
                     {options.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -102,7 +104,7 @@
             </div>
         );
 
-        const TextArea = ({ label, placeholder, value, onChange, className = '', rows = 3, required }) => (
+        const TextArea = ({ label, placeholder, value, onChange, className = '', rows = 3, required, disabled = false, ...props }) => (
             <div className={className}>
                 {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>}
                 <textarea
@@ -112,6 +114,8 @@
                     rows={rows}
                     className="w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 resize-vertical"
                     required={required}
+                    disabled={disabled}
+                    {...props}
                 />
             </div>
         );

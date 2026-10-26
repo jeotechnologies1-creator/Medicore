@@ -20,6 +20,8 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 16. `accounts_payment_approval.sql`
 17. `hospital_workflows.sql`
 18. `workflow_completion.sql`
+19. `organization_permissions.sql`
+20. `finance_posting_refunds.sql`
 
 The front-end calls the following database contracts:
 
@@ -41,6 +43,8 @@ The front-end calls the following database contracts:
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Payment review | `payment_submissions` and `review_payment_submission(uuid,text)` from `accounts_payment_approval.sql`; payments remain pending until Accounts approval |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
+| Organization chart and scoped permission assignments | `organization_units`, `job_positions`, `staff_organization_memberships`, `permission_catalog`, and permission-grant tables from `organization_permissions.sql` |
+| Payment idempotency, posting, and refund approval | `submit_payment_for_approval`, `review_payment_submission`, `request_billing_refund`, and `review_billing_refund` from `finance_posting_refunds.sql` |
 
 ## Required non-SQL deployment
 

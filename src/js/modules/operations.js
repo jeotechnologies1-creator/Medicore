@@ -627,6 +627,7 @@
         // ==========================================
         const BillingModule = ({ initialTab = 'invoices' }) => {
             const { user } = useAuth();
+            const newPaymentIdempotencyKey = () => window.crypto?.randomUUID?.() || `payment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
             const [activeTab, setActiveTab] = useState(initialTab);
             const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -634,13 +635,18 @@
             const [invoices, setInvoices] = useState(getLiveStore().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
-            const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
+            const [paymentForm, setPaymentForm] = useState(() => ({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }));
             const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
             const [insuranceMemberships, setInsuranceMemberships] = useState([]);
             const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
             const [membershipMessage, setMembershipMessage] = useState('');
             const [verificationReferences, setVerificationReferences] = useState({});
+            const [paymentPostings, setPaymentPostings] = useState([]);
+            const [refundRequests, setRefundRequests] = useState([]);
+            const [refundDraft, setRefundDraft] = useState({ postingId: '', amount: '', reason: '' });
+            const [refundMessage, setRefundMessage] = useState('');
+            const [showRefundModal, setShowRefundModal] = useState(false);
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -662,11 +668,43 @@
                 });
             }, [activeTab]);
 
+            useEffect(() => {
+                if (activeTab !== 'refunds') return;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setRefundMessage('Supabase is not configured.');
+                Promise.all([
+                    client.from('payment_postings').select('*').order('recorded_at', { ascending: false }),
+                    client.from('refund_requests').select('*').order('created_at', { ascending: false })
+                ]).then(([postings, requests]) => {
+                    if (postings.error || requests.error) return setRefundMessage(postings.error?.message || requests.error?.message || 'Refund queue could not be loaded.');
+                    setPaymentPostings(postings.data || []); setRefundRequests(requests.data || []); setRefundMessage('');
+                }).catch((error) => setRefundMessage(error.message || 'Refund queue could not be loaded.'));
+            }, [activeTab]);
+
+            const requestRefund = async () => {
+                const amount = Number(refundDraft.amount || 0);
+                if (!refundDraft.postingId || amount <= 0 || !refundDraft.reason.trim()) return setRefundMessage('Select a payment, enter a positive amount, and document the reason.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('request_billing_refund', { p_payment_posting_id: refundDraft.postingId, p_amount: amount, p_reason: refundDraft.reason.trim() });
+                if (error) return setRefundMessage(error.message);
+                setShowRefundModal(false); setRefundDraft({ postingId: '', amount: '', reason: '' }); setRefundMessage('Refund request submitted for independent Accounts review.');
+                const { data } = await window.OneMedSupabase.getClient().from('refund_requests').select('*').order('created_at', { ascending: false }); setRefundRequests(data || []);
+            };
+
+            const reviewRefund = async (request, decision) => {
+                const rejectionReason = decision === 'rejected' ? window.prompt('Reason for rejecting this refund request') : null;
+                if (decision === 'rejected' && !String(rejectionReason || '').trim()) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('review_billing_refund', { p_refund_request_id: request.id, p_decision: decision, p_rejection_reason: rejectionReason });
+                if (error) return setRefundMessage(error.message);
+                const { data } = await window.OneMedSupabase.getClient().from('refund_requests').select('*').order('created_at', { ascending: false }); setRefundRequests(data || []);
+                setRefundMessage(`Refund request ${decision}.`);
+            };
+
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
                 { id: 'payments', label: 'Payments' },
                 { id: 'insurance', label: 'Insurance Claims' }
                 ,{ id: 'memberships', label: 'Schemes & Eligibility' }
+                ,{ id: 'refunds', label: 'Refunds' }
             ];
 
             const createInsuranceMembership = async () => {
@@ -729,11 +767,11 @@
                 const invoice = invoices.find(row => row.id === paymentForm.invoiceId);
                 const amount = Number(paymentForm.amount || 0);
                 if (!client || !invoice || amount <= 0 || amount > Number(invoice.balance || 0)) return notifyPersistenceFailure('submit payment for approval');
-                const { error } = await client.from('payment_submissions').insert({ billing_id: invoice.id, patient_id: invoice.patientId, amount, payment_method: paymentForm.method, reference: paymentForm.reference || null, status: 'pending' });
+                const { error } = await client.rpc('submit_payment_for_approval', { p_billing_id: invoice.id, p_amount: amount, p_payment_method: paymentForm.method, p_reference: paymentForm.reference || null, p_idempotency_key: paymentForm.idempotencyKey });
                 if (error) return notifyPersistenceFailure('process payment', error);
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
                 setShowPaymentModal(false);
-                setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
+                setPaymentForm({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() });
             };
 
             const handleAdvanceClaim = async (claimId) => {
@@ -836,7 +874,7 @@
                                 data={invoices}
                                 actions={(row) => (
                                     <>
-                                        <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '' }); setShowPaymentModal(true); }}>Post Payment</Button>
+                                        <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }); setShowPaymentModal(true); }}>Post Payment</Button>
                                     </>
                                 )}
                             />
@@ -860,6 +898,27 @@
                             />
                         </Card>
                     )}
+
+                    {activeTab === 'refunds' && <div className="space-y-6">
+                        <div className="flex justify-end"><Button variant="primary" onClick={() => setShowRefundModal(true)}>Request refund</Button></div>
+                        {refundMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{refundMessage}</p>}
+                        <Card title="Approved payment postings"><DataTable columns={[
+                            { key: 'recorded_at', title: 'Posted', render: (row) => formatDateTime(row.recorded_at) },
+                            { key: 'invoice', title: 'Invoice', render: (row) => invoices.find((invoice) => invoice.id === row.billing_id)?.invoiceNumber || 'Invoice unavailable' },
+                            { key: 'amount', title: 'Posted amount', render: (row) => formatCurrency(row.amount) },
+                            { key: 'payment_method', title: 'Method' }, { key: 'external_reference', title: 'Reference' }
+                        ]} data={paymentPostings} /></Card>
+                        <Card title="Refund approval queue"><DataTable columns={[
+                            { key: 'payment_posting_id', title: 'Payment', render: (row) => paymentPostings.find((posting) => posting.id === row.payment_posting_id)?.external_reference || row.payment_posting_id },
+                            { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) }, { key: 'reason', title: 'Reason' },
+                            { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'}>{row.status}</Badge> },
+                            { key: 'created_at', title: 'Requested', render: (row) => formatDateTime(row.created_at) },
+                            { key: 'review', title: 'Review', render: (row) => row.status === 'pending' && ['accountant','super_admin'].includes(user?.role) ? <div className="flex gap-2"><Button size="sm" variant="primary" onClick={() => reviewRefund(row,'approved')}>Approve</Button><Button size="sm" variant="danger" onClick={() => reviewRefund(row,'rejected')}>Reject</Button></div> : null }
+                        ]} data={refundRequests} /></Card>
+                        <Modal isOpen={showRefundModal} onClose={() => setShowRefundModal(false)} title="Request payment refund" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setShowRefundModal(false)}>Cancel</Button><Button variant="primary" onClick={requestRefund}>Submit request</Button></div>}>
+                            <div className="space-y-4"><Select label="Approved payment" value={refundDraft.postingId} onChange={(event) => setRefundDraft({ ...refundDraft, postingId: event.target.value })} options={[{ value: '', label: 'Select payment' }, ...paymentPostings.map((posting) => ({ value: posting.id, label: `${invoices.find((invoice) => invoice.id === posting.billing_id)?.invoiceNumber || 'Invoice'} — ${formatCurrency(posting.amount)} — ${formatDate(posting.recorded_at)}` }))]} /><Input label="Refund amount" type="number" value={refundDraft.amount} onChange={(event) => setRefundDraft({ ...refundDraft, amount: event.target.value })} /><TextArea label="Reason" value={refundDraft.reason} onChange={(event) => setRefundDraft({ ...refundDraft, reason: event.target.value })} />{refundMessage && <p role="alert" className="text-sm text-red-700">{refundMessage}</p>}</div>
+                        </Modal>
+                    </div>}
 
                     {activeTab === 'insurance' && (
                         <div className="space-y-6">

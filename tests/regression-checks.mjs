@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -23,7 +23,13 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('supabase/functions/create-staff/index.ts'),
     read('supabase/legacy_role_enum_compatibility.sql'),
     read('supabase/hospital_workflows.sql'),
-    read('supabase/workflow_completion.sql')
+    read('supabase/workflow_completion.sql'),
+    read('supabase/organization_permissions.sql'),
+    read('src/js/modules/system.js'),
+    read('supabase/tests/core_workflows.test.sql'),
+    read('supabase/finance_posting_refunds.sql'),
+    read('supabase/tests/core_workflows.test.sql'),
+    read('src/js/modules/operations.js')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -103,5 +109,19 @@ assert.doesNotMatch(safeCore, /records officers read patient documents" on stora
 assert.match(records, /purpose: 'records_module'/, 'Opening a chart in Records must be audited.');
 assert.match(records, /purpose: 'records_document'/, 'Opening a private document from Records must be audited.');
 assert.match(records, /createDocumentUrl\(document\.fileUrl\)/, 'Records must open private attachments through short-lived signed URLs.');
+assert.match(organization, /create table if not exists public\.organization_units/, 'Hospital departments and units must be configurable data.');
+assert.match(organization, /guard_organization_unit_tree/, 'Organization hierarchy must reject cycles and cross-facility parents.');
+assert.match(organization, /create table if not exists public\.staff_organization_memberships/, 'Staff department assignments must be effective-dated records.');
+assert.match(organization, /create or replace function public\.has_org_permission/, 'The database must expose an explicit scoped permission check.');
+assert.match(organization, /audit_organization_change/, 'Organization and permission changes must be audited.');
+assert.match(organizationUi, /const OrganizationModule = /, 'Administrators must have a persisted organization management screen.');
+assert.match(organizationTest, /facility scope denies access to another facility/, 'Database tests must check cross-facility permission denial.');
+assert.match(organizationTest, /non-admin cannot modify organization structure/, 'Database tests must check non-admin write denial.');
+assert.match(finance, /submit_payment_for_approval/, 'Payment submission must be transactional and idempotent.');
+assert.match(finance, /reviewed_by=actor_profile/, 'Payment reviews must record the profile ID.');
+assert.match(finance, /payment_reversals/, 'Refund approvals must produce immutable reversal records.');
+assert.match(operations, /submit_payment_for_approval/, 'Billing UI must use the idempotent payment RPC.');
+assert.match(operations, /review_billing_refund/, 'Accounts users must have a persisted refund review workflow.');
+assert.match(financeTest, /payment posting/, 'Database integration tests must verify payment posting.');
 
 console.log('Regression checks passed.');
