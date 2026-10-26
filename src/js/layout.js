@@ -46,6 +46,7 @@
                         { id: 'radiology', label: 'Radiology', icon: Icons.Image },
                         { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },
                         { id: 'prescriptions', label: 'Prescriptions', icon: Icons.Pill },
+                        { id: 'admissions', label: 'Admission Requests', icon: Icons.Bed },
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
                     ],
                     nurse: [
@@ -59,10 +60,29 @@
                     receptionist: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
+                        { id: 'clinical_workflows', label: 'Emergency Registration', icon: Icons.ClipboardList },
                     ],
                     records_officer: [
                         { id: 'records', label: 'Health Information Management (HIM)', icon: Icons.FolderOpen },
                         { id: 'clinical_workflows', label: 'Encounter Registration', icon: Icons.ClipboardList },
+                    ],
+                    surgeon: [
+                        { id: 'patients', label: 'Patients', icon: Icons.Users },
+                        { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },
+                        { id: 'surgeries', label: 'Surgery / Theatre', icon: Icons.Scissors },
+                        { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
+                    ],
+                    specialist: [
+                        { id: 'patients', label: 'Patients', icon: Icons.Users },
+                        { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
+                        { id: 'consultations', label: 'Consultations', icon: Icons.ClipboardList },
+                        { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },
+                        { id: 'radiology', label: 'Radiology', icon: Icons.Image },
+                        { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },
+                        { id: 'prescriptions', label: 'Prescriptions', icon: Icons.Pill },
+                    ],
+                    theatre_staff: [
+                        { id: 'surgeries', label: 'Surgery / Theatre', icon: Icons.Scissors },
                     ],
                     laboratory_scientist: [
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },

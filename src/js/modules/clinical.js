@@ -1,21 +1,39 @@
         const ConsultationsModule = () => {
+            const { user } = useAuth();
             const [consultations, setConsultations] = useState(getLiveStore().consultations || []);
             const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+            const [consultationMessage, setConsultationMessage] = useState('');
+            const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+            const [prescriptionMessage, setPrescriptionMessage] = useState('');
 
             const handleSaveConsultation = async () => {
-                if (!form.patientId || !form.chiefComplaint) return;
+                if (!form.patientId || !form.chiefComplaint.trim() || !form.diagnosis.trim() || !form.assessment.trim() || !form.plan.trim()) return setConsultationMessage('Patient, presenting complaint, diagnosis, assessment, and plan are required before finalizing.');
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return;
+                if (!client) return setConsultationMessage('The clinical database is unavailable. No consultation was saved.');
+                const encounter = (appData.encounters || []).find((item) => item.patientId === form.patientId && !item.endedAt);
                 const { data, error } = await client.from('consultations').insert({
-                    patient_id: form.patientId, doctor_id: form.doctorId || null, chief_complaint: form.chiefComplaint,
+                    patient_id: form.patientId, encounter_id: encounter?.id || null, doctor_id: form.doctorId || user?.id || null, chief_complaint: form.chiefComplaint,
                     diagnosis: form.diagnosis || null, assessment: form.assessment || null, plan: form.plan || null,
                     follow_up_date: form.followUpDate || null, status: 'completed'
                 }).select();
-                if (error || !data?.[0]) return;
+                if (error || !data?.[0]) return setConsultationMessage(error?.message || 'Consultation was not saved.');
                 const next = [normalizeConsultations(data)[0], ...consultations];
                 appData.consultations = next;
                 setConsultations(next);
                 setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+                setConsultationMessage('Consultation finalized and saved to the patient record.');
+            };
+
+            const savePrescription = async () => {
+                if (!prescriptionForm.patientId || !prescriptionForm.diagnosis.trim() || !prescriptionForm.medication.trim() || !prescriptionForm.dose.trim() || !Number.isInteger(Number(prescriptionForm.quantity)) || Number(prescriptionForm.quantity) < 1) return setPrescriptionMessage('Patient, diagnosis, medicine, dose, and a positive whole-number quantity are required.');
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setPrescriptionMessage('The clinical database is unavailable. No prescription was saved.');
+                const encounter = (appData.encounters || []).find((item) => item.patientId === prescriptionForm.patientId && !item.endedAt);
+                const { data, error } = await client.from('prescriptions').insert({ patient_id: prescriptionForm.patientId, encounter_id: encounter?.id || null, doctor_id: user?.id || null, diagnosis: prescriptionForm.diagnosis.trim(), medications: [{ name: prescriptionForm.medication.trim(), quantity: Number(prescriptionForm.quantity), dose: prescriptionForm.dose.trim(), route: prescriptionForm.route.trim() || null, frequency: prescriptionForm.frequency.trim() || null }], priority: prescriptionForm.priority, status: 'active' }).select().single();
+                if (error || !data) return setPrescriptionMessage(error?.message || 'Prescription was not saved.');
+                appData.prescriptions = [normalizePrescriptions([data])[0], ...(appData.prescriptions || [])];
+                setPrescriptionForm({ patientId: '', diagnosis: '', medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+                setPrescriptionMessage('Prescription sent to the pharmacy queue.');
             };
 
             return (
@@ -38,6 +56,7 @@
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
                                 <TextArea label="Plan / Treatment" value={form.plan} onChange={(e) => setForm(prev => ({ ...prev, plan: e.target.value }))} rows={3} />
                                 <Input label="Follow-up Date" type="date" value={form.followUpDate} onChange={(e) => setForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
+                                {consultationMessage && <p className="text-sm text-slate-700" role="status">{consultationMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveConsultation}>Save Consultation</Button>
                             </div>
                         </Card>
@@ -50,6 +69,11 @@
                             </div>
                         </Card>
                     </div>
+
+                    {['doctor','specialist','super_admin'].includes(user?.role) && <Card title="New prescription" subtitle="Urgent orders are highlighted in the pharmacy queue. Dispensing is recorded atomically against available stock.">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><Input label="Diagnosis" value={prescriptionForm.diagnosis} onChange={(event) => setPrescriptionForm((form) => ({...form,diagnosis:event.target.value}))} /><Input label="Medicine (must match pharmacy stock)" value={prescriptionForm.medication} onChange={(event) => setPrescriptionForm((form) => ({...form,medication:event.target.value}))} /><Input label="Dose" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
+                        {prescriptionMessage && <p className="mt-3 text-sm text-slate-700" role="status">{prescriptionMessage}</p>}<Button className="mt-4" variant="primary" onClick={savePrescription}>Send prescription to pharmacy</Button>
+                    </Card>}
 
                     <Card title="Recent Encounters">
                         <DataTable
@@ -71,27 +95,34 @@
         };
 
         const VitalsModule = () => {
+            const { user } = useAuth();
             const [vitals, setVitals] = useState(getLiveStore().vitals || []);
             const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0' });
+            const [vitalsMessage, setVitalsMessage] = useState('');
 
             const handleSaveVitals = async () => {
-                if (!form.patientId) return;
+                if (!form.patientId) return setVitalsMessage('Select a patient before recording observations.');
+                const ranges = { temperature:[25,45], heartRate:[0,300], bloodPressureSystolic:[0,300], bloodPressureDiastolic:[0,200], oxygenSaturation:[0,100], respiratoryRate:[0,100], weight:[0,500], height:[0,280], painScore:[0,10] };
+                const invalid = Object.entries(ranges).find(([key,[min,max]]) => form[key] !== '' && (!Number.isFinite(Number(form[key])) || Number(form[key]) < min || Number(form[key]) > max));
+                if (invalid) return setVitalsMessage(`${invalid[0]} is outside the permitted measurement range. Check the value and units.`);
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return;
+                if (!client) return setVitalsMessage('The clinical database is unavailable. No observations were saved.');
                 const numericOrNull = (value) => value === '' ? null : Number(value);
+                const encounter = (appData.encounters || []).find((item) => item.patientId === form.patientId && !item.endedAt);
                 const { data, error } = await client.from('vital_signs').insert({
-                    patient_id: form.patientId, temperature: numericOrNull(form.temperature), heart_rate: numericOrNull(form.heartRate),
+                    patient_id: form.patientId, encounter_id: encounter?.id || null, recorded_by: user?.id || null, temperature: numericOrNull(form.temperature), heart_rate: numericOrNull(form.heartRate),
                     blood_pressure_systolic: numericOrNull(form.bloodPressureSystolic), blood_pressure_diastolic: numericOrNull(form.bloodPressureDiastolic),
                     oxygen_saturation: numericOrNull(form.oxygenSaturation), respiratory_rate: numericOrNull(form.respiratoryRate),
                     weight: numericOrNull(form.weight), height: numericOrNull(form.height),
                     bmi: Number(form.weight) > 0 && Number(form.height) > 0 ? Number((Number(form.weight) / ((Number(form.height) / 100) ** 2)).toFixed(1)) : null,
                     pain_score: numericOrNull(form.painScore), consciousness: 'Alert'
                 }).select();
-                if (error || !data?.[0]) return;
+                if (error || !data?.[0]) return setVitalsMessage(error?.message || 'Observations were not saved.');
                 const next = [normalizeVitals(data)[0], ...vitals];
                 appData.vitals = next;
                 setVitals(next);
                 setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0' });
+                setVitalsMessage('Observations saved. Corrections should be entered as a new audited observation.');
             };
 
             return (
@@ -119,6 +150,7 @@
                                 </div>
                                 {Number(form.weight) > 0 && Number(form.height) > 0 && <p className="text-sm text-slate-600" role="status">Calculated BMI: {(Number(form.weight) / ((Number(form.height) / 100) ** 2)).toFixed(1)} kg/m²</p>}
                                 <Input label="Pain Score (0-10)" value={form.painScore} onChange={(e) => setForm(prev => ({ ...prev, painScore: e.target.value }))} />
+                                {vitalsMessage && <p className="text-sm text-slate-700" role="status">{vitalsMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveVitals}>Save Vital Signs</Button>
                             </div>
                         </Card>
@@ -348,7 +380,11 @@
             const [encounters, setEncounters] = useState(getLiveStore().encounters || []);
             const [immunizations, setImmunizations] = useState(getLiveStore().immunizations || []);
             const [administrations, setAdministrations] = useState(getLiveStore().medicationAdministrations || []);
-            const isHim = user?.role === 'records_officer';
+            const isRegistrationOnly = ['records_officer', 'receptionist'].includes(user?.role);
+            const [unknownIdentity, setUnknownIdentity] = useState(false);
+            const [intakeMessage, setIntakeMessage] = useState('');
+            const [bidEncounter, setBidEncounter] = useState(null);
+            const [bidForm, setBidForm] = useState({ status: 'under_assessment', notes: '', disposition: '' });
             const [encounterForm, setEncounterForm] = useState({ patientId: '', encounterType: 'outpatient', caseType: 'routine', location: '', reason: '', arrivalMode: '', referralSource: '', accompanyingPerson: '', presentingEmergency: '', triagePriority: 'routine' });
             const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: new Date().toISOString().slice(0, 10), nextDueDate: '', notes: '' });
             const [administrationForm, setAdministrationForm] = useState({ patientId: '', medicationName: '', dosage: '', notes: '' });
@@ -360,18 +396,26 @@
             };
 
             const saveEncounter = async () => {
-                if (!encounterForm.patientId || !encounterForm.reason.trim()) return;
+                if ((!encounterForm.patientId && !unknownIdentity) || !encounterForm.reason.trim()) return setIntakeMessage('Select a patient or use unidentified emergency registration, and enter presenting circumstances.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('start encounter');
+                if (unknownIdentity) {
+                    if (encounterForm.caseType !== 'emergency') return setIntakeMessage('Unidentified registration is only available for an emergency encounter.');
+                    const { data: encounterId, error: unknownError } = await client.rpc('register_unidentified_emergency', { p_reason: encounterForm.reason.trim(), p_arrival_mode: encounterForm.arrivalMode || null, p_presenting_emergency: encounterForm.presentingEmergency || encounterForm.reason.trim(), p_triage_priority: encounterForm.triagePriority, p_referral_source: encounterForm.referralSource || null, p_accompanying_person: encounterForm.accompanyingPerson || null });
+                    if (unknownError || !encounterId) return setIntakeMessage(unknownError?.message || 'Emergency registration was not saved.');
+                    setUnknownIdentity(false); setIntakeMessage(`Temporary emergency record created. Encounter ${encounterId.slice(0,8)} is in the doctor queue for identity verification and care.`);
+                    window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+                    return;
+                }
                 const isBID = encounterForm.caseType === 'bid';
                 const initialStatus = ['doctor', 'nurse', 'super_admin'].includes(user?.role) && !isBID ? 'in_progress' : 'arrived';
                 const encounterType = encounterForm.caseType === 'emergency' || isBID ? 'emergency' : encounterForm.encounterType;
-                const { data, error } = await client.from('encounters').insert({ patient_id: encounterForm.patientId, attending_clinician_id: ['doctor', 'super_admin'].includes(user?.role) && isBID ? user?.id : null, encounter_type: encounterType, location: encounterForm.location || null, reason_for_visit: encounterForm.reason.trim(), status: initialStatus, case_type: encounterForm.caseType, arrival_mode: encounterForm.arrivalMode || null, referral_source: encounterForm.referralSource || null, accompanying_person: encounterForm.accompanyingPerson || null, presenting_emergency: encounterForm.presentingEmergency || null, triage_priority: encounterForm.triagePriority, death_assessment_status: isBID ? 'assessment_required' : null }).select();
+                const { data, error } = await client.from('encounters').insert({ patient_id: encounterForm.patientId, registration_staff_id: user?.id || null, attending_clinician_id: ['doctor','specialist','super_admin'].includes(user?.role) && isBID ? user?.id : null, encounter_type: encounterType, location: encounterForm.location || null, reason_for_visit: encounterForm.reason.trim(), status: initialStatus, case_type: encounterForm.caseType, arrival_mode: encounterForm.arrivalMode || null, referral_source: encounterForm.referralSource || null, accompanying_person: encounterForm.accompanyingPerson || null, presenting_emergency: encounterForm.presentingEmergency || null, triage_priority: encounterForm.triagePriority, death_assessment_status: isBID ? 'assessment_required' : null }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('start encounter', error);
                 const next = [normalizeEncounters(data)[0], ...encounters];
                 const { error: historyError } = await client.from('encounter_workflow_events').insert({ encounter_id: data[0].id, patient_id: data[0].patient_id, event_type: isBID ? 'bid_case_registered' : encounterForm.caseType === 'emergency' ? 'emergency_registered' : 'encounter_registered', to_status: initialStatus, department: ['doctor','nurse','super_admin'].includes(user?.role) && !isBID ? 'Clinical Intake' : 'Health Information Management', notes: encounterForm.reason.trim(), actor_id: user?.id });
                 if (historyError) window.dispatchEvent(new CustomEvent('onemed:persistence-error', { detail: 'Encounter was registered, but its workflow history could not be saved. Contact an administrator.' }));
-                persistStoreTable('encounters', next); setEncounters(next);
+                persistStoreTable('encounters', next); setEncounters(next); setIntakeMessage(isBID ? 'BID/BOD case recorded and awaiting authorized doctor assessment.' : 'Encounter registered.');
                 setEncounterForm({ patientId: '', encounterType: 'outpatient', caseType: 'routine', location: '', reason: '', arrivalMode: '', referralSource: '', accompanyingPerson: '', presentingEmergency: '', triagePriority: 'routine' });
             };
             const saveImmunization = async () => {
@@ -399,13 +443,29 @@
                 if (!client) return notifyPersistenceFailure('complete encounter');
                 const { data, error } = await client.from('encounters').update({ status: 'completed', ended_at: new Date().toISOString() }).eq('id', encounter.id).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('complete encounter', error);
+                const patientId = encounter.patientId || encounter.patient_id;
+                const event = await client.from('encounter_workflow_events').insert({ encounter_id: encounter.id, patient_id: patientId, event_type: 'encounter_completed', from_status: encounter.status, to_status: 'completed', department: 'Clinical Care', actor_id: user?.id });
                 const updated = normalizeEncounters(data)[0]; const next = encounters.map((item) => item.id === updated.id ? updated : item);
                 persistStoreTable('encounters', next); setEncounters(next);
+                if (event.error) notifyPersistenceFailure('record encounter completion', event.error);
+            };
+            const saveBidAssessment = async () => {
+                if (!bidEncounter || !bidForm.notes.trim()) return setIntakeMessage('Document the clinical assessment before saving.');
+                if (bidForm.status === 'death_confirmed' && !bidForm.disposition.trim()) return setIntakeMessage('Record the authorized disposition for a confirmed death.');
+                const client = window.OneMedSupabase?.getClient?.();
+                const { data, error } = await client.from('encounters').update({ death_assessment_status: bidForm.status, death_assessment_notes: bidForm.notes.trim(), disposition: bidForm.disposition.trim() || null }).eq('id', bidEncounter.id).select().single();
+                if (error || !data) return setIntakeMessage(error?.message || 'BID/BOD assessment could not be saved.');
+                await client.from('encounter_workflow_events').insert({ encounter_id: bidEncounter.id, patient_id: bidEncounter.patientId || bidEncounter.patient_id, event_type: 'bid_clinical_assessment_recorded', to_status: bidForm.status, department: 'Medical / Emergency', notes: bidForm.notes.trim(), actor_id: user?.id });
+                const updated = normalizeEncounters([data])[0];
+                const next = encounters.map((item) => item.id === updated.id ? updated : item);
+                appData.encounters = next; setEncounters(next); persistStoreTable('encounters', next);
+                setBidEncounter(null); setBidForm({ status: 'under_assessment', notes: '', disposition: '' }); setIntakeMessage('BID/BOD clinical assessment recorded. Follow the facility disposition workflow.');
             };
             return <div className="p-6 space-y-6 animate-fade-in">
                 <div><h2 className="text-2xl font-bold text-slate-900">Clinical Workflows</h2><p className="text-slate-500 mt-1">Encounter coordination, emergency intake, immunization, and medication-administration records.</p></div>
-                <Tabs tabs={isHim ? [{ id: 'encounters', label: 'Encounter Registration' }] : [{ id: 'encounters', label: 'Encounters' }, { id: 'immunizations', label: 'Immunizations' }, { id: 'mar', label: 'Medication Administration' }]} activeTab={tab} onChange={setTab} />
-                {tab === 'encounters' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Register encounter"><div className="space-y-3"><Select label="Patient" value={encounterForm.patientId} onChange={(event) => setEncounterForm({ ...encounterForm, patientId: event.target.value })} options={patientOptions} /><Select label="Encounter type" value={encounterForm.encounterType} onChange={(event) => setEncounterForm({ ...encounterForm, encounterType: event.target.value })} options={['outpatient','emergency','inpatient','telehealth','home_visit'].map((value) => ({ value, label: value.replace('_', ' ') }))} /><Select label="Registration pathway" value={encounterForm.caseType} onChange={(event) => setEncounterForm({ ...encounterForm, caseType: event.target.value })} options={[{value:'routine',label:'Routine'}, {value:'emergency',label:'Emergency'}, {value:'bid',label:'Brought In Dead (BID/BOD)'}]} />{(encounterForm.caseType === 'emergency' || encounterForm.encounterType === 'emergency') && <><Input label="Arrival mode" value={encounterForm.arrivalMode} onChange={(event) => setEncounterForm({ ...encounterForm, arrivalMode: event.target.value })} /><Select label="Triage priority" value={encounterForm.triagePriority} onChange={(event) => setEncounterForm({ ...encounterForm, triagePriority: event.target.value })} options={['routine','urgent','emergency','immediate'].map((value) => ({value,label:value}))} /><Input label="Presenting emergency" value={encounterForm.presentingEmergency} onChange={(event) => setEncounterForm({ ...encounterForm, presentingEmergency: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /></>} {encounterForm.caseType === 'bid' && <><Input label="Source of referral" value={encounterForm.referralSource} onChange={(event) => setEncounterForm({ ...encounterForm, referralSource: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /><p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Registration records a reported case only. An authorized clinician must document the assessment and disposition.</p></>}<Input label="Location" value={encounterForm.location} onChange={(event) => setEncounterForm({ ...encounterForm, location: event.target.value })} /><TextArea label="Presenting complaint / circumstances" value={encounterForm.reason} onChange={(event) => setEncounterForm({ ...encounterForm, reason: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveEncounter}>Register encounter</Button></div></Card><Card title="Active and recent encounters" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'encounterType', title: 'Type' }, { key: 'reasonForVisit', title: 'Reason' }, { key: 'startedAt', title: 'Started', render: (row) => formatDateTime(row.startedAt) }, { key: 'status', title: 'Status' }]} data={encounters} actions={(row) => row.status === 'in_progress' ? <Button size="sm" onClick={() => completeEncounter(row)}>Complete</Button> : null} /></Card></div>}
+                <Tabs tabs={isRegistrationOnly ? [{ id: 'encounters', label: 'Encounter Registration' }] : [{ id: 'encounters', label: 'Encounters' }, { id: 'immunizations', label: 'Immunizations' }, { id: 'mar', label: 'Medication Administration' }]} activeTab={tab} onChange={setTab} />
+                {tab === 'encounters' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Register encounter"><div className="space-y-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unknownIdentity} onChange={(event) => {setUnknownIdentity(event.target.checked);setEncounterForm((form) => ({...form,caseType:event.target.checked ? 'emergency' : form.caseType}));}} /> Unidentified emergency patient</label><Select label="Patient" disabled={unknownIdentity} value={encounterForm.patientId} onChange={(event) => setEncounterForm({ ...encounterForm, patientId: event.target.value })} options={patientOptions} /><Select label="Encounter type" value={encounterForm.encounterType} onChange={(event) => setEncounterForm({ ...encounterForm, encounterType: event.target.value })} options={['outpatient','emergency','inpatient','telehealth','home_visit'].map((value) => ({ value, label: value.replace('_', ' ') }))} /><Select label="Registration pathway" value={encounterForm.caseType} onChange={(event) => setEncounterForm({ ...encounterForm, caseType: event.target.value })} options={[{value:'routine',label:'Routine'}, {value:'emergency',label:'Emergency'}, {value:'bid',label:'Brought In Dead (BID/BOD)'}]} />{(encounterForm.caseType === 'emergency' || encounterForm.encounterType === 'emergency') && <><Input label="Arrival mode" value={encounterForm.arrivalMode} onChange={(event) => setEncounterForm({ ...encounterForm, arrivalMode: event.target.value })} /><Select label="Triage priority" value={encounterForm.triagePriority} onChange={(event) => setEncounterForm({ ...encounterForm, triagePriority: event.target.value })} options={['routine','urgent','emergency','immediate'].map((value) => ({value,label:value}))} /><Input label="Presenting emergency" value={encounterForm.presentingEmergency} onChange={(event) => setEncounterForm({ ...encounterForm, presentingEmergency: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /></>}{encounterForm.caseType === 'bid' && <><Input label="Source of referral" value={encounterForm.referralSource} onChange={(event) => setEncounterForm({ ...encounterForm, referralSource: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /><p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Registration records a reported case only. An authorized clinician must document the assessment and disposition.</p></>}<Input label="Location" value={encounterForm.location} onChange={(event) => setEncounterForm({ ...encounterForm, location: event.target.value })} /><TextArea label="Presenting complaint / circumstances" value={encounterForm.reason} onChange={(event) => setEncounterForm({ ...encounterForm, reason: event.target.value })} />{intakeMessage && <p className="text-sm text-slate-700" role="status">{intakeMessage}</p>}<Button variant="primary" className="w-full justify-center" onClick={saveEncounter}>Register encounter</Button></div></Card><Card title="Active and recent encounters" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'encounterType', title: 'Type' }, { key: 'reasonForVisit', title: 'Reason' }, { key: 'startedAt', title: 'Started', render: (row) => formatDateTime(row.startedAt) }, { key: 'status', title: 'Status', render:(row) => row.case_type === 'bid' || row.caseType === 'bid' ? `BID/BOD: ${row.death_assessment_status || row.deathAssessmentStatus || 'assessment required'}` : row.status }]} data={encounters} actions={(row) => (row.case_type === 'bid' || row.caseType === 'bid') && ['doctor','super_admin'].includes(user?.role) ? <Button size="sm" variant="danger" onClick={() => {setBidEncounter(row);setBidForm({status:row.death_assessment_status || 'under_assessment',notes:row.death_assessment_notes || '',disposition:row.disposition || ''});}}>Doctor assessment</Button> : row.status === 'in_progress' && !isRegistrationOnly ? <Button size="sm" onClick={() => completeEncounter(row)}>Complete</Button> : null} /></Card></div>}
+                <Modal isOpen={!!bidEncounter} onClose={() => setBidEncounter(null)} title="Authorized BID/BOD assessment" size="lg" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setBidEncounter(null)}>Cancel</Button><Button variant="danger" onClick={saveBidAssessment}>Save assessment</Button></div>}><div className="space-y-4"><p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Reported status on arrival is not a clinical determination. Record the examination and case disposition.</p><Select label="Clinical determination" value={bidForm.status} onChange={(event) => setBidForm((form) => ({...form,status:event.target.value}))} options={[{value:'under_assessment',label:'Under assessment'},{value:'death_confirmed',label:'Death confirmed by clinician'},{value:'not_confirmed',label:'Death not confirmed'},{value:'further_assessment',label:'Further assessment required'}]} /><TextArea label="Clinical examination and documentation" value={bidForm.notes} onChange={(event) => setBidForm((form) => ({...form,notes:event.target.value}))} rows={5} /><TextArea label="Disposition per facility policy" value={bidForm.disposition} onChange={(event) => setBidForm((form) => ({...form,disposition:event.target.value}))} rows={3}/>{intakeMessage && <p role="alert" className="text-sm text-red-700">{intakeMessage}</p>}</div></Modal>
                 {tab === 'immunizations' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record immunization"><div className="space-y-3"><Select label="Patient" value={immunizationForm.patientId} onChange={(event) => setImmunizationForm({ ...immunizationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Vaccine" value={immunizationForm.vaccine} onChange={(event) => setImmunizationForm({ ...immunizationForm, vaccine: event.target.value })} /><Input label="Administered date" type="date" value={immunizationForm.administeredDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, administeredDate: event.target.value })} /><Input label="Next due date" type="date" value={immunizationForm.nextDueDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, nextDueDate: event.target.value })} /><TextArea label="Notes" value={immunizationForm.notes} onChange={(event) => setImmunizationForm({ ...immunizationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveImmunization}>Record immunization</Button></div></Card><Card title="Immunization history" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'vaccine', title: 'Vaccine' }, { key: 'administeredDate', title: 'Administered', render: (row) => formatDate(row.administeredDate) }, { key: 'nextDueDate', title: 'Next due', render: (row) => formatDate(row.nextDueDate) }, { key: 'status', title: 'Status' }]} data={immunizations} /></Card></div>}
                 {tab === 'mar' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record administration"><div className="space-y-3"><Select label="Patient" value={administrationForm.patientId} onChange={(event) => setAdministrationForm({ ...administrationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Medication" value={administrationForm.medicationName} onChange={(event) => setAdministrationForm({ ...administrationForm, medicationName: event.target.value })} /><Input label="Dose administered" value={administrationForm.dosage} onChange={(event) => setAdministrationForm({ ...administrationForm, dosage: event.target.value })} /><TextArea label="Notes" value={administrationForm.notes} onChange={(event) => setAdministrationForm({ ...administrationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveAdministration}>Record administration</Button></div></Card><Card title="Medication administration record" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'medicationName', title: 'Medication' }, { key: 'dosage', title: 'Dose' }, { key: 'administeredAt', title: 'Administered', render: (row) => formatDateTime(row.administeredAt) }]} data={administrations} /></Card></div>}
             </div>;

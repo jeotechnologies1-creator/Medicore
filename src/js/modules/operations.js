@@ -576,6 +576,8 @@
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
                                     { key: 'diagnosis', title: 'Diagnosis' },
+                                    { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'emergency' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority || 'routine'}</Badge> },
+                                    { key: 'medications', title: 'Medication orders', render: (row) => (row.medications || []).map((medication) => `${medication.name} × ${medication.quantity}`).join(', ') || 'No items' },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : row.status === 'dispensed' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
                                 data={appData.prescriptions}
@@ -624,6 +626,7 @@
         // BILLING MODULE
         // ==========================================
         const BillingModule = ({ initialTab = 'invoices' }) => {
+            const { user } = useAuth();
             const [activeTab, setActiveTab] = useState(initialTab);
             const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -634,6 +637,10 @@
             const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: 0, method: 'Card', reference: '' });
             const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', provider: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0, amountApproved: 0, status: 'pending' });
+            const [insuranceMemberships, setInsuranceMemberships] = useState([]);
+            const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
+            const [membershipMessage, setMembershipMessage] = useState('');
+            const [verificationReferences, setVerificationReferences] = useState({});
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -647,11 +654,40 @@
                 return () => { active = false; };
             }, []);
 
+            useEffect(() => {
+                if (activeTab !== 'memberships') return;
+                window.OneMedSupabase?.getClient?.()?.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+                    if (error) setMembershipMessage(`Membership records unavailable: ${error.message}`);
+                    else setInsuranceMemberships(data || []);
+                });
+            }, [activeTab]);
+
             const tabs = [
                 { id: 'invoices', label: 'Invoices' },
                 { id: 'payments', label: 'Payments' },
                 { id: 'insurance', label: 'Insurance Claims' }
+                ,{ id: 'memberships', label: 'Schemes & Eligibility' }
             ];
+
+            const createInsuranceMembership = async () => {
+                if (!membershipForm.patientId || !membershipForm.provider.trim() || !membershipForm.policyNumber.trim()) return setMembershipMessage('Patient, insurer, and policy number are required.');
+                const { data, error } = await window.OneMedSupabase.getClient().from('insurance_memberships').insert({ patient_id: membershipForm.patientId, provider: membershipForm.provider.trim(), scheme: membershipForm.scheme.trim() || null, plan_name: membershipForm.planName.trim() || null, policy_number: membershipForm.policyNumber.trim(), principal_member: membershipForm.principalMember.trim() || null, dependent_relationship: membershipForm.dependentRelationship || null, effective_from: membershipForm.effectiveFrom || null, effective_to: membershipForm.effectiveTo || null, copayment: Number(membershipForm.copayment || 0), deductible: Number(membershipForm.deductible || 0), created_by: user?.id || null, coverage_status: 'pending', verification_status: 'pending_manual' }).select().single();
+                if (error || !data) return setMembershipMessage(error?.message || 'Membership was not saved.');
+                setInsuranceMemberships((items) => [data, ...items]);
+                setMembershipForm({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
+                setMembershipMessage('Membership saved as pending manual verification.');
+            };
+
+            const recordManualEligibility = async (membership, status) => {
+                const reference = verificationReferences[membership.id] || '';
+                const client = window.OneMedSupabase.getClient();
+                const { data: check, error: checkError } = await client.from('insurance_eligibility_checks').insert({ membership_id: membership.id, service_type: verificationReferences[`${membership.id}:service`] || 'general', status: status === 'verified_manual' ? 'eligible' : 'ineligible', reference: reference || null, notes: 'Manual verification recorded by authorized insurance staff.', checked_by: user?.id || null }).select().single();
+                if (checkError || !check) return setMembershipMessage(checkError?.message || 'Eligibility result was not saved.');
+                const { data, error } = await client.from('insurance_memberships').update({ verification_status: status, verification_reference: reference || null, verified_by: user?.id || null, verified_at: new Date().toISOString(), coverage_status: status === 'verified_manual' ? 'active' : 'rejected' }).eq('id', membership.id).select().single();
+                if (error || !data) return setMembershipMessage(error?.message || 'Membership status could not be updated.');
+                setInsuranceMemberships((items) => items.map((item) => item.id === membership.id ? data : item));
+                setMembershipMessage(status === 'verified_manual' ? 'Manual eligibility check recorded as verified.' : 'Manual eligibility check recorded as ineligible.');
+            };
 
             const handleCreateInvoice = async () => {
                 if (!invoiceForm.patientId) return;
@@ -877,6 +913,35 @@
                         </div>
                     )}
 
+                    {activeTab === 'memberships' && (
+                        <div className="space-y-6">
+                            <Card title="Record insurance membership" subtitle="Coverage remains pending until eligibility is checked with the insurer. Emergency care must follow facility policy regardless of verification state.">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                                    <Select label="Patient" value={membershipForm.patientId} onChange={(event) => setMembershipForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} />
+                                    <Input label="Insurer/provider" value={membershipForm.provider} onChange={(event) => setMembershipForm((form) => ({...form,provider:event.target.value}))} />
+                                    <Input label="Scheme" value={membershipForm.scheme} onChange={(event) => setMembershipForm((form) => ({...form,scheme:event.target.value}))} />
+                                    <Input label="Plan" value={membershipForm.planName} onChange={(event) => setMembershipForm((form) => ({...form,planName:event.target.value}))} />
+                                    <Input label="Policy / membership number" value={membershipForm.policyNumber} onChange={(event) => setMembershipForm((form) => ({...form,policyNumber:event.target.value}))} />
+                                    <Input label="Principal member" value={membershipForm.principalMember} onChange={(event) => setMembershipForm((form) => ({...form,principalMember:event.target.value}))} />
+                                    <Select label="Dependent relationship" value={membershipForm.dependentRelationship} onChange={(event) => setMembershipForm((form) => ({...form,dependentRelationship:event.target.value}))} options={[{value:'',label:'Principal / unspecified'},...['spouse','child','parent','other'].map((value) => ({value,label:value}))]} />
+                                    <Input label="Effective from" type="date" value={membershipForm.effectiveFrom} onChange={(event) => setMembershipForm((form) => ({...form,effectiveFrom:event.target.value}))} />
+                                    <Input label="Effective to" type="date" value={membershipForm.effectiveTo} onChange={(event) => setMembershipForm((form) => ({...form,effectiveTo:event.target.value}))} />
+                                    <Input label="Co-payment" type="number" min="0" value={membershipForm.copayment} onChange={(event) => setMembershipForm((form) => ({...form,copayment:event.target.value}))} />
+                                    <Input label="Deductible" type="number" min="0" value={membershipForm.deductible} onChange={(event) => setMembershipForm((form) => ({...form,deductible:event.target.value}))} />
+                                    <div className="flex items-end"><Button variant="primary" onClick={createInsuranceMembership}>Save membership</Button></div>
+                                </div>
+                                {membershipMessage && <p className="mt-3 text-sm text-slate-700" role="status">{membershipMessage}</p>}
+                            </Card>
+                            <Card title="Membership and manual eligibility queue">
+                                {insuranceMemberships.length ? <div className="divide-y divide-slate-100">{insuranceMemberships.map((membership) => {
+                                    const patient = (appData.patients || []).find((item) => item.id === membership.patient_id);
+                                    return <div key={membership.id} className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr] gap-3 py-4 items-center"><div><p className="font-semibold text-slate-900">{patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record unavailable'}</p><p className="text-sm text-slate-600">{membership.provider} · {membership.scheme || 'Scheme not specified'} · {membership.policy_number}</p><p className="text-xs text-slate-500">{membership.plan_name || 'No plan'} · {membership.dependent_relationship || 'Principal/unspecified'} · {membership.effective_from || 'Start unknown'} to {membership.effective_to || 'No end date'}</p></div><div><Badge variant={membership.verification_status === 'verified_manual' ? 'success' : membership.verification_status === 'rejected_manual' ? 'danger' : 'warning'}>{membership.verification_status}</Badge><p className="mt-1 text-xs text-slate-500">Manual verification only · {membership.verification_reference || 'No reference'}</p></div><div className="flex flex-wrap items-end gap-2"><Select label="Service" value={verificationReferences[`${membership.id}:service`] || 'general'} onChange={(event) => setVerificationReferences((values) => ({...values,[`${membership.id}:service`]:event.target.value}))} options={['general','consultation','pharmacy','laboratory','surgery','inpatient'].map((value) => ({value,label:value}))} /><Input label="Insurer reference" value={verificationReferences[membership.id] || ''} onChange={(event) => setVerificationReferences((values) => ({...values,[membership.id]:event.target.value}))} /><Button size="sm" variant="primary" onClick={() => recordManualEligibility(membership,'verified_manual')}>Record eligible</Button><Button size="sm" variant="danger" onClick={() => recordManualEligibility(membership,'rejected_manual')}>Record ineligible</Button></div></div>;
+                                })}</div> : <p className="text-sm text-slate-500">No insurance memberships have been recorded.</p>}
+                                <p className="mt-3 text-xs text-slate-500">Results entered here are staff-recorded manual checks; no external insurer integration is configured.</p>
+                            </Card>
+                        </div>
+                    )}
+
                     {activeTab === 'reports' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card title="Revenue by Department">
@@ -990,39 +1055,42 @@
         // ADMISSIONS / WARD MODULE
         // ==========================================
         const AdmissionsModule = () => {
+            const { user } = useAuth();
             const [selectedWard, setSelectedWard] = useState(null);
             const [showNewAdmission, setShowNewAdmission] = useState(false);
             const [admissions, setAdmissions] = useState(getLiveStore().admissions || []);
-            const [admissionForm, setAdmissionForm] = useState({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
+            const [admissionForm, setAdmissionForm] = useState({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', acuity: 'stable', priority: 'routine' });
+            const [dispositionAdmission, setDispositionAdmission] = useState(null);
+            const [allocationAdmission, setAllocationAdmission] = useState(null);
+            const [allocationBedId, setAllocationBedId] = useState('');
+            const [dispositionForm, setDispositionForm] = useState({ type: 'discharged', summary: '', instructions: '' });
+            const [workflowError, setWorkflowError] = useState('');
 
             const handleCreateAdmission = async () => {
-                if (!admissionForm.patientId) return;
-                const payload = {
-                    patientId: admissionForm.patientId,
-                    ward: admissionForm.ward,
-                    bedNumber: admissionForm.bedNumber,
-                    admissionDate: new Date().toISOString().split('T')[0],
-                    dischargeDate: null,
-                    doctorId: admissionForm.doctorId,
-                    diagnosis: admissionForm.diagnosis,
-                    status: 'active',
-                    acuity: admissionForm.acuity
-                };
-
+                if (!admissionForm.patientId || !admissionForm.diagnosis.trim()) return setWorkflowError('Select a patient and enter the clinical admission indication.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('admit patient');
-                const { data, error } = await client.from('admissions').insert([{
-                    patient_id: payload.patientId, ward: payload.ward || null, bed_number: payload.bedNumber || null,
-                    admission_date: payload.admissionDate, doctor_id: payload.doctorId || null,
-                    diagnosis: payload.diagnosis || null, status: payload.status, acuity: payload.acuity
-                }]).select();
-                if (error || !data?.[0]) return notifyPersistenceFailure('admit patient', error);
-                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, doctorId: data[0].doctor_id || payload.doctorId, bedNumber: data[0].bed_number || payload.bedNumber, admissionDate: data[0].admission_date || payload.admissionDate };
-                const next = [...admissions, mapped];
-                persistStoreTable('admissions', next);
-                setAdmissions(next);
+                const { error } = await client.rpc('request_inpatient_admission', { p_patient_id: admissionForm.patientId, p_encounter_id: admissionForm.encounterId || null, p_doctor_id: admissionForm.doctorId || user?.id || null, p_ward_id: admissionForm.wardId || null, p_diagnosis: admissionForm.diagnosis.trim(), p_acuity: admissionForm.acuity, p_priority: admissionForm.priority });
+                if (error) return setWorkflowError(error.message || 'The admission request could not be saved.');
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+                setWorkflowError('');
                 setShowNewAdmission(false);
-                setAdmissionForm({ patientId: '', ward: '', bedNumber: '', doctorId: '', diagnosis: '', acuity: 'stable' });
+                setAdmissionForm({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', acuity: 'stable', priority: 'routine' });
+            };
+
+            const allocateRequestedBed = async () => {
+                if (!allocationAdmission || !allocationBedId) return setWorkflowError('Choose an available bed to allocate.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('allocate_requested_admission', { p_admission_id: allocationAdmission.id, p_bed_id: allocationBedId });
+                if (error) return setWorkflowError(error.message || 'Bed allocation failed. The bed may have been allocated by another staff member.');
+                setAllocationAdmission(null); setAllocationBedId(''); setWorkflowError(''); window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
+            const completeDisposition = async () => {
+                if (!dispositionAdmission || !dispositionForm.summary.trim()) return setWorkflowError('A discharge or transfer summary is required.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('complete_inpatient_disposition', { p_admission_id: dispositionAdmission.id, p_disposition: dispositionForm.type, p_summary: dispositionForm.summary.trim(), p_instructions: dispositionForm.instructions.trim() || null });
+                if (error) return setWorkflowError(error.message || 'The inpatient disposition was not saved.');
+                setDispositionAdmission(null); setDispositionForm({ type: 'discharged', summary: '', instructions: '' }); setWorkflowError('');
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 
             return (
@@ -1030,9 +1098,9 @@
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Ward Management</h2>
-                            <p className="text-slate-500 mt-1">Bed allocation and patient admissions</p>
+                            <p className="text-slate-500 mt-1">Admission requests, ward review, bed allocation, and discharge coordination</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewAdmission(true)}>New Admission</Button>
+                        {['doctor','super_admin'].includes(user?.role) && <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewAdmission(true)}>Request Admission</Button>}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -1048,7 +1116,7 @@
                                     </div>
                                     <h3 className="font-semibold text-slate-900">{ward.name}</h3>
                                     <p className="text-2xl font-bold text-slate-900 mt-1">{ward.occupied}/{ward.capacity}</p>
-                                    <p className="text-xs text-slate-500">{Math.round((ward.occupied / ward.capacity) * 100)}% occupied</p>
+                                    <p className="text-xs text-slate-500">{ward.capacity ? Math.round((ward.occupied / ward.capacity) * 100) : 0}% occupied</p>
                                     <div className="mt-2">
                                         <ProgressBar value={ward.occupied} max={ward.capacity} color={ward.occupied >= ward.capacity * 0.9 ? 'red' : 'emerald'} size="sm" />
                                     </div>
@@ -1080,14 +1148,10 @@
                                 { key: 'acuity', title: 'Acuity', render: (row) => <Badge variant={row.acuity === 'critical' ? 'danger' : row.acuity === 'moderate' ? 'warning' : 'success'}>{row.acuity}</Badge> }
                             ]}
                             data={admissions.filter(a => a.status === 'active')}
-                            actions={(row) => (
-                                <>
-                                    <Button variant="primary" size="sm">Transfer</Button>
-                                    <Button variant="secondary" size="sm">Discharge</Button>
-                                </>
-                            )}
+                            actions={(row) => ['super_admin','doctor','nurse'].includes(user?.role) ? <Button variant="secondary" size="sm" onClick={() => { setWorkflowError(''); setDispositionForm({type:user?.role==='nurse'?'transferred':'discharged',summary:'',instructions:''}); setDispositionAdmission(row); }}>{user?.role==='nurse'?'Transfer':'Discharge / Transfer'}</Button> : null}
                         />
                     </Card>
+                    {['doctor','nurse','super_admin'].includes(user?.role) && <Card title="Admission requests awaiting bed allocation"><DataTable columns={[{key:'patientId',title:'Patient',render:(row)=>{const patient=appData.patients.find((item)=>item.id===row.patientId);return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';}},{key:'ward',title:'Requested ward'},{key:'diagnosis',title:'Admission indication'},{key:'admissionPriority',title:'Priority'},{key:'createdAt',title:'Requested',render:(row)=>formatDateTime(row.createdAt)}]} data={admissions.filter((row)=>row.status==='awaiting_bed')} actions={(row)=>['nurse','super_admin'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={()=>{setWorkflowError('');setAllocationAdmission(row);setAllocationBedId('');}}>Allocate available bed</Button> : null} /></Card>}
 
                     <Modal
                         isOpen={showNewAdmission}
@@ -1097,18 +1161,26 @@
                         footer={
                             <div className="flex justify-end gap-3">
                                 <Button variant="ghost" onClick={() => setShowNewAdmission(false)}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateAdmission}>Admit Patient</Button>
+                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateAdmission}>Submit Admission Request</Button>
                             </div>
                         }
                     >
                         <div className="space-y-4">
                             <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Ward" value={admissionForm.ward} onChange={(e) => setAdmissionForm(prev => ({ ...prev, ward: e.target.value }))} options={[{ value: 'General Ward', label: 'General Ward' }, { value: 'ICU', label: 'ICU' }, { value: 'Maternity', label: 'Maternity' }, { value: 'Pediatrics', label: 'Pediatrics' }]} />
-                            <Input label="Bed Number" value={admissionForm.bedNumber} onChange={(e) => setAdmissionForm(prev => ({ ...prev, bedNumber: e.target.value }))} />
+                            <Select label="Requested ward" value={admissionForm.wardId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, wardId: e.target.value, bedId: '' }))} options={[{ value: '', label: 'Select ward...' }, ...(appData.wards || []).filter((ward) => ward.status === 'active').map((ward) => ({ value: ward.id, label: ward.name }))]} />
+                            <Select label="Active encounter" value={admissionForm.encounterId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'No encounter selected' }, ...(appData.encounters || []).filter((encounter) => encounter.patientId === admissionForm.patientId && !encounter.endedAt).map((encounter) => ({ value: encounter.id, label: `${encounter.encounterType} · ${encounter.reasonForVisit}` }))]} />
                             <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Diagnosis" value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                            <Select label="Admission priority" value={admissionForm.priority} onChange={(e) => setAdmissionForm(prev => ({ ...prev, priority: e.target.value }))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} />
                             <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
+                            {workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}
                         </div>
+                    </Modal>
+
+                    <Modal isOpen={!!allocationAdmission} onClose={()=>setAllocationAdmission(null)} title="Allocate ward bed" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={()=>setAllocationAdmission(null)}>Cancel</Button><Button variant="primary" onClick={allocateRequestedBed}>Allocate bed</Button></div>}><div className="space-y-4"><p className="text-sm text-slate-600">Requested ward: {allocationAdmission?.ward || 'Any available ward'}</p><Select label="Available bed" value={allocationBedId} onChange={(event)=>setAllocationBedId(event.target.value)} options={[{value:'',label:'Select an available bed'},...(appData.beds || []).filter((bed)=>bed.status==='available' && (!allocationAdmission?.requested_ward_id || bed.wardId===allocationAdmission.requested_ward_id)).map((bed)=>({value:bed.id,label:`${(appData.wards || []).find((ward)=>ward.id===bed.wardId)?.name || 'Ward'} · ${bed.bedNumber}`}))]} />{workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}</div></Modal>
+
+                    <Modal isOpen={!!dispositionAdmission} onClose={() => setDispositionAdmission(null)} title="Complete inpatient disposition" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setDispositionAdmission(null)}>Cancel</Button><Button variant="primary" onClick={completeDisposition}>Complete disposition</Button></div>}>
+                        <div className="space-y-4"><Select label="Disposition" value={dispositionForm.type} onChange={(event) => setDispositionForm((value) => ({ ...value, type: event.target.value }))} options={user?.role==='nurse' ? [{value:'transferred',label:'Transferred'}] : [{value:'discharged',label:'Discharged'}, {value:'transferred',label:'Transferred'}]} /><TextArea label="Discharge or transfer summary" value={dispositionForm.summary} onChange={(event) => setDispositionForm((value) => ({ ...value, summary: event.target.value }))} rows={4} /><TextArea label="Patient instructions and follow-up" value={dispositionForm.instructions} onChange={(event) => setDispositionForm((value) => ({ ...value, instructions: event.target.value }))} rows={3} />{workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}</div>
                     </Modal>
 
                     <Modal
@@ -1140,12 +1212,16 @@
         // SURGERIES MODULE
         // ==========================================
         const SurgeriesModule = () => {
+            const { user } = useAuth();
             const [showSchedule, setShowSchedule] = useState(false);
             const [surgeries, setSurgeries] = useState(getLiveStore().surgeries || []);
-            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+            const [selectedSurgery, setSelectedSurgery] = useState(null);
+            const [surgeryUpdate, setSurgeryUpdate] = useState({ status: 'accepted', reviewReason: '', consentStatus: 'pending', preoperativeNotes: '', operativeNotes: '', postoperativePlan: '', complications: '', scheduledDate: '', scheduledTime: '', otRoom: '' });
+            const [surgeryMessage, setSurgeryMessage] = useState('');
 
             const handleScheduleSurgery = async () => {
-                if (!surgeryForm.patientId || !surgeryForm.procedure || !surgeryForm.scheduledDate) return;
+                if (!surgeryForm.patientId || !surgeryForm.procedure.trim() || !surgeryForm.indication.trim() || !surgeryForm.diagnosis.trim() || (surgeryForm.priority === 'elective' && !surgeryForm.scheduledDate)) return setSurgeryMessage('Patient, indication, diagnosis, procedure, and elective date are required.');
 
                 const payload = {
                     patientId: surgeryForm.patientId,
@@ -1154,19 +1230,23 @@
                     scheduledDate: surgeryForm.scheduledDate,
                     scheduledTime: surgeryForm.scheduledTime,
                     duration: surgeryForm.duration || null,
-                    status: 'scheduled',
+                    status: 'requested',
                     otRoom: surgeryForm.otRoom,
                     anesthesia: surgeryForm.anesthesia,
-                    priority: surgeryForm.priority
+                    priority: surgeryForm.priority,
+                    indication: surgeryForm.indication,
+                    diagnosis: surgeryForm.diagnosis,
+                    encounterId: surgeryForm.encounterId
                 };
 
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('schedule surgery');
                 const { data, error } = await client.from('surgeries').insert([{
                     patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure,
-                    scheduled_date: payload.scheduledDate, scheduled_time: payload.scheduledTime || null,
+                    scheduled_date: payload.scheduledDate || new Date().toISOString().slice(0, 10), scheduled_time: payload.scheduledTime || null,
                     duration: payload.duration, status: payload.status, ot_room: payload.otRoom || null,
-                    anesthesia: payload.anesthesia || null, priority: payload.priority
+                    anesthesia: payload.anesthesia || null, priority: payload.priority, indication: payload.indication,
+                    diagnosis: payload.diagnosis, encounter_id: payload.encounterId || null, requesting_clinician_id: user?.id || null
                 }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('schedule surgery', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
@@ -1174,7 +1254,23 @@
                 persistStoreTable('surgeries', next);
                 setSurgeries(next);
                 setShowSchedule(false);
-                setSurgeryForm({ patientId: '', surgeonId: '', procedure: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+                setSurgeryForm({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+            };
+
+            const saveSurgeryReview = async () => {
+                if (!selectedSurgery) return;
+                if (['scheduled','in-progress'].includes(surgeryUpdate.status) && surgeryUpdate.consentStatus !== 'documented' && selectedSurgery.priority !== 'emergency') return setSurgeryMessage('Document consent before scheduling or starting elective surgery.');
+                if (surgeryUpdate.status === 'completed' && (!surgeryUpdate.operativeNotes.trim() || !surgeryUpdate.postoperativePlan.trim())) return setSurgeryMessage('Operative notes and a postoperative plan are required before completion.');
+                if (surgeryUpdate.status === 'scheduled' && (!surgeryUpdate.scheduledDate || !surgeryUpdate.scheduledTime || !surgeryUpdate.otRoom)) return setSurgeryMessage('Choose a date, time, and theatre room before scheduling.');
+                if (surgeryUpdate.status === 'deferred' || surgeryUpdate.status === 'rejected') if (!surgeryUpdate.reviewReason.trim()) return setSurgeryMessage('A reason is required to defer or reject a request.');
+                const patch = { status: surgeryUpdate.status, review_reason: surgeryUpdate.reviewReason.trim() || null, consent_status: surgeryUpdate.consentStatus, preoperative_notes: surgeryUpdate.preoperativeNotes.trim() || null, operative_notes: surgeryUpdate.operativeNotes.trim() || null, postoperative_plan: surgeryUpdate.postoperativePlan.trim() || null, complications: surgeryUpdate.complications.trim() || null, scheduled_date: surgeryUpdate.scheduledDate || selectedSurgery.scheduledDate, scheduled_time: surgeryUpdate.scheduledTime || null, ot_room: surgeryUpdate.otRoom || null };
+                if (surgeryUpdate.status === 'in-progress' && !selectedSurgery.startedAt) patch.started_at = new Date().toISOString();
+                if (surgeryUpdate.status === 'completed') patch.ended_at = new Date().toISOString();
+                const { data, error } = await window.OneMedSupabase.getClient().from('surgeries').update(patch).eq('id', selectedSurgery.id).select().single();
+                if (error || !data) return setSurgeryMessage(error?.message || 'Surgery workflow update failed.');
+                const updated = normalizeSurgeries([data])[0];
+                setSurgeries((items) => items.map((item) => item.id === updated.id ? updated : item));
+                setSelectedSurgery(null); setSurgeryMessage('');
             };
 
             return (
@@ -1184,7 +1280,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Operating Theatre</h2>
                             <p className="text-slate-500 mt-1">Surgery scheduling and management</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus} onClick={() => setShowSchedule(true)}>Schedule Surgery</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => {setSurgeryMessage('');setShowSchedule(true);}}>Request Surgery</Button>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1211,12 +1307,10 @@
                                     { key: 'duration', title: 'Duration', render: (row) => row.duration || 'Not specified' },
                                     { key: 'otRoom', title: 'OT Room' },
                                     { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'emergency' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority}</Badge> },
-                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : 'default'}>{row.status}</Badge> }
+                                    { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : row.status === 'emergency_escalated' ? 'danger' : 'default'}>{row.status}</Badge> }
                                 ]}
-                                data={surgeries.sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''))}
-                                actions={(row) => (
-                                    <Button variant="primary" size="sm">Details</Button>
-                                )}
+                                data={[...surgeries].sort((a, b) => ({emergency:0,urgent:1,elective:2}[a.priority] ?? 3) - ({emergency:0,urgent:1,elective:2}[b.priority] ?? 3) || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''))}
+                                actions={(row) => <Button variant="primary" size="sm" onClick={() => {setSurgeryMessage('');setSelectedSurgery(row);setSurgeryUpdate({status:row.status === 'requested' ? 'accepted' : row.status,reviewReason:row.reviewReason || '',consentStatus:row.consentStatus || 'pending',preoperativeNotes:row.preoperativeNotes || '',operativeNotes:row.operativeNotes || '',postoperativePlan:row.postoperativePlan || '',complications:row.complications || '',scheduledDate:row.scheduledDate || '',scheduledTime:row.scheduledTime || '',otRoom:row.otRoom || ''});}}>Review / Document</Button>}
                             />
                         </Card>
                         <Card title="OT Rooms Status">
@@ -1254,8 +1348,11 @@
                     >
                         <div className="space-y-4">
                             <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Encounter" value={surgeryForm.encounterId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{value:'',label:'Optional encounter'},...(appData.encounters || []).filter((encounter) => encounter.patientId === surgeryForm.patientId && !encounter.endedAt).map((encounter) => ({value:encounter.id,label:`${encounter.encounterType} · ${encounter.reasonForVisit}`}))]} />
                             <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
+                            <Input label="Indication" value={surgeryForm.indication} onChange={(e) => setSurgeryForm(prev => ({ ...prev, indication: e.target.value }))} />
+                            <Input label="Diagnosis" value={surgeryForm.diagnosis} onChange={(e) => setSurgeryForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
                                 <Input label="Time" type="time" value={surgeryForm.scheduledTime} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledTime: e.target.value }))} />
@@ -1264,7 +1361,11 @@
                             <Select label="OT Room" value={surgeryForm.otRoom} onChange={(e) => setSurgeryForm(prev => ({ ...prev, otRoom: e.target.value }))} options={[{ value: 'OT-1', label: 'OT-1' }, { value: 'OT-2', label: 'OT-2' }, { value: 'OT-3', label: 'OT-3' }, { value: 'OT-4', label: 'OT-4' }]} />
                             <Select label="Priority" value={surgeryForm.priority} onChange={(e) => setSurgeryForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'elective', label: 'Elective' }, { value: 'urgent', label: 'Urgent' }, { value: 'emergency', label: 'Emergency' }]} />
                             <Input label="Anesthesia" value={surgeryForm.anesthesia} onChange={(e) => setSurgeryForm(prev => ({ ...prev, anesthesia: e.target.value }))} />
+                            {surgeryMessage && <p className="text-sm text-red-700" role="alert">{surgeryMessage}</p>}
                         </div>
+                    </Modal>
+                    <Modal isOpen={!!selectedSurgery} onClose={() => setSelectedSurgery(null)} title="Surgical review and operative record" size="lg" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setSelectedSurgery(null)}>Cancel</Button><Button variant="primary" onClick={saveSurgeryReview}>Save surgical record</Button></div>}>
+                        <div className="space-y-4"><p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{selectedSurgery?.procedure} · {selectedSurgery?.priority} · {selectedSurgery?.diagnosis}</p><Select label="Workflow status" value={surgeryUpdate.status} onChange={(event) => setSurgeryUpdate((value) => ({...value,status:event.target.value}))} options={['requested','accepted','deferred','rejected','scheduled','in-progress','completed'].map((value) => ({value,label:value.replace('_',' ')}))} /><Input label="Review reason (required for defer/reject)" value={surgeryUpdate.reviewReason} onChange={(event) => setSurgeryUpdate((value) => ({...value,reviewReason:event.target.value}))} />{surgeryUpdate.status==='scheduled' && <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><Input label="Surgery date" type="date" value={surgeryUpdate.scheduledDate} onChange={(event)=>setSurgeryUpdate((value)=>({...value,scheduledDate:event.target.value}))}/><Input label="Surgery time" type="time" value={surgeryUpdate.scheduledTime} onChange={(event)=>setSurgeryUpdate((value)=>({...value,scheduledTime:event.target.value}))}/><Select label="Theatre room" value={surgeryUpdate.otRoom} onChange={(event)=>setSurgeryUpdate((value)=>({...value,otRoom:event.target.value}))} options={[{value:'',label:'Select room'},...Array.from({length:6},(_,index)=>({value:`OT-${index+1}`,label:`OT-${index+1}`}))]}/></div>}<Select label="Consent" value={surgeryUpdate.consentStatus} onChange={(event) => setSurgeryUpdate((value) => ({...value,consentStatus:event.target.value}))} options={['pending','documented','declined','not_applicable'].map((value) => ({value,label:value.replace('_',' ')}))} /><TextArea label="Preoperative checks and anesthesia assessment" value={surgeryUpdate.preoperativeNotes} onChange={(event) => setSurgeryUpdate((value) => ({...value,preoperativeNotes:event.target.value}))} rows={3} /><TextArea label="Operative notes and responsible team" value={surgeryUpdate.operativeNotes} onChange={(event) => setSurgeryUpdate((value) => ({...value,operativeNotes:event.target.value}))} rows={4} /><TextArea label="Complications" value={surgeryUpdate.complications} onChange={(event) => setSurgeryUpdate((value) => ({...value,complications:event.target.value}))} rows={2} /><TextArea label="Postoperative plan" value={surgeryUpdate.postoperativePlan} onChange={(event) => setSurgeryUpdate((value) => ({...value,postoperativePlan:event.target.value}))} rows={3} />{surgeryMessage && <p className="text-sm text-red-700" role="alert">{surgeryMessage}</p>}</div>
                     </Modal>
                 </div>
             );

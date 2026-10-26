@@ -200,6 +200,7 @@
         // LABORATORY MODULE
         // ==========================================
         const LaboratoryModule = ({ initialTab = 'orders' }) => {
+            const { user } = useAuth();
             const [activeTab, setActiveTab] = useState(initialTab);
             const [selectedOrder, setSelectedOrder] = useState(null);
             const [showResultEntry, setShowResultEntry] = useState(false);
@@ -248,8 +249,9 @@
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create laboratory order');
+                const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('lab_orders').insert([{
-                    patient_id: payload.patientId, doctor_id: payload.doctorId, test_type: payload.testType,
+                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, test_type: payload.testType,
                     ordered_date: payload.orderedDate, technician_id: payload.technicianId,
                     category: payload.category, priority: payload.priority, status: payload.status
                 }]).select();
@@ -269,7 +271,8 @@
                 const isCritical = resultForm.severity === 'critical';
                 const nextOrder = {
                     ...selectedOrder,
-                    status: isCritical ? 'critical' : 'completed',
+                    status: isCritical ? 'critical' : 'processing',
+                    result_status: 'preliminary',
                     resultDate: new Date().toISOString().split('T')[0],
                     results: {
                         comments: resultForm.comments.trim() || null,
@@ -278,13 +281,26 @@
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
-                const { error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'final', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
+                const { error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'preliminary', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
                 persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowResultEntry(false);
                 setResultForm({ comments: '', severity: 'normal', values: {} });
+            };
+
+            const collectSpecimen = async (order) => {
+                const { data, error } = await window.OneMedSupabase.getClient().from('lab_orders').update({ status: 'processing', specimen_collected_at: new Date().toISOString() }).eq('id', order.id).eq('status', 'pending').select().single();
+                if (error || !data) return notifyPersistenceFailure('record specimen collection', error || new Error('This order is no longer pending.'));
+                const mapped = normalizeLabOrders([data])[0]; const next = labOrders.map((item) => item.id === order.id ? mapped : item);
+                setLabOrders(next); persistStoreTable('labOrders', next);
+            };
+
+            const verifyLabResult = async (order) => {
+                const { error } = await window.OneMedSupabase.getClient().from('lab_orders').update({ status: order.status === 'critical' ? 'critical' : 'completed', result_status: 'final', result_verified_by: user?.id || null, result_verified_at: new Date().toISOString() }).eq('id', order.id);
+                if (error) return notifyPersistenceFailure('verify laboratory result', error);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 
             return (
@@ -331,6 +347,7 @@
                                 data={labOrders}
                                 actions={(row) => (
                                     <>
+                                        {row.status === 'pending' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => collectSpecimen(row)}>Specimen collected</Button>}
                                         {!['completed', 'critical'].includes(row.status) && (
                                             <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', severity: 'normal', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
                                         )}
@@ -350,14 +367,16 @@
                                         const patient = appData.patients.find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
-                                    { key: 'resultDate', title: 'Completed', render: (row) => formatDate(row.resultDate) },
+                                    { key: 'resultDate', title: 'Result date', render: (row) => formatDate(row.resultDate) },
+                                    { key: 'resultStatus', title: 'Verification', render: (row) => <Badge variant={row.result_status === 'final' ? 'success' : 'warning'}>{row.result_status || 'pending'}</Badge> },
                                     { key: 'results', title: 'Key Findings', render: (row) => {
                                         if (!row.results) return 'N/A';
                                         const abnormal = row.results.values.filter(v => v.flag !== 'normal');
                                         return abnormal.length > 0 ? abnormal.length + ' abnormal values' : 'All normal';
                                     }}
                                 ]}
-                                data={labOrders.filter(l => l.status === 'completed')}
+                                data={labOrders.filter((row) => Boolean(row.results) && ['processing','completed','critical'].includes(row.status))}
+                                actions={(row) => row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}
                             />
                         </Card>
                     )}
@@ -529,8 +548,9 @@
 
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create radiology order');
+                const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('radiology_orders').insert([{
-                    patient_id: payload.patientId, doctor_id: payload.doctorId, study_type: payload.studyType,
+                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, study_type: payload.studyType,
                     modality: payload.modality, priority: payload.priority, status: payload.status,
                     scheduled_date: payload.scheduledDate || null, report: payload.report || null,
                     ordered_date: payload.orderedDate

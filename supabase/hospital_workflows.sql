@@ -54,6 +54,9 @@ revoke update, delete, truncate, references, trigger on public.encounter_workflo
 -- HIM and reception may create an encounter only in the initial arrived state.
 -- Clinical edits remain restricted to the clinician roles from role_authorization.sql.
 drop policy if exists "authorized clinical manage" on public.encounters;
+drop policy if exists "authorized clinical read encounters" on public.encounters;
+drop policy if exists "clinical manage encounters" on public.encounters;
+drop policy if exists "HIM register encounters" on public.encounters;
 create policy "authorized clinical read encounters" on public.encounters for select
   using (public.can_read_patient_record(patient_id));
 create policy "clinical manage encounters" on public.encounters for all
@@ -71,6 +74,15 @@ create policy "HIM register encounters" on public.encounters for insert
 create or replace function public.guard_death_assessment_authority() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if tg_op = 'INSERT' then
+    if new.case_type = 'bid' and new.death_assessment_status is distinct from 'assessment_required' then
+      raise exception 'BID/BOD registration must remain pending clinical assessment.';
+    end if;
+    if new.case_type <> 'bid' and new.death_assessment_status is not null then
+      raise exception 'Death assessment fields are only valid for a BID/BOD encounter.';
+    end if;
+    return new;
+  end if;
   if new.death_assessment_status is distinct from old.death_assessment_status
      or new.death_assessment_notes is distinct from old.death_assessment_notes
      or new.disposition is distinct from old.disposition then
@@ -82,7 +94,7 @@ begin
 end;
 $$;
 drop trigger if exists guard_death_assessment_authority on public.encounters;
-create trigger guard_death_assessment_authority before update on public.encounters
+create trigger guard_death_assessment_authority before insert or update on public.encounters
   for each row execute function public.guard_death_assessment_authority();
 
 create or replace function public.prevent_encounter_workflow_event_mutation() returns trigger

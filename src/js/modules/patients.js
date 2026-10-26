@@ -181,9 +181,9 @@
                     frequency: 'Daily',
                     indication: ''
                 });
-                const [recordsReferralReason, setRecordsReferralReason] = useState('');
-                const [recordsReferralMessage, setRecordsReferralMessage] = useState('');
-                const [sendingRecordsReferral, setSendingRecordsReferral] = useState(false);
+                const [himReferralReason, setHimReferralReason] = useState('');
+                const [himReferralMessage, setHimReferralMessage] = useState('');
+                const [sendingHimReferral, setSendingHimReferral] = useState(false);
                 const [encounterForm, setEncounterForm] = useState({
                     chiefComplaint: '',
                     diagnosis: '',
@@ -552,30 +552,30 @@
                 ];
 
                 const handleReferToRecords = async () => {
-                    const reason = recordsReferralReason.trim();
+                    const reason = himReferralReason.trim();
                     if (!reason) {
-                        setRecordsReferralMessage('Enter a reason for the records referral.');
+                        setHimReferralMessage('Enter a reason for the HIM referral.');
                         return;
                     }
                     const client = window.OneMedSupabase?.getClient?.();
                     if (!client) {
-                        setRecordsReferralMessage('The records referral could not be sent because the database is unavailable.');
+                        setHimReferralMessage('The HIM referral could not be sent because the database is unavailable.');
                         return;
                     }
-                    setSendingRecordsReferral(true);
-                    setRecordsReferralMessage('');
+                    setSendingHimReferral(true);
+                    setHimReferralMessage('');
                     const { error } = await client.from('patient_record_referrals').insert({
                         patient_id: patient.id,
                         referred_by_profile_id: user.id,
                         reason
                     });
-                    setSendingRecordsReferral(false);
+                    setSendingHimReferral(false);
                     if (error) {
-                        setRecordsReferralMessage(`Referral not sent: ${error.message}`);
+                        setHimReferralMessage(`Referral not sent: ${error.message}`);
                         return;
                     }
-                    setRecordsReferralReason('');
-                    setRecordsReferralMessage('Referral sent to the Health Information Management (HIM) team.');
+                    setHimReferralReason('');
+                    setHimReferralMessage('Referral sent to the Health Information Management (HIM) team.');
                 };
 
                 return (
@@ -615,9 +615,9 @@
                                     {isReceptionist && <Card title="Refer to Health Information Management (HIM)">
                                         <div className="space-y-3">
                                             <p className="text-sm text-slate-600">Send an administrative records request to the Health Information Management (HIM) team.</p>
-                                            <TextArea label="Reason for referral" rows={3} value={recordsReferralReason} onChange={(event) => setRecordsReferralReason(event.target.value)} />
-                                            {recordsReferralMessage && <p className={'text-sm ' + (recordsReferralMessage === 'Referral sent to the Health Information Management (HIM) team.' ? 'text-emerald-700' : 'text-red-600')}>{recordsReferralMessage}</p>}
-                                            <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingRecordsReferral}>{sendingRecordsReferral ? 'Sending referral...' : 'Refer patient to HIM'}</Button>
+                                            <TextArea label="Reason for referral" rows={3} value={himReferralReason} onChange={(event) => setHimReferralReason(event.target.value)} />
+                                            {himReferralMessage && <p className={'text-sm ' + (himReferralMessage === 'Referral sent to the Health Information Management (HIM) team.' ? 'text-emerald-700' : 'text-red-600')}>{himReferralMessage}</p>}
+                                            <Button variant="primary" icon={Icons.Send} onClick={handleReferToRecords} disabled={sendingHimReferral}>{sendingHimReferral ? 'Sending referral...' : 'Refer patient to HIM'}</Button>
                                         </div>
                                     </Card>}
                                 </div>

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
@@ -22,7 +22,8 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('src/js/modules/people.js'),
     read('supabase/functions/create-staff/index.ts'),
     read('supabase/legacy_role_enum_compatibility.sql'),
-    read('supabase/hospital_workflows.sql')
+    read('supabase/hospital_workflows.sql'),
+    read('supabase/workflow_completion.sql')
 ]);
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
@@ -80,9 +81,23 @@ assert.match(authorization, /role::text in \([^\n]*'records_officer'/, 'The prof
 assert.match(legacyRoles, /'accountant','records_officer','patient'/, 'Legacy role enums must be upgraded before Records Officers are created.');
 assert.match(authorization, /or public\.has_any_role\(array\['records_officer'\]\)/, 'Records Officers must have read-only clinical chart access.');
 assert.match(hospitalWorkflows, /HIM register encounters/, 'HIM staff must be able to open an encounter in its initial state.');
+assert.match(hospitalWorkflows, /drop policy if exists "authorized clinical read encounters" on public\.encounters/, 'Encounter authorization policies must be replaceable when the workflow migration is rerun.');
 assert.match(hospitalWorkflows, /prevent_encounter_workflow_event_mutation/, 'Encounter workflow history must be append-only.');
 assert.match(hospitalWorkflows, /guard_death_assessment_authority/, 'BID/BOD assessment changes must be restricted to authorized clinicians.');
 assert.match(hospitalWorkflows, /death_assessment_status = 'assessment_required'/, 'BID/BOD registration must not mark death as confirmed.');
+assert.match(workflowCompletion, /create table if not exists public\.family_cards/, 'HIM must have persisted family cards.');
+assert.match(workflowCompletion, /create table if not exists public\.insurance_memberships/, 'Insurance membership must be stored per patient.');
+assert.match(workflowCompletion, /pending_manual/, 'Insurance verification must remain explicit and manual when no payer integration exists.');
+assert.match(workflowCompletion, /request_inpatient_admission/, 'Clinicians must be able to submit an inpatient admission request.');
+assert.match(workflowCompletion, /allocate_requested_admission/, 'Ward staff must allocate requested beds through a server operation.');
+assert.match(workflowCompletion, /revoke all on function public\.allocate_admission_bed\(uuid,uuid,uuid,uuid,text,text,text\) from public, anon, authenticated/, 'The legacy direct bed allocation RPC must remain unavailable.');
+assert.match(workflowCompletion, /for update/, 'Bed allocation must lock records to prevent double allocation.');
+assert.match(workflowCompletion, /register_unidentified_emergency/, 'Unidentified emergency intake must use a temporary patient identifier.');
+assert.match(workflowCompletion, /merge_unidentified_patient/, 'Temporary patient identity must be linkable to a permanent record.');
+assert.match(workflowCompletion, /guard_surgery_workflow/, 'Surgery transitions must enforce clinical documentation requirements.');
+assert.match(workflowCompletion, /guard_lab_result_verification/, 'Lab results must be verified before they are final.');
+assert.doesNotMatch(workflowCompletion, /drop table|truncate table|delete from public\.patients/i, 'Workflow migrations must preserve existing patient data.');
+assert.match(records, /Patient Journey/, 'Authorized patient charts must show a patient journey timeline.');
 assert.match(safeCore, /create policy "records officers read patient documents" on storage\.objects for select/, 'Records Officers must be able to read private chart attachments.');
 assert.doesNotMatch(safeCore, /records officers read patient documents" on storage\.objects for (insert|update|delete)/, 'Records Officers must not upload, update, or delete chart attachments.');
 assert.match(records, /purpose: 'records_module'/, 'Opening a chart in Records must be audited.');

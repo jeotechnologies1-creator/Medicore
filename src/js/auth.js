@@ -70,7 +70,7 @@
                 const roleKey = String(row?.role || '').trim().toLowerCase().replace(/\s+/g, '_');
                 if (roleKey === 'receptionist') {
                     canonicalModuleKeys.forEach((key) => {
-                        const allowed = ['dashboard', 'patients', 'appointments'].includes(key);
+                        const allowed = ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(key);
                         permissions[key] = allowed;
                         (legacyPermissionAliases[key] || []).forEach((alias) => { permissions[alias] = allowed; });
                     });
@@ -157,7 +157,7 @@
                     payments: false,
                     documents: true,
                     compliance: true,
-                    admissions: false,
+                    admissions: true,
                     surgeries: false,
                     clinical_safety: true,
                     inventory: false,
@@ -269,6 +269,18 @@
                     patients: true,
                     clinical_workflows: true
                 }
+            },
+            {
+                role: 'Surgeon',
+                permissions: { dashboard: true, patients: true, clinical_workflows: true, surgeries: true, clinical_safety: true }
+            },
+            {
+                role: 'Specialist',
+                permissions: { dashboard: true, patients: true, appointments: true, consultations: true, laboratory: true, radiology: true, clinical_workflows: true, prescriptions: true, clinical_safety: true }
+            },
+            {
+                role: 'Theatre Staff',
+                permissions: { dashboard: true, surgeries: true }
             }
         ];
 
@@ -409,7 +421,7 @@
                 // This control is deliberately evaluated here (rather than only in
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
-                if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments'].includes(moduleId);
+                if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(moduleId);
                 if (normalizedRole === 'records_officer') return ['dashboard', 'records', 'patients', 'clinical_workflows'].includes(moduleId);
 
                 const matrix = getStoredRoleMatrix();
@@ -422,10 +434,13 @@
 
                 const fallback = {
                     super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'reports', 'audit', 'settings'],
-                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
+                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'admissions', 'clinical_safety'],
                     nurse: ['dashboard', 'patients', 'ward', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
                     receptionist: ['dashboard', 'patients', 'appointments'],
                     records_officer: ['dashboard', 'records'],
+                    surgeon: ['dashboard', 'patients', 'clinical_workflows', 'surgeries', 'clinical_safety'],
+                    specialist: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
+                    theatre_staff: ['dashboard', 'surgeries'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
                     laboratory_scientist: ['dashboard', 'laboratory', 'results'],
                     radiographer: ['dashboard', 'radiology', 'upload'],

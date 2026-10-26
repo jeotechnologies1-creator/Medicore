@@ -32,15 +32,19 @@ Run the SQL files in this order in the Supabase SQL editor:
 14. `supabase/safe_core_multibranch.sql`
 15. `supabase/receptionist_records_referrals.sql`
 16. `supabase/patient_appointment_coordination.sql`
-17. `supabase/hospital_workflows.sql`
+17. `supabase/accounts_payment_approval.sql`
+18. `supabase/hospital_workflows.sql`
+19. `supabase/workflow_completion.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
 OneMed has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
 
-The last migration adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the working workflow for maintaining allergies, problems and care plans.
+`clinical_safety.sql` adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the workflow for maintaining allergies, problems, and care plans.
 
 `hospital_workflows.sql` adds emergency and Brought In Dead (BID/BOD) intake fields and an append-only encounter workflow history. HIM and reception can open an encounter at its initial arrived state; death-related cases remain pending an authorized clinical assessment. Apply it after the authorization migration.
+
+`workflow_completion.sql` adds family cards, per-patient insurance memberships and manual eligibility history, encounter-linked diagnostic/surgical/inpatient records, and transactional bed allocation/disposition operations. Beds are allocated under a row lock to prevent simultaneous assignment. Apply this migration after `hospital_workflows.sql` and test database permissions in staging before clinical use.
 
 ## Required production setup
 

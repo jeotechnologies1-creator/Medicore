@@ -18,6 +18,13 @@ const RecordsModule = () => {
     const [bookingForm, setBookingForm] = useState({ patientId: '', doctorId: '', date: '', time: '', department: '', appointmentType: 'consultation', notes: '' });
     const [bookingMessage, setBookingMessage] = useState('');
     const [bookingBusy, setBookingBusy] = useState(false);
+    const [familyCards, setFamilyCards] = useState([]);
+    const [familyForm, setFamilyForm] = useState({ contactName: '', contactPhone: '', address: '', patientId: '', relationship: 'primary_contact' });
+    const [familyMessage, setFamilyMessage] = useState('');
+    const [familyBusy, setFamilyBusy] = useState(false);
+    const [familyEdits, setFamilyEdits] = useState({});
+    const [identityForm, setIdentityForm] = useState({ temporaryPatientId: '', permanentPatientId: '', reason: '' });
+    const [patientJourney, setPatientJourney] = useState([]);
     const patients = appData.patients || [];
 
     useEffect(() => {
@@ -41,6 +48,10 @@ const RecordsModule = () => {
         client.rpc('get_appointment_providers').then(({ data, error }) => {
             if (error) setAppointmentMessage(error.message);
             else setAppointmentProviders(data || []);
+        });
+        client.from('family_cards').select('id,card_number,contact_name,contact_phone,address,status,created_at,family_card_members(id,patient_id,relationship,patients(first_name,last_name,patient_number))').order('created_at', { ascending: false }).then(({ data, error }) => {
+            if (error) setFamilyMessage(`Family cards could not be loaded: ${error.message}`);
+            else setFamilyCards(data || []);
         });
     }, [user?.role]);
 
@@ -74,6 +85,9 @@ const RecordsModule = () => {
                 return;
             }
         }
+        const { data: journey, error: journeyError } = await client.from('encounter_workflow_events').select('id,encounter_id,event_type,from_status,to_status,department,notes,created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(200);
+        setPatientJourney(journey || []);
+        if (journeyError) setAccessMessage('The patient chart opened, but the encounter journey could not be loaded.');
         setSelectedPatient(patient);
     };
 
@@ -84,6 +98,51 @@ const RecordsModule = () => {
         if (error) return setReferralError(error.message);
         setReferralError('');
         setReferrals((current) => current.map((item) => item.id === referral.id ? { ...item, ...data } : item));
+    };
+
+    const createFamilyCard = async () => {
+        if (!familyForm.contactName.trim()) return setFamilyMessage('Enter the authorized primary contact name.');
+        setFamilyBusy(true); setFamilyMessage('');
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) { setFamilyBusy(false); return setFamilyMessage('Database connection unavailable.'); }
+        const { data, error } = await client.from('family_cards').insert({ contact_name: familyForm.contactName.trim(), contact_phone: familyForm.contactPhone.trim() || null, address: familyForm.address.trim() || null, created_by: user?.id || null }).select().single();
+        if (error || !data) { setFamilyBusy(false); return setFamilyMessage(error?.message || 'Family card could not be created.'); }
+        let members = [];
+        if (familyForm.patientId) {
+            const { data: member, error: memberError } = await client.from('family_card_members').insert({ family_card_id: data.id, patient_id: familyForm.patientId, relationship: familyForm.relationship, linked_by: user?.id || null }).select('id,patient_id,relationship,patients(first_name,last_name,patient_number)').single();
+            if (memberError) setFamilyMessage(`Family card ${data.card_number} was created, but the patient link failed: ${memberError.message}`);
+            else members = [member];
+        }
+        setFamilyCards((current) => [{ ...data, family_card_members: members }, ...current]);
+        setFamilyForm({ contactName: '', contactPhone: '', address: '', patientId: '', relationship: 'primary_contact' });
+        setFamilyBusy(false);
+    };
+
+    const addFamilyMember = async (card) => {
+        if (!familyForm.patientId) return setFamilyMessage('Select a patient to link to this card.');
+        const client = window.OneMedSupabase?.getClient?.();
+        const { data, error } = await client.from('family_card_members').insert({ family_card_id: card.id, patient_id: familyForm.patientId, relationship: familyForm.relationship, linked_by: user?.id || null }).select('id,patient_id,relationship,patients(first_name,last_name,patient_number)').single();
+        if (error || !data) return setFamilyMessage(error?.message || 'The patient could not be linked.');
+        setFamilyCards((current) => current.map((item) => item.id === card.id ? { ...item, family_card_members: [...(item.family_card_members || []), data] } : item));
+        setFamilyMessage(`Patient linked to family card ${card.card_number}.`);
+    };
+
+    const saveFamilyContact = async (card) => {
+        const edit = familyEdits[card.id] || card;
+        const { data, error } = await window.OneMedSupabase.getClient().from('family_cards').update({ contact_name: String(edit.contact_name ?? card.contact_name).trim(), contact_phone: String(edit.contact_phone ?? card.contact_phone ?? '').trim() || null, address: String(edit.address ?? card.address ?? '').trim() || null, updated_at: new Date().toISOString() }).eq('id', card.id).select().single();
+        if (error || !data) return setFamilyMessage(error?.message || 'Family contact changes could not be saved.');
+        setFamilyCards((cards) => cards.map((item) => item.id === card.id ? {...item,...data} : item));
+        setFamilyEdits((edits) => ({...edits,[card.id]:data}));
+        setFamilyMessage(`Family card ${card.card_number} contact details updated.`);
+    };
+
+    const verifyTemporaryIdentity = async () => {
+        if (!identityForm.temporaryPatientId || !identityForm.permanentPatientId || !identityForm.reason.trim()) return setFamilyMessage('Select both records and document how identity was verified.');
+        const { error } = await window.OneMedSupabase.getClient().rpc('merge_unidentified_patient', { p_temporary_patient_id: identityForm.temporaryPatientId, p_permanent_patient_id: identityForm.permanentPatientId, p_reason: identityForm.reason.trim() });
+        if (error) return setFamilyMessage(error.message || 'Identity verification was not saved.');
+        setFamilyMessage('Temporary encounter history is now linked to the permanent patient record.');
+        setIdentityForm({ temporaryPatientId: '', permanentPatientId: '', reason: '' });
+        window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
     };
 
     const resolveAppointmentRequest = async (request, action) => {
@@ -198,6 +257,10 @@ const RecordsModule = () => {
                     </div>
                     <Badge variant={patient.status === 'active' ? 'success' : 'default'}>{patient.status || 'active'}</Badge>
                 </div>
+                <Card title="Patient Journey" subtitle="Timestamped care events, with outstanding work shown separately.">
+                    {patientJourney.length ? <ol className="space-y-3">{patientJourney.map((event) => <li key={event.id} className="flex gap-3 border-l-2 border-medical-200 pl-4"><span className="mt-1 h-2 w-2 rounded-full bg-medical-600" /><div><div className="flex flex-wrap items-center gap-2"><span className="font-medium capitalize text-slate-800">{event.event_type.replaceAll('_',' ')}</span><Badge>{event.to_status || 'Recorded'}</Badge></div><p className="text-xs text-slate-500">{formatDateTime(event.created_at)} · {event.department} · Encounter {event.encounter_id.slice(0,8)}</p>{event.notes && <p className="mt-1 text-sm text-slate-600">{event.notes}</p>}</div></li>)}</ol> : <p className="text-sm text-slate-500">No encounter workflow events have been recorded for this patient yet.</p>}
+                    <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-slate-800">Pending actions</h3>{(() => { const tasks = [...(appData.clinicalTasks || []).filter((row) => row.patientId === patient.id && !['completed','cancelled'].includes(row.status)).map((row) => ({label:row.title,status:row.status,department:row.taskType})), ...(appData.labOrders || []).filter((row) => row.patientId === patient.id && row.status !== 'completed').map((row) => ({label:row.testType,status:row.status,department:'Laboratory'})), ...(appData.prescriptions || []).filter((row) => row.patientId === patient.id && !['dispensed','cancelled'].includes(row.status)).map((row) => ({label:row.diagnosis || 'Medication order',status:row.status,department:'Pharmacy'})), ...(appData.admissions || []).filter((row) => row.patientId === patient.id && row.status === 'active').map((row) => ({label:`${row.ward || 'Ward'} admission`,status:'active',department:'Ward / Inpatient'}))]; return tasks.length ? <ul className="flex flex-wrap gap-2">{tasks.map((task,index) => <li key={`${task.department}-${task.label}-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{task.department}: {task.label} · {task.status}</li>)}</ul> : <p className="text-sm text-slate-500">No pending actions are shown in connected queues.</p>; })()}</div>
+                </Card>
                 <div className="grid gap-6 xl:grid-cols-2">
                     <Card title="Demographics">
                         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
@@ -316,6 +379,21 @@ const RecordsModule = () => {
                         </div>
                     </div>)}
                 </div> : <p className="text-sm text-slate-500">No patient referrals have been sent to HIM.</p>}
+            </Card>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Family Card Management" subtitle="Group identification and contact details; each member retains an individual medical record.">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
+                    <Input label="Primary contact" value={familyForm.contactName} onChange={(event) => setFamilyForm((form) => ({ ...form, contactName: event.target.value }))} />
+                    <Input label="Contact phone" value={familyForm.contactPhone} onChange={(event) => setFamilyForm((form) => ({ ...form, contactPhone: event.target.value }))} />
+                    <Input label="Address" value={familyForm.address} onChange={(event) => setFamilyForm((form) => ({ ...form, address: event.target.value }))} />
+                    <Select label="Link patient (optional)" value={familyForm.patientId} onChange={(event) => setFamilyForm((form) => ({ ...form, patientId: event.target.value }))} options={[{value:'',label:'No initial member'},...patients.map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id.slice(0,8)}`}))]} />
+                    <Button variant="primary" disabled={familyBusy} onClick={createFamilyCard}>{familyBusy ? 'Saving…' : 'Create family card'}</Button>
+                </div>
+                {familyForm.patientId && <div className="mt-3 max-w-xs"><Select label="Relationship" value={familyForm.relationship} onChange={(event) => setFamilyForm((form) => ({ ...form, relationship: event.target.value }))} options={['primary_contact','parent','child','spouse','guardian','sibling','other'].map((value) => ({value,label:value.replace('_',' ')}))} /></div>}
+                {familyMessage && <p className="mt-3 text-sm text-slate-700" role="status">{familyMessage}</p>}
+                <div className="mt-5 space-y-3">{familyCards.map((card) => {const edit=familyEdits[card.id] || card;return <div key={card.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-semibold text-slate-900">{card.card_number} · {card.contact_name}</p><p className="text-sm text-slate-500">{card.contact_phone || 'No phone'} · {card.address || 'No address'}</p></div><div className="flex gap-2"><Badge variant="success">{card.status}</Badge><Button size="sm" variant="outline" onClick={() => window.print()}>Print</Button></div></div><div className="mt-3 flex flex-wrap items-end gap-3">{(card.family_card_members || []).map((member) => <span key={member.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{member.patients?.first_name} {member.patients?.last_name} · {member.relationship}</span>)}<Select label="Patient" value={familyForm.patientId} onChange={(event) => setFamilyForm((form) => ({ ...form, patientId: event.target.value }))} options={[{value:'',label:'Select patient to link'},...patients.filter((patient) => !(card.family_card_members || []).some((member) => member.patient_id === patient.id)).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><Select label="Relationship" value={familyForm.relationship} onChange={(event) => setFamilyForm((form) => ({ ...form, relationship: event.target.value }))} options={['parent','child','spouse','guardian','sibling','other'].map((value) => ({value,label:value}))} /><Button size="sm" variant="outline" onClick={() => addFamilyMember(card)}>Link member</Button></div><div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3 items-end"><Input label="Update primary contact" value={edit.contact_name || ''} onChange={(event) => setFamilyEdits((values) => ({...values,[card.id]:{...edit,contact_name:event.target.value}}))} /><Input label="Update phone" value={edit.contact_phone || ''} onChange={(event) => setFamilyEdits((values) => ({...values,[card.id]:{...edit,contact_phone:event.target.value}}))} /><Input label="Update address" value={edit.address || ''} onChange={(event) => setFamilyEdits((values) => ({...values,[card.id]:{...edit,address:event.target.value}}))} /><Button size="sm" variant="secondary" onClick={() => saveFamilyContact(card)}>Save contact changes</Button></div></div>;})}</div>
+            </Card>}
+            {['super_admin','records_officer'].includes(user?.role) && (patients.some((patient) => patient.identity_status === 'unidentified' || patient.identityStatus === 'unidentified')) && <Card title="Emergency identity verification" subtitle="Link a temporary unidentified record to a verified patient after checking identity. The temporary record remains as a traceable merge record.">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-end"><Select label="Temporary emergency record" value={identityForm.temporaryPatientId} onChange={(event) => setIdentityForm((form) => ({...form,temporaryPatientId:event.target.value}))} options={[{value:'',label:'Select temporary record'},...patients.filter((patient) => patient.identity_status === 'unidentified' || patient.identityStatus === 'unidentified').map((patient) => ({value:patient.id,label:`${patient.patientNumber} · ${patient.firstName} ${patient.lastName}`}))]} /><Select label="Verified permanent record" value={identityForm.permanentPatientId} onChange={(event) => setIdentityForm((form) => ({...form,permanentPatientId:event.target.value}))} options={[{value:'',label:'Select verified patient'},...patients.filter((patient) => patient.identity_status !== 'unidentified' && patient.identityStatus !== 'unidentified' && patient.id !== identityForm.temporaryPatientId).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id.slice(0,8)}`}))]} /><Input label="Identity verification reason" value={identityForm.reason} onChange={(event) => setIdentityForm((form) => ({...form,reason:event.target.value}))} /><Button variant="primary" onClick={verifyTemporaryIdentity}>Verify and link records</Button></div>
             </Card>}
             <Card title="Patient index" subtitle={`${filteredPatients.length} of ${patients.length} records`}>
                 <div className="mb-4 max-w-lg">

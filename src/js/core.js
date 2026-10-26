@@ -229,7 +229,15 @@
             status: row.status || 'scheduled',
             otRoom: row.ot_room || row.otRoom,
             anesthesia: row.anesthesia,
-            priority: row.priority || 'elective'
+            priority: row.priority || 'elective',
+            encounterId: row.encounter_id || row.encounterId,
+            indication: row.indication || '',
+            diagnosis: row.diagnosis || '',
+            reviewReason: row.review_reason || '',
+            consentStatus: row.consent_status || 'pending',
+            operativeNotes: row.operative_notes || '',
+            postoperativePlan: row.postoperative_plan || '',
+            complications: row.complications || ''
         }));
 
         const normalizeNotifications = (rows = []) => rows.map((row) => ({

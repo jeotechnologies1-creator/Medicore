@@ -488,9 +488,9 @@
                     permissions: permissionDepartments.reduce((permissions, department) => {
                         const value = row.permissions?.[department.key] ?? row.permissions?.[permissionAliases[department.key]];
                         const isRecordsOfficer = roleKey === 'records_officer';
-                        const defaultAllowed = isSuperAdmin || (isRecordsOfficer && ['dashboard', 'records'].includes(department.key));
-                        const receptionistAllowed = ['dashboard', 'patients', 'appointments'].includes(department.key);
-                        const recordsOfficerAllowed = ['dashboard', 'records'].includes(department.key);
+                        const defaultAllowed = isSuperAdmin || (isRecordsOfficer && ['dashboard', 'records', 'clinical_workflows'].includes(department.key));
+                        const receptionistAllowed = ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(department.key);
+                        const recordsOfficerAllowed = ['dashboard', 'records', 'clinical_workflows'].includes(department.key);
                         return { ...permissions, [department.key]: isReceptionist ? receptionistAllowed : isRecordsOfficer ? recordsOfficerAllowed : value === undefined ? defaultAllowed : Boolean(value) };
                     }, { ...(row.permissions || {}) })
                 };
@@ -539,7 +539,7 @@
                         payments: false,
                         documents: true,
                         compliance: true,
-                        admissions: false,
+                        admissions: true,
                         surgeries: false,
                         clinical_safety: true,
                         inventory: false,
@@ -660,7 +660,10 @@
                         patients: true,
                         clinical_workflows: true
                     }
-                }
+                },
+                { role: 'Surgeon', permissions: { dashboard: true, patients: true, clinical_workflows: true, surgeries: true, clinical_safety: true } },
+                { role: 'Specialist', permissions: { dashboard: true, patients: true, appointments: true, consultations: true, laboratory: true, clinical_workflows: true, clinical_safety: true } },
+                { role: 'Theatre Staff', permissions: { dashboard: true, surgeries: true } }
             ];
 
             const completeMatrixRows = (matrix) => {

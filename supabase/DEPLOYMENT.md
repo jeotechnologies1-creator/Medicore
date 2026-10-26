@@ -18,6 +18,8 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 14. `receptionist_records_referrals.sql`
 15. `patient_appointment_coordination.sql`
 16. `accounts_payment_approval.sql`
+17. `hospital_workflows.sql`
+18. `workflow_completion.sql`
 
 The front-end calls the following database contracts:
 
@@ -30,9 +32,12 @@ The front-end calls the following database contracts:
 | Documents | `patient_documents` plus the private `patient-documents` Storage bucket from `production_hardening.sql` |
 | Portal messages and refill requests | `patient_messages`, `medication_refill_requests` from `patient_portal.sql` |
 | Patient chart read auditing and active patient-linked access | `patient_access_logs`, `safe_core_multibranch.sql` |
-| Records Officer registry, patient overview/visits/vitals, and read-only chart access | `dashboard`, `patients`, and `records` permissions, `records_officer` profile role, and patient-record RLS from `role_authorization.sql` plus `safe_core_multibranch.sql` |
-| Reception referrals to Records | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
-| Patient portal booking and Records scheduling | Patient-owned requests, Records appointment booking/confirmation, `get_appointment_providers()`, and patient confirmation notifications from `patient_appointment_coordination.sql` |
+| HIM patient registry, emergency intake, and chart access | `records_officer` profile role, encounter intake, identity verification, and patient-record RLS from `role_authorization.sql`, `safe_core_multibranch.sql`, `hospital_workflows.sql`, and `workflow_completion.sql` |
+| Reception referrals to HIM | `patient_record_referrals` and role-scoped policies from `receptionist_records_referrals.sql` |
+| Patient portal booking and HIM scheduling | Patient-owned requests, appointment booking/confirmation, `get_appointment_providers()`, and patient confirmation notifications from `patient_appointment_coordination.sql` |
+| Family cards and insurance membership | `family_cards`, individual family memberships, `insurance_memberships`, and manual eligibility history from `workflow_completion.sql` |
+| Ward admission and bed occupancy | `request_inpatient_admission`, `allocate_requested_admission`, and `complete_inpatient_disposition` from `workflow_completion.sql` |
+| Encounter journey and BID/BOD | Encounter workflow events, unidentified emergency registration, and guarded identity merge/death assessment functions from `hospital_workflows.sql` and `workflow_completion.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `app_activation.sql` |
 | Payment review | `payment_submissions` and `review_payment_submission(uuid,text)` from `accounts_payment_approval.sql`; payments remain pending until Accounts approval |
 | Result acknowledgement and reconciliation | `result_acknowledgements`, `medication_reconciliations` from `quality_safety_upgrade.sql` |
@@ -47,7 +52,7 @@ supabase functions deploy create-staff
 
 `create-staff` is the only front-end-invoked function that is not a Postgres function. It uses `SUPABASE_SERVICE_ROLE_KEY` in the Supabase Edge Function environment. Never expose that key in the front end.
 
-The staff form creates active `records_officer` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql` so the enum accepts the new role. Records Officers can read patient charts and private attachments but cannot write clinical records or upload/delete files; the `records` module permission controls their app navigation.
+The staff form creates active `records_officer`, `surgeon`, `specialist`, and `theatre_staff` accounts. On projects where `profiles.role` is a legacy enum, run `legacy_role_enum_compatibility.sql` before `role_authorization.sql`; `workflow_completion.sql` adds the theatre role values. HIM staff can register and link patient records, while clinical records and private documents retain their role-scoped write rules.
 
 ## Post-deployment checks
 
