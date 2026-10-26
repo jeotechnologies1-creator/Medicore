@@ -1112,15 +1112,16 @@
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <Card title="Role-Permission Matrix">
+                        <Card title="Role-Permission Matrix" className="lg:col-span-2">
                             <p className="mb-4 text-sm text-slate-500">Set access for every clinical, operational, financial, and administrative department. Changes take effect as soon as they are toggled; save to persist them for all users.</p>
                             <DataTable
                                 columns={[
                                     {
                                         key: 'role',
                                         title: 'Role',
+                                        width: '14rem',
                                         render: (row) => (
-                                            <div>
+                                            <div className="permission-role-cell">
                                                 <p className="font-medium text-slate-800">{row.role}</p>
                                                 <p className="text-xs text-slate-500">Access profile</p>
                                             </div>
@@ -1129,20 +1130,26 @@
                                     ...permissionDepartments.map((department) => ({
                                         key: department.key,
                                         title: department.label,
-                                        className: 'text-center',
+                                        width: '8.5rem',
+                                        className: 'permission-column',
                                         render: (row) => (
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(row.permissions?.[department.key])}
-                                                onChange={() => togglePermission(row.role, department.key)}
-                                                disabled={String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'receptionist'}
-                                                className="h-4 w-4 rounded border-slate-300 text-medical-600 focus:ring-medical-500 disabled:cursor-not-allowed disabled:opacity-40"
-                                                aria-label={`${row.role}: ${department.label}`}
-                                            />
+                                            <label className="permission-checkbox">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={Boolean(row.permissions?.[department.key])}
+                                                    onChange={() => togglePermission(row.role, department.key)}
+                                                    disabled={String(row.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'receptionist'}
+                                                    className="h-5 w-5 rounded border-slate-300 text-medical-600 focus:ring-medical-500 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    aria-label={`${row.role}: ${department.label}`}
+                                                />
+                                            </label>
                                         )
                                     }))
                                 ]}
                                 data={roleMatrix}
+                                className="role-permission-scroll"
+                                tableClassName="role-permission-table"
+                                scrollLabel="Role permissions table. Scroll horizontally to view all departments."
                             />
                         </Card>
 

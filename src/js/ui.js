@@ -201,7 +201,7 @@
             </div>
         );
 
-        const DataTable = ({ columns, data, onRowClick, actions, emptyMessage = 'No data available', loading = false }) => {
+        const DataTable = ({ columns, data, onRowClick, actions, emptyMessage = 'No data available', loading = false, className = '', tableClassName = '', scrollLabel = 'Scrollable data table' }) => {
             if (loading) {
                 return (
                     <div className="w-full">
@@ -224,12 +224,16 @@
                 );
             }
             return (
-                <div className="overflow-x-auto">
-                    <table className="data-table w-full">
+                <div className={'overflow-x-auto data-table-scroll ' + className} role="region" aria-label={scrollLabel} tabIndex={0}>
+                    <table className={'data-table w-full ' + tableClassName} aria-label={scrollLabel}>
+                        <colgroup>
+                            {columns.map((col) => <col key={col.key} style={col.width ? { width: col.width } : undefined} />)}
+                            {actions && <col style={{ width: '8rem' }} />}
+                        </colgroup>
                         <thead>
                             <tr className="border-b border-slate-200">
                                 {columns.map((col) => (
-                                    <th key={col.key} className={'px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ' + (col.className || '')}>
+                                    <th key={col.key} scope="col" className={'px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ' + (col.className || '')}>
                                         {col.title}
                                     </th>
                                 ))}

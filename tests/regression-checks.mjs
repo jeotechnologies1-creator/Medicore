@@ -175,7 +175,12 @@ assert.match(styles, /@media \(max-width: 1023px\)[\s\S]*?\.mobile-drawer\.is-op
 assert.match(styles, /@media \(max-width: 480px\)[\s\S]*?data-label/, 'Narrow-screen tables must expose responsive row labels.');
 assert.match(styles, /app-main \.truncate[\s\S]*?text-overflow: clip/, 'Clinical and billing copy must not be hidden behind truncation utilities.');
 assert.match(styles, /-webkit-overflow-scrolling: touch[\s\S]*?scroll-behavior: smooth/, 'Horizontal data regions must support smooth touch and programmatic scrolling.');
-assert.match(styles, /overflow-wrap: anywhere/, 'Long names and identifiers must wrap instead of widening the viewport.');
+assert.match(styles, /overflow-wrap: break-word; word-break: normal/, 'Long prose must wrap at sensible word boundaries.');
+assert.doesNotMatch(styles, /body\s*\{[^}]*overflow-x:\s*(?:hidden|clip)/, 'The page must not mask horizontal layout defects by clipping body overflow.');
+assert.match(system, /Role-Permission Matrix[\s\S]*?width: '14rem'[\s\S]*?width: '8\.5rem'/, 'The role matrix must have deliberate role and permission column widths.');
+assert.match(system, /permission-checkbox[\s\S]*?aria-label=\{`\$\{row\.role\}: \$\{department\.label\}`\}/, 'Permission controls must remain individually labelled.');
+assert.match(system, /className="role-permission-scroll"[\s\S]*?scrollLabel=/, 'The role matrix must remain a labelled horizontal-scroll table on narrow screens.');
+assert.match(ui, /<colgroup>[\s\S]*?col\.width[\s\S]*?scope="col"/, 'Shared data tables must support explicit column sizing and semantic headings.');
 assert.match(styles, /prefers-reduced-motion: reduce/, 'Motion must respect the reduced-motion preference.');
 assert.match(styles, /@supports \(backdrop-filter: blur\(1px\)\)/, 'Glass surfaces must be progressively enhanced.');
 assert.match(auth, /autoComplete="current-password"/, 'The login must support password managers.');
