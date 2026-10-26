@@ -160,6 +160,7 @@
                             <button
                                 key={item.id}
                                 data-nav-item={item.id}
+                                data-nav-collapsed={showCollapsed}
                                 onClick={() => onModuleChange(item.id)}
                                 aria-current={activeModule === item.id ? 'page' : undefined}
                                 className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (showCollapsed ? 'justify-center' : '')}
