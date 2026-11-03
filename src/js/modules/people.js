@@ -1,7 +1,30 @@
         // MAIN APP LAYOUT
         // ==========================================
+        const getEdgeFunctionErrorMessage = async (error, functionName) => {
+            const response = error?.context;
+            if (response && typeof response.clone === 'function') {
+                try {
+                    const body = await response.clone().json();
+                    if (body?.error) return body.error;
+                    if (body?.message) return body.message;
+                } catch (parseError) {
+                    try {
+                        const text = await response.clone().text();
+                        if (text) return text.slice(0, 500);
+                    } catch (readError) {}
+                }
+            }
+            if (error?.name === 'FunctionsFetchError') return `Could not reach the ${functionName} Edge Function. Check that it is deployed and that this browser can reach Supabase.`;
+            if (error?.name === 'FunctionsRelayError') return `Supabase could not start the ${functionName} Edge Function. Check its deployment and Edge Function logs.`;
+            return error?.message || `Unable to call the ${functionName} Edge Function.`;
+        };
+
         const HRStaffModule = () => {
+            const { user } = useAuth();
             const [activeTab, setActiveTab] = useState('overview');
+            const [staffForm, setStaffForm] = useState({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+            const [staffMessage, setStaffMessage] = useState('');
+            const [creatingStaff, setCreatingStaff] = useState(false);
             const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'super_admin'].includes(person.role));
             const activeStaff = staff.filter((person) => person.status === 'active').length;
             const attendanceRate = staff.length ? Math.round((activeStaff / staff.length) * 100) : 0;
@@ -19,6 +42,35 @@
             }));
             const payrollSummary = [];
             const recruitmentPipeline = [];
+            const handleCreateStaff = async () => {
+                if (user?.role !== 'super_admin') {
+                    setStaffMessage(`This account's profile role is “${user?.role || 'unknown'}”. It must be “super_admin” to create staff accounts.`);
+                    return;
+                }
+                if (!staffForm.fullName.trim() || !staffForm.email.trim() || staffForm.password.length < 8) {
+                    setStaffMessage('Enter a name, work email, and password of at least 8 characters.');
+                    return;
+                }
+                setCreatingStaff(true);
+                setStaffMessage('');
+                try {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) throw new Error('Supabase client is not available.');
+                    const { data, error } = await client.functions.invoke('create-staff', {
+                        body: { ...staffForm, fullName: staffForm.fullName.trim(), email: staffForm.email.trim().toLowerCase() }
+                    });
+                    if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'create-staff'));
+                    if (!data?.staff) throw new Error(data?.error || 'The function returned no staff profile. Check the create-staff Edge Function logs.');
+                    appData.users = [...(appData.users || []), normalizeUsers([data.staff])[0]];
+                    setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+                    setStaffMessage(`${data.staff.full_name || data.staff.email} can now sign in.`);
+                } catch (error) {
+                    console.error('create-staff failed:', error);
+                    setStaffMessage(error.message || 'Unable to create the staff account.');
+                } finally {
+                    setCreatingStaff(false);
+                }
+            };
             const tabs = [
                 { id: 'overview', label: 'Overview' },
                 { id: 'attendance', label: 'Attendance' },
@@ -34,6 +86,26 @@
                             <p className="text-slate-500 mt-1">Workforce planning, attendance, payroll, and hiring operations</p>
                         </div>
                     </div>
+
+                    {user?.role !== 'super_admin' && <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                        Staff account creation is available to active Super Admin profiles. Current profile role: <strong>{user?.role || 'unknown'}</strong>.
+                    </p>}
+
+                    {user?.role === 'super_admin' && <Card title="Create Staff Account">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
+                            <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
+                            <Input label="Temporary password (8+ characters)" type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
+                            <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'records_officer', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'surgeon', 'specialist', 'theatre_staff'].map(value => ({ value, label: value === 'records_officer' ? 'Health Information Management Officer' : value.replaceAll('_', ' ') }))} />
+                            <Input label="Department" value={staffForm.department} onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })} />
+                            {staffMessage && <p role="status" className={'md:col-span-2 text-sm ' + (staffMessage.includes('can now sign in') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
+                            <div className="md:col-span-2">
+                                <Button variant="primary" className="w-full justify-center" onClick={handleCreateStaff} disabled={creatingStaff} icon={creatingStaff ? Icons.RefreshCw : Icons.UserPlus}>
+                                    {creatingStaff ? 'Creating account...' : 'Create Staff Account'}
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <StatCard title="Total Staff" value={staff.length} icon={Icons.Users} color="medical" />
@@ -186,9 +258,6 @@
             });
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
-            const [staffForm, setStaffForm] = useState({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-            const [staffMessage, setStaffMessage] = useState('');
-            const [creatingStaff, setCreatingStaff] = useState(false);
             const [patientPortalForm, setPatientPortalForm] = useState({ patientId: '', email: '', password: '' });
             const [patientPortalMessage, setPatientPortalMessage] = useState('');
             const [creatingPatientPortal, setCreatingPatientPortal] = useState(false);
@@ -264,35 +333,6 @@
                 }
             };
 
-            const handleCreateStaff = async () => {
-                if (user?.role !== 'super_admin') {
-                    setStaffMessage('Only the system administrator can create staff accounts.');
-                    return;
-                }
-                if (!staffForm.fullName || !staffForm.email || !staffForm.password) {
-                    setStaffMessage('Full name, email, and password are required.');
-                    return;
-                }
-                setCreatingStaff(true);
-                setStaffMessage('');
-                try {
-                    const client = window.OneMedSupabase?.getClient?.();
-                    if (!client) throw new Error('Supabase client is not available.');
-                    const { data, error } = await client.functions.invoke('create-staff', { body: { ...staffForm, fullName: staffForm.fullName, email: staffForm.email.trim() } });
-                    if (error) throw error;
-                    if (!data?.staff) throw new Error(data?.error || 'Unable to create the staff account.');
-                    const created = normalizeUsers([data.staff])[0];
-                    appData.users = [...(appData.users || []), created];
-                    setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-                    setStaffMessage(`${created.fullName} can now sign in.`);
-                } catch (error) {
-                    console.error(error);
-                    setStaffMessage(error.message || 'Unable to create the staff account.');
-                } finally {
-                    setCreatingStaff(false);
-                }
-            };
-
             const handleCreatePatientPortal = async () => {
                 if (user?.role !== 'super_admin') return setPatientPortalMessage('Only a super admin can create patient portal accounts.');
                 if (!patientPortalForm.patientId || !patientPortalForm.email || patientPortalForm.password.length < 8) return setPatientPortalMessage('Choose a patient, enter their email, and set a password of at least 8 characters.');
@@ -302,7 +342,7 @@
                     const client = window.OneMedSupabase?.getClient?.();
                     if (!client) throw new Error('Supabase client is not available.');
                     const { data, error } = await client.functions.invoke('create-patient-portal', { body: { ...patientPortalForm, email: patientPortalForm.email.trim() } });
-                    if (error) throw error;
+                    if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'create-patient-portal'));
                     if (!data?.patient) throw new Error(data?.error || 'Unable to create the patient portal account.');
                     setPatientPortalForm({ patientId: '', email: '', password: '' });
                     setPatientPortalMessage('Patient portal account created. The patient can sign in with the email and password provided.');
@@ -374,19 +414,6 @@
                                 <Input label="Temporary password (8+ characters)" type="password" value={patientPortalForm.password} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, password: e.target.value }))} />
                                 {patientPortalMessage && <p className={'text-sm ' + (patientPortalMessage.includes('created') ? 'text-emerald-600' : 'text-red-600')}>{patientPortalMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" onClick={handleCreatePatientPortal} disabled={creatingPatientPortal} icon={creatingPatientPortal ? Icons.RefreshCw : Icons.UserPlus}>{creatingPatientPortal ? 'Creating account...' : 'Create Patient Portal'}</Button>
-                            </div>
-                        </Card>}
-                        {user?.role === 'super_admin' && <Card title="Create Staff Account">
-                            <div className="space-y-4">
-                                <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
-                                <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
-                                <Input label="Temporary password" type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
-                                <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'records_officer', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'surgeon', 'specialist', 'theatre_staff'].map(value => ({ value, label: value === 'records_officer' ? 'Health Information Management Officer' : value.replaceAll('_', ' ') }))} />
-                                <Input label="Department" value={staffForm.department} onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })} />
-                                {staffMessage && <p className={'text-sm ' + (staffMessage.includes('now sign in') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
-                                <Button variant="primary" className="w-full justify-center" onClick={handleCreateStaff} disabled={creatingStaff} icon={creatingStaff ? Icons.RefreshCw : Icons.UserPlus}>
-                                    {creatingStaff ? 'Creating account...' : 'Create Staff Account'}
-                                </Button>
                             </div>
                         </Card>}
 

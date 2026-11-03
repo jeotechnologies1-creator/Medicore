@@ -8,24 +8,27 @@ const corsHeaders = {
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  try {
   if (request.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) return Response.json({ error: 'Missing authorization' }, { status: 401, headers: corsHeaders });
 
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const url = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !anonKey || !serviceKey) return Response.json({ error: 'create-staff is not configured. Set SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in the Edge Function environment.' }, { status: 500, headers: corsHeaders });
   const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: { user }, error: userError } = await requesterClient.auth.getUser();
   if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
 
   const adminClient = createClient(url, serviceKey);
-  const { data: requesterProfile } = await adminClient
+  const { data: requesterProfile, error: requesterProfileError } = await adminClient
     .from('profiles')
     .select('role, status')
     .eq('auth_user_id', user.id)
     .maybeSingle();
+  if (requesterProfileError) return Response.json({ error: 'Unable to verify the administrator profile.' }, { status: 500, headers: corsHeaders });
   if (requesterProfile?.role !== 'super_admin' || requesterProfile?.status !== 'active') {
     return Response.json({ error: 'Only a super admin can create staff accounts.' }, { status: 403, headers: corsHeaders });
   }
@@ -36,7 +39,7 @@ Deno.serve(async (request) => {
   } catch {
     return Response.json({ error: 'Request body must be valid JSON.' }, { status: 400, headers: corsHeaders });
   }
-  const email = typeof payload.email === 'string' ? payload.email.trim() : '';
+  const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
   const password = typeof payload.password === 'string' ? payload.password : '';
   const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : '';
   const role = typeof payload.role === 'string' ? payload.role : '';
@@ -65,4 +68,8 @@ Deno.serve(async (request) => {
     return Response.json({ error: profileError.message }, { status: 500, headers: corsHeaders });
   }
   return Response.json({ staff: profile }, { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error('create-staff Edge Function failed:', error);
+    return Response.json({ error: 'Unexpected server error in create-staff. Check the Edge Function logs.' }, { status: 500, headers: corsHeaders });
+  }
 });

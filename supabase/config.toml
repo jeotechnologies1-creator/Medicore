@@ -390,6 +390,12 @@ deno_version = 2
 [functions.integration-webhook]
 verify_jwt = false
 
+[functions.create-staff]
+verify_jwt = true
+
+[functions.create-patient-portal]
+verify_jwt = true
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
