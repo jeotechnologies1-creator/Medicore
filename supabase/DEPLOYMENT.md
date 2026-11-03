@@ -25,6 +25,8 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 21. `clinical_department_rls.sql`
 22. `external_finance_integrations.sql`
 23. `patient_portal_chat_payments.sql`
+24. `document_storage_scope.sql`
+25. `specialist_clinical_authoring.sql`
 
 The front-end calls the following database contracts:
 

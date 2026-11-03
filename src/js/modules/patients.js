@@ -257,13 +257,13 @@
                 const [documentMessage, setDocumentMessage] = useState('');
                 const [documentLink, setDocumentLink] = useState(null);
                 const patientDocuments = (appData.documents || []).filter((document) => document.patientId === patient.id);
-                const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse', 'pharmacist', 'laboratory_scientist', 'radiographer'].includes(user?.role);
+                const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse'].includes(user?.role);
 
                 const uploadDocument = async () => {
                     if (!canUploadPatientDocument || !documentFile || documentBusy) return;
                     setDocumentMessage('');
-                    if (documentFile.size > 10 * 1024 * 1024) {
-                        setDocumentMessage('Choose a file smaller than 10 MB.');
+                    if (documentFile.size <= 0 || documentFile.size > 10 * 1024 * 1024) {
+                        setDocumentMessage('Choose a non-empty file up to 10 MB.');
                         return;
                     }
                     if (!['application/pdf', 'image/jpeg', 'image/png'].includes(documentFile.type)) {

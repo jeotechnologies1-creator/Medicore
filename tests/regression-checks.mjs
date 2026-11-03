@@ -56,6 +56,8 @@ assert.doesNotMatch(auth, /savedLocal\.length/, 'Browser-local role matrices mus
 assert.match(supabaseClient, /data\?\.status === 'active'/, 'Password login must reject inactive profiles.');
 assert.match(portal, /sender_profile_id: user\.id/, 'Patient messages must carry the authenticated sender profile.');
 assert.match(authorization, /can_manage_patient_table/, 'Clinical write permissions must be table and role specific.');
+assert.match(authorization, /when 'prescriptions' then public\.has_any_role\(array\['super_admin','doctor','specialist'\]\)/, 'Specialists must receive the scoped prescribing write permission already granted to their role.');
+assert.match(authorization, /when 'encounters' then public\.has_any_role\(array\['super_admin','doctor','nurse','specialist'\]\)/, 'Specialist encounter authoring must be enabled at the base role gate and still pass department RLS.');
 assert.match(authorization, /'profiles','notifications','audit_logs','patient_messages','medication_refill_requests'/, 'Final authorization must reset every inherited sensitive-table policy.');
 assert.match(authorization, /profiles_role_allowed/, 'Profile roles must be constrained at the database layer.');
 assert.match(authorization, /billing_amounts_nonnegative/, 'Billing totals must reject negative values.');
@@ -187,5 +189,13 @@ assert.match(auth, /autoComplete="current-password"/, 'The login must support pa
 assert.match(auth, /aria-label=\{showPassword \? 'Hide password' : 'Show password'\}/, 'Password visibility must have an accessible control name.');
 assert.match(ui, /aria-modal="true"/, 'Dialogs must expose modal semantics.');
 assert.match(ui, /handleDialogKeys/, 'Dialogs must keep keyboard focus within the open dialog.');
+assert.match(auth, /onemed:session-expiring/, 'Configured idle sessions must warn users before sign-out.');
+assert.match(auth, /onemed_last_activity_/, 'Idle activity must be coordinated across open browser tabs.');
+assert.match(patients, /canUploadPatientDocument = \['super_admin', 'doctor', 'nurse'\]/, 'Document upload controls must match database-authorized writer roles.');
+
+const documentStorageScope = await read('supabase/document_storage_scope.sql');
+assert.match(documentStorageScope, /has_clinical_department_permission\(patient\.id, null, 'patient\.read', true\)/, 'Storage reads must inherit patient and department read authorization.');
+assert.match(documentStorageScope, /has_clinical_department_permission\(patient\.id, null, 'document\.manage', false\)/, 'Storage writes must require scoped document permissions.');
+assert.match(documentStorageScope, /file_size_limit, allowed_mime_types/, 'Patient documents must enforce bucket-level MIME and size limits.');
 
 console.log('Regression checks passed.');

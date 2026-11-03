@@ -19,7 +19,7 @@
 4. Patient merge and records access need end-to-end tests across every patient-linked table and Storage object.
 5. Browser configuration is stored locally; protect shared workstations, enforce hosted Auth session lifetime/revocation in the Supabase project, and do not store privileged keys there. The browser idle timeout is a usability and workstation safeguard, not a replacement for server-side session expiry.
 6. Audit completeness, append-only enforcement, retention, actor attribution and read auditing need deployed verification.
-7. File upload MIME/size/content scanning, private signed URL expiry, and malware handling need review.
+7. The private patient-document bucket limits uploads to PDF/JPEG/PNG up to 10 MiB, and Storage object policies now intersect patient/department permissions. Content inspection, malware scanning, retention, and release-of-information handling still need deployment-level review.
 8. Backups, encryption-at-rest configuration, disaster recovery, breach response, monitoring and downtime reconciliation are deployment responsibilities and were not verified.
 9. No test runner, lint/build toolchain, dependency lockfile or security scanning configuration is present in `package.json`.
 
