@@ -794,6 +794,7 @@
                         return;
                     }
                     window.dispatchEvent(new CustomEvent('onemed:access-policy-updated', { detail: { roleMatrix: cleanedMatrix } }));
+                    window.dispatchEvent(new CustomEvent('onemed:session-settings-updated', { detail: settings }));
                     setSaveMessage('Settings and role matrix saved successfully.');
                 } catch (e) {
                     setSaveMessage('Unable to save settings in this browser session.');
@@ -817,6 +818,7 @@
                         return;
                     }
                     window.dispatchEvent(new CustomEvent('onemed:access-policy-updated', { detail: { roleMatrix: resetMatrix } }));
+                    window.dispatchEvent(new CustomEvent('onemed:session-settings-updated', { detail: defaultSettings }));
                     setSaveMessage('Baseline EMR settings restored.');
                 } catch (e) {
                     setSaveMessage('Baseline settings restored locally.');
@@ -1064,7 +1066,7 @@
 
                         <Card title="Security & Access Control">
                             <div className="space-y-4">
-                                <Input label="Session timeout (minutes)" type="number" value={settings.sessionTimeoutMinutes} onChange={(e) => updateSetting('sessionTimeoutMinutes', Number(e.target.value || 30))} />
+                                <Input label="Session timeout (minutes)" type="number" min={5} max={1440} value={settings.sessionTimeoutMinutes} onChange={(e) => updateSetting('sessionTimeoutMinutes', Math.min(1440, Math.max(5, Number(e.target.value) || 30)))} />
                                 <Input label="Password minimum length" type="number" value={settings.passwordMinLength} onChange={(e) => updateSetting('passwordMinLength', Number(e.target.value || 8))} />
                                 <Input label="Failed attempts before lock" type="number" value={settings.lockAfterFailedAttempts} onChange={(e) => updateSetting('lockAfterFailedAttempts', Number(e.target.value || 5))} />
                                 <Input label="Audit retention (days)" type="number" value={settings.auditRetentionDays} onChange={(e) => updateSetting('auditRetentionDays', Number(e.target.value || 2555))} />

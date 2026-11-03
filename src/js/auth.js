@@ -286,6 +286,106 @@
             const [user, setUser] = useState(null);
             const [roleMatrix, setRoleMatrix] = useState(defaultRoleMatrix);
             const [loading, setLoading] = useState(false);
+            const [sessionSecurity, setSessionSecurity] = useState({ timeoutMinutes: 30, autoLogoutIdle: true });
+
+            useEffect(() => {
+                if (!user?.id) return undefined;
+                let active = true;
+                const applySettings = (settings) => {
+                    if (!settings || typeof settings !== 'object') return;
+                    const timeout = Number(settings.sessionTimeoutMinutes);
+                    setSessionSecurity({
+                        timeoutMinutes: Number.isFinite(timeout) ? Math.min(1440, Math.max(5, timeout)) : 30,
+                        autoLogoutIdle: settings.autoLogoutIdle !== false
+                    });
+                };
+                const loadSettings = async () => {
+                    try {
+                        const settings = await window.OneMedSupabase?.loadSystemSettings?.();
+                        if (active) applySettings(settings);
+                    } catch (error) {
+                        console.warn('Session security settings unavailable; using the 30-minute default.');
+                    }
+                };
+                const handleSettingsUpdate = (event) => applySettings(event.detail);
+                window.addEventListener('onemed:session-settings-updated', handleSettingsUpdate);
+                loadSettings();
+                return () => {
+                    active = false;
+                    window.removeEventListener('onemed:session-settings-updated', handleSettingsUpdate);
+                };
+            }, [user?.id]);
+
+            useEffect(() => {
+                if (!user?.id || !sessionSecurity.autoLogoutIdle) return undefined;
+                const timeoutMs = sessionSecurity.timeoutMinutes * 60 * 1000;
+                const activityKey = `onemed_last_activity_${user.id}`;
+                let warningTimer;
+                let logoutTimer;
+                let lastStorageWriteAt = 0;
+                let expired = false;
+                let lastActivityAt = Date.now();
+                try { localStorage.setItem(activityKey, String(lastActivityAt)); } catch (error) {}
+                const clearTimers = () => {
+                    window.clearTimeout(warningTimer);
+                    window.clearTimeout(logoutTimer);
+                };
+                const expireSession = async () => {
+                    if (expired) return;
+                    expired = true;
+                    clearTimers();
+                    window.dispatchEvent(new CustomEvent('onemed:session-expired'));
+                    setUser(null);
+                    try { await window.OneMedSupabase?.logout?.(); } catch (error) {
+                        console.warn('Supabase sign-out could not be confirmed after inactivity.');
+                    }
+                };
+                const schedule = () => {
+                    clearTimers();
+                    const remaining = Math.max(0, timeoutMs - (Date.now() - lastActivityAt));
+                    warningTimer = window.setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('onemed:session-expiring', {
+                            detail: { secondsRemaining: Math.ceil(Math.min(60000, timeoutMs) / 1000) }
+                        }));
+                    }, Math.max(0, remaining - Math.min(60000, timeoutMs)));
+                    logoutTimer = window.setTimeout(expireSession, remaining);
+                };
+                const recordActivity = () => {
+                    lastActivityAt = Date.now();
+                    if (lastActivityAt - lastStorageWriteAt >= 5000) {
+                        try { localStorage.setItem(activityKey, String(lastActivityAt)); } catch (error) {}
+                        lastStorageWriteAt = lastActivityAt;
+                    }
+                    schedule();
+                };
+                const syncOtherTabActivity = (event) => {
+                    if (event.key !== activityKey) return;
+                    const sharedActivityAt = Number(event.newValue);
+                    if (Number.isFinite(sharedActivityAt) && sharedActivityAt > lastActivityAt) {
+                        lastActivityAt = sharedActivityAt;
+                        schedule();
+                    }
+                };
+                const checkOnReturn = () => {
+                    if (document.visibilityState === 'visible') {
+                        try { lastActivityAt = Math.max(lastActivityAt, Number(localStorage.getItem(activityKey)) || 0); } catch (error) {}
+                        if (Date.now() - lastActivityAt >= timeoutMs) expireSession();
+                        else schedule();
+                    }
+                };
+                const events = ['keydown', 'pointerdown', 'touchstart', 'scroll'];
+                events.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));
+                document.addEventListener('visibilitychange', checkOnReturn);
+                window.addEventListener('storage', syncOtherTabActivity);
+                schedule();
+                return () => {
+                    clearTimers();
+                    events.forEach((eventName) => window.removeEventListener(eventName, recordActivity));
+                    document.removeEventListener('visibilitychange', checkOnReturn);
+                    window.removeEventListener('storage', syncOtherTabActivity);
+                    try { localStorage.removeItem(activityKey); } catch (error) {}
+                };
+            }, [user?.id, sessionSecurity]);
 
             useEffect(() => {
                 const client = window.OneMedSupabase?.getClient?.();

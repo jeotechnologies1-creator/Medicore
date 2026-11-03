@@ -8,6 +8,7 @@
 - SQL RLS and role-specific policies in later migrations; private patient document storage policies.
 - Database audit triggers/policies and patient-access log support.
 - Staff provisioning occurs through an Edge Function using server-side secrets; the browser uses only URL/public anon key configuration.
+- Idle browser sessions sign out using the saved inactivity setting (30-minute default, 5–1440 minute range); the app warns the user during the final minute.
 - Payment, pharmacy dispensing, bed allocation, unidentified emergency identity and merge workflows use database transactions/RPCs in the migrations.
 
 ## Material risks / open verification
@@ -16,7 +17,7 @@
 2. Historical migration files contain broad authenticated policies. Confirm final migrations remove/replace all broad policies on every exposed table.
 3. New tables/RPCs need least-privilege grants, RLS, actor validation, stable `search_path`, and idempotency/concurrency review.
 4. Patient merge and records access need end-to-end tests across every patient-linked table and Storage object.
-5. Browser configuration is stored locally; protect shared workstations, secure sessions, enforce timeout/revocation, and do not store privileged keys there.
+5. Browser configuration is stored locally; protect shared workstations, enforce hosted Auth session lifetime/revocation in the Supabase project, and do not store privileged keys there. The browser idle timeout is a usability and workstation safeguard, not a replacement for server-side session expiry.
 6. Audit completeness, append-only enforcement, retention, actor attribution and read auditing need deployed verification.
 7. File upload MIME/size/content scanning, private signed URL expiry, and malware handling need review.
 8. Backups, encryption-at-rest configuration, disaster recovery, breach response, monitoring and downtime reconciliation are deployment responsibilities and were not verified.

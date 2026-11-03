@@ -58,11 +58,12 @@ Deploy the staff provisioning endpoint after the SQL migration succeeds:
 
 ```sh
 supabase functions deploy create-staff
+supabase functions deploy create-patient-portal
 supabase functions deploy integration-dispatch
 supabase functions deploy integration-webhook
 ```
 
-`create-staff` is called by the staff administration screen. The finance integration functions run server-side and must keep `SUPABASE_SERVICE_ROLE_KEY` in Edge Function secrets. Never expose that key in the front end.
+`create-staff` and `create-patient-portal` are called by the staff administration and patient portal provisioning screens. Both provisioning functions and the finance integration functions need `SUPABASE_SERVICE_ROLE_KEY` in Edge Function secrets. Never expose that key in the front end.
 
 The finance integration functions run only with the server-side service-role key. Configure connector secrets with `supabase secrets set`; never put credentials in `integration_connections.config` or browser code. Create one active connection row for each facility/provider in the Supabase SQL editor, using only non-secret settings, for example `insert into public.integration_connections(facility_id,integration_type,provider_code,status) values ('<facility-uuid>','payment_gateway','example_gateway','active');`. `MEDICORE_CONNECTORS_JSON` maps each `provider_code` to a base URL, secret variable name, and optional checkout return URL, for example `{"example_gateway":{"baseUrl":"https://sandbox.example.invalid/api/","tokenEnv":"EXAMPLE_GATEWAY_TOKEN","returnUrl":"https://hospital.example/checkout/return"}}`. The dispatcher uses fixed routes for `payment.intent.create`, `payer.claim.submit`, and `ledger.journal.posted`; each provider must accept the canonical JSON body and the `Idempotency-Key` header or be wrapped with a vendor-specific adapter. A gateway intent response can include `{ "id": "provider-reference", "checkout_url": "https://..." }`; the URL is stored only when HTTPS. Configure `MEDICORE_WEBHOOK_SECRET_<CONNECTION_UUID_WITHOUT_DASHES_UPPERCASE>` per connection. Webhooks must send `x-medicore-connection`, `x-provider-signature: sha256=<HMAC-SHA256-of-raw-body>`, and JSON `{ "event_id": "...", "event_type": "payment.succeeded|payment.failed|payer.claim.accepted|payer.claim.adjudicated|payer.remittance", "data": { ... } }`. Payment events identify `transaction_id`; payer events identify `claim_id`, adjudications also include `amount_approved`, and remittances include `amount`. The inbox deduplicates provider event IDs; payment successes create a pending payment submission and still require independent Accounts review. Schedule `integration-dispatch` with a server-side Supabase service-role bearer token to drain/retry outbox events.
 

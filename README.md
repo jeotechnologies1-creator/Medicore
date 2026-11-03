@@ -39,6 +39,7 @@ Run the SQL files in this order in the Supabase SQL editor:
 21. `supabase/finance_posting_refunds.sql`
 22. `supabase/clinical_department_rls.sql`
 23. `supabase/external_finance_integrations.sql`
+24. `supabase/patient_portal_chat_payments.sql`
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -52,7 +53,7 @@ OneMed has no seed script and never persists clinical records in browser storage
 
 `organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. `clinical_department_rls.sql` intersects existing clinical role policies with active facility and department membership permissions. Configure organization-unit codes or names to match department values stored on clinical records; untagged records use a staff member's primary unit, or their only active unit. Apply after `finance_posting_refunds.sql` and verify with the local RLS suite before deployment.
 
-`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. `external_finance_integrations.sql` adds provider-neutral payer claim submission, gateway checkout, signed webhook ingestion, retryable outbox processing, remittance review, and immutable balanced general-ledger journals. Configure the `integration-dispatch` and `integration-webhook` Edge Functions with server-side secrets using the contract in `supabase/DEPLOYMENT.md`. Vendor-specific sandbox mappings and credentials are required before live external connectivity; no vendor is preconfigured.
+`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. `external_finance_integrations.sql` adds provider-neutral payer claim submission, gateway checkout, signed webhook ingestion, retryable outbox processing, remittance review, and immutable balanced general-ledger journals. `patient_portal_chat_payments.sql` adds the portal chat inbox, facility-scoped HIM appointment coordination, and patient-owned checkout requests. Configure the `integration-dispatch` and `integration-webhook` Edge Functions with server-side secrets using the contract in `supabase/DEPLOYMENT.md`. Vendor-specific sandbox mappings and credentials are required before live external connectivity; no vendor is preconfigured.
 
 For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 
@@ -66,17 +67,18 @@ The same migration creates server-side audit triggers for clinical and operation
 
 `quality_safety_upgrade.sql` adds result acknowledgement records, overdue-result escalation support, medication reconciliation records, and optional terminology/barcode/lot fields. Configure a server-side scheduled job to call `escalate_overdue_results()`; it is intentionally not callable from the browser.
 
-`app_activation.sql` is the final compatibility migration. It enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
+`app_activation.sql` enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
 
-`role_authorization.sql` must be applied last. It resets all inherited policies for clinical, portal, profile, notification, and audit tables before applying role-specific database authorization. It also restricts clinical authorship by record type, aligns document storage with document-write roles, and adds write-time data-integrity constraints. Test every role in staging after applying it; validate the new `NOT VALID` constraints after resolving any legacy-data exceptions.
+Apply `role_authorization.sql` after `app_activation.sql` and before the subsequent workflow migrations, as shown in the ordered list above. It resets inherited policies before applying role-specific authorization. Later workflow migrations add narrow policies and grants for their new features. It also restricts clinical authorship by record type, aligns document storage with document-write roles, and adds write-time data-integrity constraints. Validate the new `NOT VALID` constraints after resolving any legacy-data exceptions.
 
-Deploy the staff-provisioning Edge Function after applying the SQL migrations:
+Deploy the staff and patient-portal account provisioning Edge Functions after applying the SQL migrations:
 
 ```sh
 supabase functions deploy create-staff
+supabase functions deploy create-patient-portal
 ```
 
-The function at `supabase/functions/create-staff/index.ts` requires the project-managed `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. Do not place the service-role key in the browser or this repository.
+Both functions require the project-managed `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. The patient portal account form calls `create-patient-portal`; deploy it or that workflow will fail. Do not place the service-role key in the browser or this repository.
 
 This is a clinical application, so it should also have a privacy review, a retention/backup plan, encrypted device/session management, a data-processing agreement where applicable, and clinical governance before real patient data is entered. It is not presented as a certified EHR.
 

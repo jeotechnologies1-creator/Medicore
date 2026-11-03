@@ -81,6 +81,12 @@
             }, []);
 
             useEffect(() => {
+                const handleSessionExpiring = (event) => addToast(`You will be signed out in ${event.detail?.secondsRemaining || 60} seconds due to inactivity.`, 'warning');
+                window.addEventListener('onemed:session-expiring', handleSessionExpiring);
+                return () => window.removeEventListener('onemed:session-expiring', handleSessionExpiring);
+            }, []);
+
+            useEffect(() => {
                 if (!isAuthenticated || !user?.id) return undefined;
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return undefined;
