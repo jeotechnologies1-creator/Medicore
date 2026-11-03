@@ -6,6 +6,9 @@ const specialistAuthoring = await read('supabase/specialist_clinical_authoring.s
 const clinicalRetention = await read('supabase/clinical_record_retention.sql');
 const clinicalRetentionRollback = await read('supabase/rollback/20261103000026_clinical_record_retention.sql');
 const clinicalRetentionPlan = await read('docs/deployment/rollback-clinical-record-retention.md');
+const himRecords = await read('supabase/him_records.sql');
+const himMigration = await read('supabase/migrations/20261103000030_him_records.sql');
+const himRollback = await read('supabase/rollback/20261103000030_him_records.sql');
 const stagingGuide = await read('infra/supabase-staging/README.md');
 const stagingConfig = await read('infra/supabase-staging/supabase/config.toml');
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
@@ -198,6 +201,17 @@ assert.doesNotMatch(billingUi, /handleAdvanceClaim/, 'Billing must not manually 
 assert.match(deploymentDocs, /MEDICORE_CONNECTORS_JSON/, 'Deployment docs must describe connector configuration and secret handling.');
 assert.match(financeTest, /provider webhook event IDs are idempotent/, 'Database integration tests must verify webhook deduplication.');
 assert.match(financeTest, /balanced journal entries/, 'Database integration tests must verify double-entry ledger balance.');
+assert.match(himRecords, /create table if not exists public\.medical_record_files/, 'HIM must use a dedicated file index linked to existing patient identities.');
+assert.match(himRecords, /create table if not exists public\.medical_record_movement_events/, 'HIM file movements must retain an append-only history.');
+assert.match(himRecords, /create or replace function public\.request_medical_record_file/, 'HIM file requests must persist through a backend transaction.');
+assert.match(himRecords, /create or replace function public\.transition_medical_record_movement/, 'HIM file transitions must be handled by a permission-checked backend function.');
+assert.match(himRecords, /has_org_permission\('records\.file\.manage',patient_facility,null\)/, 'HIM file operations must enforce the patient facility boundary.');
+assert.match(himRecords, /revoke all on public\.medical_record_files,public\.medical_record_movements,public\.medical_record_movement_events[\s\S]*?grant select on public\.medical_record_files/, 'Browser roles must not directly mutate medical file movements or history.');
+assert.match(himRecords, /get_him_dashboard_summary/, 'HIM KPIs must come from a permission-scoped database aggregate.');
+assert.equal(himMigration, himRecords, 'HIM records migration must be present in the ordered migration chain.');
+assert.match(himRollback, /export medical_record_files, medical_record_movements,/, 'HIM rollback must require exporting operational tracking history.');
+assert.match(records, /get_him_dashboard_summary[\s\S]*?request_medical_record_file[\s\S]*?transition_medical_record_movement/, 'HIM dashboard and file actions must call the persisted backend contracts.');
+assert.match(records, /Movement history/, 'The HIM user interface must expose stored file movement history.');
 assert.match(app, /mobileOpen=\{sidebarOpen\}/, 'The mobile navigation drawer must be controlled by app state.');
 assert.match(layout, /aria-expanded=\{menuOpen\}/, 'The mobile menu control must expose its expanded state.');
 assert.match(styles, /@media \(max-width: 1023px\)[\s\S]*?\.mobile-drawer\.is-open/, 'Tablet and mobile widths must use a navigable drawer.');

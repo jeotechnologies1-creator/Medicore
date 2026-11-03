@@ -31,6 +31,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 27. `migrations/20261103000027_payment_dispute_workflow.sql`
 28. `appointment_slot_integrity.sql` (or `migrations/20261103000028_appointment_slot_integrity.sql`)
 29. `patient_facility_scope.sql` (or `migrations/20261103000029_patient_facility_scope.sql`)
+30. `him_records.sql` (or `migrations/20261103000030_him_records.sql`)
 
 The front-end calls the following database contracts:
 
@@ -58,11 +59,12 @@ The front-end calls the following database contracts:
 | External payer, payment gateway, and GL | `external_finance_integrations.sql` adds claims, checkout intents, a durable outbox/inbox, normalized webhooks, remittance review, balanced journals, and a provider-neutral Edge adapter |
 | Payment disputes and chargeback alerting | `migrations/20261103000027_payment_dispute_workflow.sql` adds provider dispute intake, an auditable response queue, and configurable provider-specific count/rate alerts |
 | Patient registry privacy and scheduling | `patient_facility_scope.sql` scopes patient-linked reads and writes, prevents authenticated hard deletes of retained patient/clinical rows, and validates appointment RPC writes and provider facility membership; `appointment_slot_integrity.sql` prevents same-time patient/doctor double bookings |
+| HIM physical file circulation | `him_records.sql` adds facility-bound file indexing, request/release/return/missing/investigation transitions, append-only movement events, and `records.file.read/manage` permissions. Apply after #29 and test with active HIM facility membership in staging first. |
 | HIM access administration | Organization Structure → “Health Information Management (HIM) access” edits facility scoped `records_officer` grants; staff also need an active facility membership. Patient checkout still requires an active payment gateway connection and uses the existing provider webhook and Accounts review path. |
 
 Before applying migration 29, run `select count(*) from public.patients where home_facility_id is null;` in staging and reconcile every result against the verified source facility. The migration does not guess or bulk-assign facilities: unassigned patients remain available to their linked patient and Super Admin, but hidden from facility/department staff until explicitly mapped. Super Admin can assign `home_facility_id` after verifying the patient's actual facility. Validate existing staff facility/department memberships and the active registration roles in staging as part of promotion.
 
-Rollbacks are prepared at `supabase/rollback/20261103000027_payment_dispute_workflow.sql`, `supabase/rollback/20261103000028_appointment_slot_integrity.sql`, and `supabase/rollback/20261103000029_patient_facility_scope.sql`. For migration 29, stop writes during rollback and use its staging-first instructions; it removes the scope policies and restores the prior broader role policies. The published operational refund notice is available at `/refund-policy.html`; it does not invent refund timing or eligibility terms absent from facility configuration.
+Rollbacks are prepared at `supabase/rollback/20261103000027_payment_dispute_workflow.sql`, `supabase/rollback/20261103000028_appointment_slot_integrity.sql`, `supabase/rollback/20261103000029_patient_facility_scope.sql`, and `supabase/rollback/20261103000030_him_records.sql`. For migration 29, stop writes during rollback and use its staging-first instructions; it removes the scope policies and restores the prior broader role policies. Migration 30 rollback requires pausing file movements and exporting all three HIM tables before removing them. The published operational refund notice is available at `/refund-policy.html`; it does not invent refund timing or eligibility terms absent from facility configuration.
 
 ## Required non-SQL deployment
 

@@ -28,6 +28,13 @@ const RecordsModule = () => {
     const [familyEdits, setFamilyEdits] = useState({});
     const [identityForm, setIdentityForm] = useState({ temporaryPatientId: '', permanentPatientId: '', reason: '' });
     const [patientJourney, setPatientJourney] = useState([]);
+    const [recordFiles, setRecordFiles] = useState([]);
+    const [fileMovementMessage, setFileMovementMessage] = useState('');
+    const [fileRequest, setFileRequest] = useState({ patientId: '', requestingDepartment: '', destinationDepartment: '', receiverName: '', expectedReturnAt: '' });
+    const [fileMovementBusy, setFileMovementBusy] = useState(false);
+    const [fileRegisterLoading, setFileRegisterLoading] = useState(true);
+    const [fileRegisterError, setFileRegisterError] = useState('');
+    const [himSummary, setHimSummary] = useState(null);
     const patients = appData.patients || [];
 
     useEffect(() => {
@@ -60,7 +67,64 @@ const RecordsModule = () => {
             if (error) setPortalInboxMessage(error.message);
             else setPortalInbox(data || []);
         });
+        client.rpc('get_him_dashboard_summary').then(({ data, error }) => {
+            if (error) setFileMovementMessage(`HIM summary is unavailable: ${error.message}`);
+            else setHimSummary(data || null);
+        });
+        Promise.all([
+            client.from('medical_record_files').select('id,patient_id,facility_id,file_number,status,location,current_custodian,last_retrieved_at,last_returned_at,patients(first_name,last_name,patient_number)').order('updated_at', { ascending: false }).limit(500),
+            client.from('medical_record_movements').select('id,file_id,patient_id,requesting_department,destination_department,receiver_name,expected_return_at,released_at,returned_at,status,created_at,patients(first_name,last_name,patient_number)').order('created_at', { ascending: false }).limit(500),
+            client.from('medical_record_movement_events').select('id,movement_id,event_type,details,created_at,profiles(full_name)').order('created_at', { ascending: false }).limit(1000)
+        ]).then(([files, movements, events]) => {
+            const error = files.error || movements.error || events.error;
+            if (error) { setFileRegisterError(error.message); setFileRegisterLoading(false); return; }
+            setFileRegisterError(''); setFileRegisterLoading(false);
+            setRecordFiles((files.data || []).map((file) => ({ ...file, movements: (movements.data || []).filter((row) => row.file_id === file.id), events: (events.data || []).filter((row) => (movements.data || []).some((movement) => movement.file_id === file.id && movement.id === row.movement_id)) })));
+        });
     }, [user?.role]);
+
+    const refreshRecordFiles = async () => {
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return;
+        setFileRegisterLoading(true);
+        const [files, movements, events] = await Promise.all([
+            client.from('medical_record_files').select('id,patient_id,facility_id,file_number,status,location,current_custodian,last_retrieved_at,last_returned_at,patients(first_name,last_name,patient_number)').order('updated_at', { ascending: false }).limit(500),
+            client.from('medical_record_movements').select('id,file_id,patient_id,requesting_department,destination_department,receiver_name,expected_return_at,released_at,returned_at,status,created_at,patients(first_name,last_name,patient_number)').order('created_at', { ascending: false }).limit(500),
+            client.from('medical_record_movement_events').select('id,movement_id,event_type,details,created_at,profiles(full_name)').order('created_at', { ascending: false }).limit(1000)
+        ]);
+        const error = files.error || movements.error || events.error;
+        if (error) { setFileRegisterError(error.message); setFileRegisterLoading(false); return; }
+        setFileRegisterError(''); setFileRegisterLoading(false);
+        setRecordFiles((files.data || []).map((file) => ({ ...file, movements: (movements.data || []).filter((row) => row.file_id === file.id), events: (events.data || []).filter((row) => (movements.data || []).some((movement) => movement.file_id === file.id && movement.id === row.movement_id)) })));
+        const { data: summary, error: summaryError } = await client.rpc('get_him_dashboard_summary');
+        if (summaryError) setFileMovementMessage(summaryError.message); else setHimSummary(summary || null);
+    };
+
+    const requestRecordFile = async () => {
+        if (!fileRequest.patientId || !fileRequest.requestingDepartment.trim() || !fileRequest.destinationDepartment.trim() || !fileRequest.receiverName.trim()) return setFileMovementMessage('Choose a patient and enter the requesting department, destination department, and receiving officer.');
+        setFileMovementBusy(true); setFileMovementMessage('');
+        const { error } = await window.OneMedSupabase.getClient().rpc('request_medical_record_file', {
+            p_patient_id: fileRequest.patientId,
+            p_requesting_department: fileRequest.requestingDepartment.trim(),
+            p_destination_department: fileRequest.destinationDepartment.trim(),
+            p_expected_return_at: fileRequest.expectedReturnAt ? new Date(fileRequest.expectedReturnAt).toISOString() : null,
+            p_receiver_name: fileRequest.receiverName.trim() || null
+        });
+        setFileMovementBusy(false);
+        if (error) return setFileMovementMessage(error.message);
+        setFileRequest({ patientId: '', requestingDepartment: '', destinationDepartment: '', receiverName: '', expectedReturnAt: '' });
+        setFileMovementMessage('File request recorded. Release it when the physical file is handed over.');
+        await refreshRecordFiles();
+    };
+
+    const transitionRecordFile = async (movement, action) => {
+        const notes = action === 'missing' || action === 'investigate' ? window.prompt('Document the reason or investigation note:') : null;
+        if ((action === 'missing' || action === 'investigate') && !String(notes || '').trim()) return;
+        const { error } = await window.OneMedSupabase.getClient().rpc('transition_medical_record_movement', { p_movement_id: movement.id, p_action: action, p_notes: notes });
+        if (error) return setFileMovementMessage(error.message);
+        setFileMovementMessage(`File movement ${action} recorded.`);
+        await refreshRecordFiles();
+    };
 
     const replyToPortalMessage = async (message) => {
         const text = String(portalReplyDrafts[message.patient_id] || '').trim();
@@ -334,9 +398,45 @@ const RecordsModule = () => {
         <div className="p-6 space-y-6 animate-fade-in">
             <div>
                 <h2 className="text-2xl font-bold text-slate-900">Health Information Management (HIM)</h2>
-                <p className="mt-1 text-sm text-slate-500">Find a patient and review their read-only chart index.</p>
+                <p className="mt-1 text-sm text-slate-500">Patient information operations and physical file circulation. Counts are aggregated from records you are authorized to access.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+                {[
+                    ['Patients', himSummary?.patients_total], ['Registered today', himSummary?.patients_registered_today], ['New this week', himSummary?.patients_registered_week], ['New this month', himSummary?.patients_registered_month], ['Active patients', himSummary?.patients_active], ['Inactive patients', himSummary?.patients_inactive],
+                    ['Files indexed', himSummary?.files_total], ['Files available', himSummary?.files_available], ['In circulation', himSummary?.files_circulating], ['Awaiting release', himSummary?.files_requested], ['Overdue', himSummary?.files_overdue], ['Missing', himSummary?.files_missing], ['Requests today', himSummary?.requests_today], ['Retrieved today', himSummary?.files_retrieved_today], ['Returned today', himSummary?.files_returned_today]
+                ].map(([label, value]) => <Card key={label}><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-900">{value == null ? '—' : Number(value).toLocaleString()}</p></Card>)}
+            </div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Medical record circulation register" subtitle="Facility scoped physical file tracking. Requests, handovers, returns, and missing-file actions are recorded in an append-only event history." action={<Button size="sm" variant="ghost" onClick={refreshRecordFiles}>Refresh</Button>}>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6 items-end">
+                    <Select label="Patient" value={fileRequest.patientId} onChange={(event) => setFileRequest((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.medicalRecordNumber || patient.patientNumber || patient.id.slice(0, 8)}` }))]} />
+                    <Input label="Requesting department" value={fileRequest.requestingDepartment} onChange={(event) => setFileRequest((current) => ({ ...current, requestingDepartment: event.target.value }))} />
+                    <Input label="Destination department" value={fileRequest.destinationDepartment} onChange={(event) => setFileRequest((current) => ({ ...current, destinationDepartment: event.target.value }))} />
+                    <Input label="Receiving officer" value={fileRequest.receiverName} onChange={(event) => setFileRequest((current) => ({ ...current, receiverName: event.target.value }))} />
+                    <Input label="Expected return" type="datetime-local" value={fileRequest.expectedReturnAt} onChange={(event) => setFileRequest((current) => ({ ...current, expectedReturnAt: event.target.value }))} />
+                    <Button variant="primary" disabled={fileMovementBusy} onClick={requestRecordFile}>{fileMovementBusy ? 'Saving…' : 'Request file'}</Button>
+                </div>
+                {fileMovementMessage && <p role="status" className="mt-3 text-sm text-slate-700">{fileMovementMessage}</p>}
+                <div className="mt-5 overflow-x-auto">
+                    {fileRegisterLoading ? <p className="py-6 text-center text-sm text-slate-500">Loading the facility file register…</p>
+                    : fileRegisterError ? <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">The file register could not be loaded: {fileRegisterError}</p>
+                    : recordFiles.length ? <table className="w-full text-left text-sm">
+                        <thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><th className="px-3 py-3">File / Patient</th><th className="px-3 py-3">Status / Custodian</th><th className="px-3 py-3">Latest movement</th><th className="px-3 py-3">Due</th><th className="px-3 py-3">Actions</th></tr></thead>
+                        <tbody>{recordFiles.map((file) => {
+                            const movement = file.movements?.find((row) => ['requested', 'in_circulation', 'missing', 'under_investigation'].includes(row.status)) || file.movements?.[0];
+                            const overdue = movement?.status === 'in_circulation' && movement.expected_return_at && new Date(movement.expected_return_at) < new Date();
+                            const patientName = `${file.patients?.first_name || ''} ${file.patients?.last_name || ''}`.trim() || file.patient_id;
+                            return <tr key={file.id} className="border-b border-slate-100 align-top">
+                                <td className="px-3 py-3"><p className="font-medium text-slate-800">{file.file_number}</p><p className="text-xs text-slate-500">{patientName} · {file.patients?.patient_number || file.patient_id.slice(0, 8)}</p></td>
+                                <td className="px-3 py-3"><Badge variant={overdue || file.status === 'missing' ? 'warning' : file.status === 'available' ? 'success' : 'default'}>{overdue ? 'overdue' : file.status.replaceAll('_', ' ')}</Badge><p className="mt-1 text-xs text-slate-500">{file.current_custodian || file.location || 'No custodian recorded'}</p></td>
+                                <td className="px-3 py-3">{movement ? <><p className="font-medium">{movement.requesting_department} → {movement.destination_department}</p><p className="text-xs text-slate-500">{movement.status.replaceAll('_', ' ')} · {formatDateTime(movement.released_at || movement.created_at)}</p><details className="mt-1"><summary className="cursor-pointer text-xs text-medical-700">Movement history ({file.events?.length || 0})</summary><ul className="mt-2 space-y-1 text-xs text-slate-600">{(file.events || []).filter((event) => event.movement_id === movement.id).map((event) => <li key={event.id}>{event.event_type.replaceAll('_', ' ')} · {formatDateTime(event.created_at)} · {event.profiles?.full_name || 'Staff'}</li>)}</ul></details></> : <span className="text-slate-500">No movement recorded</span>}</td>
+                                <td className="px-3 py-3 text-slate-600">{movement?.expected_return_at ? formatDateTime(movement.expected_return_at) : '—'}</td>
+                                <td className="px-3 py-3"><div className="flex flex-wrap gap-2">{movement?.status === 'requested' && <><Button size="sm" variant="primary" onClick={() => transitionRecordFile(movement, 'release')}>Release</Button><Button size="sm" variant="ghost" onClick={() => transitionRecordFile(movement, 'reject')}>Reject</Button></>}{movement?.status === 'in_circulation' && <><Button size="sm" variant="secondary" onClick={() => transitionRecordFile(movement, 'return')}>Return</Button><Button size="sm" variant="ghost" onClick={() => transitionRecordFile(movement, 'missing')}>Mark missing</Button></>}{movement?.status === 'missing' && <Button size="sm" variant="outline" onClick={() => transitionRecordFile(movement, 'investigate')}>Start investigation</Button>}{movement?.status === 'under_investigation' && <Button size="sm" variant="outline" onClick={() => transitionRecordFile(movement, 'located')}>Record located</Button>}{!movement && <span className="text-xs text-slate-500">Available for request</span>}</div></td>
+                            </tr>;
+                        })}</tbody>
+                    </table> : <p className="py-6 text-center text-sm text-slate-500">No physical files have been registered yet. The first approved request creates the existing patient’s HIM file index.</p>}
+                </div>
+            </Card>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Book an appointment for a patient" subtitle="Confirm the date and time with the doctor before booking. The patient must have an active portal account to receive the in-app notification.">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <Select label="Patient" value={bookingForm.patientId} onChange={(event) => setBookingForm((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />

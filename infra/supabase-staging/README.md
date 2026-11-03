@@ -17,7 +17,7 @@ supabase --workdir infra/supabase-staging db reset
 supabase --workdir infra/supabase-staging test db
 ```
 
-`db reset` is destructive to this **local staging database only**. It creates a clean database and applies the ordered migration chain through `20261103000029_patient_facility_scope.sql`. Migration 29 intentionally stops if patient rows have no `home_facility_id`; seed/reconcile synthetic staging facilities and patient rows before applying it. Keep staging synthetic; do not load identifiable production patient data.
+`db reset` is destructive to this **local staging database only**. It creates a clean database and applies the ordered migration chain through `20261103000030_him_records.sql`. Migration 29 intentionally stops if patient rows have no `home_facility_id`; the clean staging database has no patients. Keep test fixtures synthetic; do not load identifiable production patient data.
 
 The local API, database, Studio, and mail UI use ports `55421`, `55422`, `55423`, and `55424`, respectively. Use `supabase --workdir infra/supabase-staging status` to inspect local credentials and endpoints. Stop the stack with:
 
@@ -27,6 +27,6 @@ supabase --workdir infra/supabase-staging stop
 
 ## Promotion gate
 
-Do not promote migrations to a hosted project until the clean migration chain is applied, the verification query in [the rollback plan](../../docs/deployment/rollback-clinical-record-retention.md) returns a restrictive false `DELETE` policy for each present clinical table, and read/update workflows pass using synthetic authenticated roles. For migration 29, first verify that every staging patient is assigned to its correct facility and validate read, registration, scheduling, insurance, and family-card access for patient, receptionist, records officer, clinician, finance, and super-admin roles. The rollbacks are prepared at `supabase/rollback/20261103000026_clinical_record_retention.sql` and `supabase/rollback/20261103000029_patient_facility_scope.sql`.
+Do not promote migrations to a hosted project until the clean migration chain is applied, the verification query in [the rollback plan](../../docs/deployment/rollback-clinical-record-retention.md) returns a restrictive false `DELETE` policy for each present clinical table, and read/update workflows pass using synthetic authenticated roles. For migration 29, first verify that every staging patient is assigned to its correct facility and validate read, registration, scheduling, insurance, and family-card access for patient, receptionist, records officer, clinician, finance, and super-admin roles. For migration 30, run `supabase test db` and verify the synthetic HIM facility membership can request/release/return a file, cannot directly update register rows, and is denied in the second facility. Rollbacks are prepared at `supabase/rollback/20261103000026_clinical_record_retention.sql` and `supabase/rollback/20261103000030_him_records.sql`.
 
 This local stack validates database behavior. A separate hosted staging project is still needed to validate deployed Auth settings, Edge Function secrets, custom domains, and Cloudflare routing. Never link this local migration workdir to the production project.
