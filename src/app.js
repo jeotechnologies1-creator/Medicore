@@ -103,6 +103,12 @@
 
             useEffect(() => {
                 setIsAuthenticated(Boolean(user));
+                if (!user) {
+                    setNotifications([]);
+                    setDataLoad({ loading: false, failures: [] });
+                    setActiveModule('dashboard');
+                    setSidebarOpen(false);
+                }
             }, [user]);
 
             useEffect(() => {

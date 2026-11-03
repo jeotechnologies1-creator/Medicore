@@ -52,6 +52,10 @@ assert.match(core, /patientId: row\.patient_id/, 'Patient-linked profiles must r
 assert.doesNotMatch(core, /role: row\.role \|\| 'super_admin'/, 'Incomplete directory rows must never default to an administrator role.');
 assert.doesNotMatch(schema, /role text not null default 'super_admin'/, 'New profiles must never default to administrator.');
 assert.match(auth, /data\?\.status !== 'active'/, 'Inactive profiles must be signed out before entering the application UI.');
+assert.match(auth, /let sessionRevision = 0/, 'Concurrent authentication events must be ordered so stale profile reads cannot restore a signed-out user.');
+assert.match(auth, /if \(!session\?\.user\) \{\s*clearSignedOutState\(\);/, 'Remote sign-out events must clear authenticated EMR state.');
+assert.match(auth, /revision !== sessionRevision/, 'Profile lookups completing after a newer auth event must be ignored.');
+assert.match(app, /if \(!user\) \{\s*setNotifications\(\[\]\)/, 'User-scoped notifications must be cleared when the session ends.');
 assert.doesNotMatch(auth, /roleBasedAccess === false\) return true/, 'Browser settings must not disable module access checks.');
 assert.doesNotMatch(auth, /savedLocal\.length/, 'Browser-local role matrices must not override the server-saved access policy.');
 assert.match(supabaseClient, /data\?\.status === 'active'/, 'Password login must reject inactive profiles.');

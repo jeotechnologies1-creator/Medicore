@@ -391,18 +391,29 @@
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return undefined;
                 let active = true;
+                let sessionRevision = 0;
+                const clearSignedOutState = () => {
+                    initializeEmptyStore();
+                    setUser(null);
+                };
                 const applySession = async (session) => {
-                    if (!session?.user || !active) return;
+                    if (!active) return;
+                    const revision = ++sessionRevision;
+                    if (!session?.user) {
+                        clearSignedOutState();
+                        return;
+                    }
                     const { data } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
+                    if (!active || revision !== sessionRevision) return;
                     // An Auth session alone is not sufficient to use the EMR.
                     // Deactivated accounts must not enter the UI until RLS rejects
                     // their first request.
                     if (data?.status !== 'active') {
                         await client.auth.signOut();
-                        if (active) setUser(null);
+                        if (active && revision === sessionRevision) clearSignedOutState();
                         return;
                     }
-                    if (active && data) {
+                    if (data) {
                         setUser({ ...data, name: data.full_name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null });
                     }
                 };
