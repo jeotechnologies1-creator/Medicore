@@ -35,7 +35,54 @@ const RecordsModule = () => {
     const [fileRegisterLoading, setFileRegisterLoading] = useState(true);
     const [fileRegisterError, setFileRegisterError] = useState('');
     const [himSummary, setHimSummary] = useState(null);
-    const patients = appData.patients || [];
+    const [himPatients, setHimPatients] = useState(appData.patients || []);
+    const [patientDirectoryLoading, setPatientDirectoryLoading] = useState(false);
+    const [patientDirectoryError, setPatientDirectoryError] = useState('');
+    const patients = himPatients;
+
+    useEffect(() => {
+        if (!['super_admin', 'records_officer'].includes(user?.role)) return undefined;
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) { setPatientDirectoryError('The patient directory is unavailable because the database is disconnected.'); return undefined; }
+        let active = true;
+        const loadPatientDirectory = async () => {
+            setPatientDirectoryLoading(true);
+            setPatientDirectoryError('');
+            try {
+                const rows = [];
+                const pageSize = 1000;
+                for (let offset = 0; ; offset += pageSize) {
+                    const { data, error } = await client.from('patients')
+                        .select('id,patient_number,medical_record_number,first_name,last_name,date_of_birth,gender,phone,email,address,status,registration_date,home_facility_id')
+                        .order('last_name', { ascending: true })
+                        .order('first_name', { ascending: true })
+                        .order('id', { ascending: true })
+                        .range(offset, offset + pageSize - 1);
+                    if (error) throw error;
+                    const page = data || [];
+                    rows.push(...page);
+                    if (page.length < pageSize) break;
+                }
+                if (active) setHimPatients(rows.map((row) => ({
+                    ...row,
+                    patientNumber: row.patient_number || '',
+                    medicalRecordNumber: row.medical_record_number || '',
+                    firstName: row.first_name || '',
+                    lastName: row.last_name || '',
+                    dateOfBirth: row.date_of_birth || '',
+                    registrationDate: row.registration_date || '',
+                    homeFacilityId: row.home_facility_id || null
+                })));
+            } catch (error) {
+                if (active) setPatientDirectoryError(`The authorized hospital patient list could not be loaded. ${error?.message || ''}`.trim());
+            } finally {
+                if (active) setPatientDirectoryLoading(false);
+            }
+        };
+        loadPatientDirectory();
+        window.addEventListener('onemed:refresh-data', loadPatientDirectory);
+        return () => { active = false; window.removeEventListener('onemed:refresh-data', loadPatientDirectory); };
+    }, [user?.id, user?.role]);
 
     useEffect(() => {
         if (!['super_admin', 'records_officer'].includes(user?.role)) return;
@@ -401,6 +448,7 @@ const RecordsModule = () => {
                 <p className="mt-1 text-sm text-slate-500">Patient information operations and physical file circulation. Counts are aggregated from records you are authorized to access.</p>
             </div>
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
+            {patientDirectoryError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{patientDirectoryError}</div>}
             {['super_admin', 'records_officer'].includes(user?.role) && <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
                 {[
                     ['Patients', himSummary?.patients_total], ['Registered today', himSummary?.patients_registered_today], ['New this week', himSummary?.patients_registered_week], ['New this month', himSummary?.patients_registered_month], ['Active patients', himSummary?.patients_active], ['Inactive patients', himSummary?.patients_inactive],
@@ -409,7 +457,7 @@ const RecordsModule = () => {
             </div>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Medical record circulation register" subtitle="Facility scoped physical file tracking. Requests, handovers, returns, and missing-file actions are recorded in an append-only event history." action={<Button size="sm" variant="ghost" onClick={refreshRecordFiles}>Refresh</Button>}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6 items-end">
-                    <Select label="Patient" value={fileRequest.patientId} onChange={(event) => setFileRequest((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.medicalRecordNumber || patient.patientNumber || patient.id.slice(0, 8)}` }))]} />
+                    <Select label="Patient" value={fileRequest.patientId} disabled={patientDirectoryLoading || Boolean(patientDirectoryError)} onChange={(event) => setFileRequest((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: patientDirectoryLoading ? 'Loading hospital patients…' : patientDirectoryError ? 'Patient list unavailable' : patients.length ? `Select from ${patients.length.toLocaleString()} patients…` : 'No patients available' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.medicalRecordNumber || patient.patientNumber || patient.id.slice(0, 8)}` }))]} />
                     <Input label="Requesting department" value={fileRequest.requestingDepartment} onChange={(event) => setFileRequest((current) => ({ ...current, requestingDepartment: event.target.value }))} />
                     <Input label="Destination department" value={fileRequest.destinationDepartment} onChange={(event) => setFileRequest((current) => ({ ...current, destinationDepartment: event.target.value }))} />
                     <Input label="Receiving officer" value={fileRequest.receiverName} onChange={(event) => setFileRequest((current) => ({ ...current, receiverName: event.target.value }))} />

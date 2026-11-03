@@ -212,6 +212,8 @@ assert.equal(himMigration, himRecords, 'HIM records migration must be present in
 assert.match(himRollback, /export medical_record_files, medical_record_movements,/, 'HIM rollback must require exporting operational tracking history.');
 assert.match(records, /get_him_dashboard_summary[\s\S]*?request_medical_record_file[\s\S]*?transition_medical_record_movement/, 'HIM dashboard and file actions must call the persisted backend contracts.');
 assert.match(records, /Movement history/, 'The HIM user interface must expose stored file movement history.');
+assert.match(records, /from\('patients'\)[\s\S]*?\.range\(offset, offset \+ pageSize - 1\)/, 'The HIM patient dropdown must page through the authorized patient directory instead of relying on the shared one-page cache.');
+assert.match(records, /Select label="Patient" value=\{fileRequest\.patientId\}[\s\S]*?patients\.map\(\(patient\)/, 'The physical file patient selector must list records fetched for the HIM directory.');
 assert.match(app, /mobileOpen=\{sidebarOpen\}/, 'The mobile navigation drawer must be controlled by app state.');
 assert.match(layout, /aria-expanded=\{menuOpen\}/, 'The mobile menu control must expose its expanded state.');
 assert.match(styles, /@media \(max-width: 1023px\)[\s\S]*?\.mobile-drawer\.is-open/, 'Tablet and mobile widths must use a navigable drawer.');
