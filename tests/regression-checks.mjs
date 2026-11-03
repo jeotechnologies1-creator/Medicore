@@ -75,6 +75,9 @@ assert.match(authorization, /drop policy if exists "care team upload patient doc
 assert.match(authorization, /drop policy if exists "care team delete patient documents" on storage\.objects;/, 'Storage delete policies must be replaceable when the authorization migration is rerun.');
 assert.match(diagnostics, /Overall result assessment/, 'Laboratory results must support normal, abnormal, and critical assessments.');
 assert.match(diagnostics, /Finalize Report/, 'Radiology must provide a report-entry workflow before finalization.');
+assert.match(diagnostics, /data=\{labOrders\.filter\(\(row\) => hasRecordedLabResults\(row\.results\)\)\}/, 'The laboratory Results tab must display saved results independently of the order status label.');
+assert.match(diagnostics, /emptyMessage="No laboratory results have been entered yet\./, 'An empty laboratory Results tab must explain how results appear.');
+assert.match(diagnostics, /Array\.isArray\(row\.results\.values\) \? row\.results\.values : \[\]/, 'Legacy or partial result payloads must not crash the laboratory results table.');
 assert.match(quality, /update of status, result_status, responsible_clinician_id/, 'Final lab results must queue acknowledgement when status changes.');
 assert.match(quality, /update of status, report_status, responsible_clinician_id/, 'Final radiology reports must queue acknowledgement when status changes.');
 assert.match(system, /resourceType: 'Bundle', type: 'collection'/, 'Patient export must use a FHIR collection bundle.');

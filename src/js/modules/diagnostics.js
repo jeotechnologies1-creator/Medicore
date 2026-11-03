@@ -208,6 +208,11 @@
             const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
             const [resultForm, setResultForm] = useState({ comments: '', severity: 'normal', values: {} });
+            const hasRecordedLabResults = (results) => {
+                if (typeof results === 'string') return results.trim().length > 0;
+                if (Array.isArray(results)) return results.length > 0;
+                return Boolean(results && typeof results === 'object' && Object.keys(results).length > 0);
+            };
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -371,11 +376,15 @@
                                     { key: 'resultStatus', title: 'Verification', render: (row) => <Badge variant={row.result_status === 'final' ? 'success' : 'warning'}>{row.result_status || 'pending'}</Badge> },
                                     { key: 'results', title: 'Key Findings', render: (row) => {
                                         if (!row.results) return 'N/A';
-                                        const abnormal = row.results.values.filter(v => v.flag !== 'normal');
+                                        if (typeof row.results === 'string') return row.results;
+                                        const values = Array.isArray(row.results.values) ? row.results.values : [];
+                                        if (!values.length) return row.results.comments || 'Results recorded';
+                                        const abnormal = values.filter(v => v?.flag && v.flag !== 'normal');
                                         return abnormal.length > 0 ? abnormal.length + ' abnormal values' : 'All normal';
                                     }}
                                 ]}
-                                data={labOrders.filter((row) => Boolean(row.results) && ['processing','completed','critical'].includes(row.status))}
+                                data={labOrders.filter((row) => hasRecordedLabResults(row.results))}
+                                emptyMessage="No laboratory results have been entered yet. Enter results from a lab order, then return here."
                                 actions={(row) => row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}
                             />
                         </Card>
