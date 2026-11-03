@@ -41,13 +41,22 @@ Deno.serve(async (request) => {
   }
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
   const password = typeof payload.password === 'string' ? payload.password : '';
-  const fullName = typeof payload.fullName === 'string' ? payload.fullName.trim() : '';
-  const role = typeof payload.role === 'string' ? payload.role : '';
+  const fullNameValue = payload.fullName ?? payload.full_name ?? payload.name;
+  const fullName = typeof fullNameValue === 'string' ? fullNameValue.trim() : '';
+  const roleValue = typeof payload.role === 'string' ? payload.role.trim().toLowerCase().replace(/[\s-]+/g, '_') : '';
+  const roleAliases: Record<string, string> = {
+    health_information_management_officer: 'records_officer',
+    lab_scientist: 'laboratory_scientist',
+  };
+  const role = roleAliases[roleValue] ?? roleValue;
   const department = typeof payload.department === 'string' ? payload.department.trim() : '';
   const allowedRoles = ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff'];
-  if (!email || !password || !fullName || !allowedRoles.includes(role) || password.length < 8) {
-    return Response.json({ error: 'Provide a name, email, supported role, and a password of at least 8 characters.' }, { status: 400, headers: corsHeaders });
-  }
+  const invalidFields: string[] = [];
+  if (!fullName) invalidFields.push('full name');
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) invalidFields.push('valid email');
+  if (!allowedRoles.includes(role)) invalidFields.push(`supported role (received “${role || 'empty'}”)`);
+  if (password.length < 8) invalidFields.push('password of at least 8 characters');
+  if (invalidFields.length) return Response.json({ error: `Invalid staff details: ${invalidFields.join(', ')}.` }, { status: 400, headers: corsHeaders });
 
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
