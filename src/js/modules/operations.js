@@ -652,6 +652,11 @@
             const [refundDraft, setRefundDraft] = useState({ postingId: '', amount: '', reason: '' });
             const [refundMessage, setRefundMessage] = useState('');
             const [showRefundModal, setShowRefundModal] = useState(false);
+            const [disputeCases, setDisputeCases] = useState([]);
+            const [disputeHistory, setDisputeHistory] = useState([]);
+            const [disputeAlerts, setDisputeAlerts] = useState([]);
+            const [disputeMessage, setDisputeMessage] = useState('');
+            const [disputeThreshold, setDisputeThreshold] = useState({ connectionId: '', windowDays: 30, warningCount: '', criticalCount: '', warningRate: '', criticalRate: '' });
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -674,7 +679,7 @@
             }, [activeTab]);
 
             useEffect(() => {
-                if (!['insurance', 'payments', 'memberships', 'ledger'].includes(activeTab)) return;
+                if (!['insurance', 'payments', 'memberships', 'ledger', 'disputes'].includes(activeTab)) return;
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return;
                 client.from('integration_connections').select('id,facility_id,integration_type,provider_code,status').eq('status', 'active').then(({ data, error }) => {
@@ -707,6 +712,53 @@
                     setPaymentPostings(postings.data || []); setRefundRequests(requests.data || []); setRefundMessage('');
                 }).catch((error) => setRefundMessage(error.message || 'Refund queue could not be loaded.'));
             }, [activeTab]);
+
+            useEffect(() => {
+                if (activeTab !== 'disputes') return;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setDisputeMessage('Supabase is not configured.');
+                Promise.all([
+                    client.from('payment_disputes').select('id,connection_id,transaction_id,external_dispute_id,amount,currency,reason,response_due_at,status,response_notes,created_at').order('response_due_at', { ascending: true, nullsFirst: false }),
+                    client.from('payment_dispute_alerts').select('id,connection_id,alert_level,dispute_count,settled_count,dispute_rate,message,created_at,acknowledged_at').order('created_at', { ascending: false }),
+                    client.from('payment_dispute_history').select('id,dispute_id,event_type,old_status,new_status,notes,created_at').order('created_at', { ascending: false }).limit(100)
+                ]).then(([cases, alerts, history]) => {
+                    if (cases.error || alerts.error || history.error) return setDisputeMessage(cases.error?.message || alerts.error?.message || history.error?.message || 'Dispute queue could not be loaded.');
+                    setDisputeCases(cases.data || []); setDisputeAlerts(alerts.data || []); setDisputeHistory(history.data || []); setDisputeMessage('');
+                }).catch((error) => setDisputeMessage(error.message || 'Dispute queue could not be loaded.'));
+                client.from('integration_connections').select('id,provider_code,facility_id').eq('integration_type', 'payment_gateway').then(({ data }) => {
+                    if (data?.length) setDisputeThreshold((draft) => ({ ...draft, connectionId: draft.connectionId || data[0].id }));
+                });
+            }, [activeTab]);
+
+            const saveDisputeThreshold = async () => {
+                if (!disputeThreshold.connectionId) return setDisputeMessage('Select an active payment provider connection.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('configure_payment_dispute_thresholds', {
+                    p_connection_id: disputeThreshold.connectionId, p_window_days: Number(disputeThreshold.windowDays || 30),
+                    p_warning_count: disputeThreshold.warningCount === '' ? null : Number(disputeThreshold.warningCount),
+                    p_critical_count: disputeThreshold.criticalCount === '' ? null : Number(disputeThreshold.criticalCount),
+                    p_warning_rate: disputeThreshold.warningRate === '' ? null : Number(disputeThreshold.warningRate),
+                    p_critical_rate: disputeThreshold.criticalRate === '' ? null : Number(disputeThreshold.criticalRate)
+                });
+                setDisputeMessage(error ? error.message : 'Provider alert thresholds saved.');
+            };
+
+            const updateDisputeCase = async (item, status) => {
+                const notes = window.prompt('Document the response summary or action taken.', item.response_notes || '');
+                if (notes === null) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('update_payment_dispute_response', {
+                    p_dispute_id: item.id, p_status: status, p_response_notes: notes, p_evidence_checklist: []
+                });
+                if (error) return setDisputeMessage(error.message);
+                setDisputeMessage(`Dispute ${item.external_dispute_id} moved to ${status}.`);
+                const { data } = await window.OneMedSupabase.getClient().from('payment_disputes').select('id,connection_id,transaction_id,external_dispute_id,amount,currency,reason,response_due_at,status,response_notes,created_at').order('response_due_at', { ascending: true, nullsFirst: false });
+                setDisputeCases(data || []);
+            };
+
+            const acknowledgeDisputeAlert = async (alert) => {
+                const { error } = await window.OneMedSupabase.getClient().rpc('acknowledge_payment_dispute_alert', { p_alert_id: alert.id });
+                if (error) return setDisputeMessage(error.message);
+                setDisputeAlerts((items) => items.map((item) => item.id === alert.id ? { ...item, acknowledged_at: new Date().toISOString() } : item));
+            };
 
             const requestRefund = async () => {
                 const amount = Number(refundDraft.amount || 0);
@@ -742,6 +794,7 @@
                 { id: 'insurance', label: 'Insurance Claims' }
                 ,{ id: 'memberships', label: 'Schemes & Eligibility' }
                 ,{ id: 'refunds', label: 'Refunds' }
+                ,{ id: 'disputes', label: 'Disputes & Alerts' }
                 ,{ id: 'ledger', label: 'General Ledger' }
             ];
 
@@ -981,6 +1034,38 @@
                         <Modal isOpen={showRefundModal} onClose={() => setShowRefundModal(false)} title="Request payment refund" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setShowRefundModal(false)}>Cancel</Button><Button variant="primary" onClick={requestRefund}>Submit request</Button></div>}>
                             <div className="space-y-4"><Select label="Approved payment" value={refundDraft.postingId} onChange={(event) => setRefundDraft({ ...refundDraft, postingId: event.target.value })} options={[{ value: '', label: 'Select payment' }, ...paymentPostings.map((posting) => ({ value: posting.id, label: `${invoices.find((invoice) => invoice.id === posting.billing_id)?.invoiceNumber || 'Invoice'} — ${formatCurrency(posting.amount)} — ${formatDate(posting.recorded_at)}` }))]} /><Input label="Refund amount" type="number" value={refundDraft.amount} onChange={(event) => setRefundDraft({ ...refundDraft, amount: event.target.value })} /><TextArea label="Reason" value={refundDraft.reason} onChange={(event) => setRefundDraft({ ...refundDraft, reason: event.target.value })} />{refundMessage && <p role="alert" className="text-sm text-red-700">{refundMessage}</p>}</div>
                         </Modal>
+                    </div>}
+
+                    {activeTab === 'disputes' && <div className="space-y-6">
+                        {disputeMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{disputeMessage}</p>}
+                        <Card title="Chargeback alert thresholds" subtitle="Set provider-specific warning and critical levels. Rates use disputes divided by posted transactions in the selected rolling window; these are your operational thresholds, not processor rules.">
+                            <div className="grid gap-4 md:grid-cols-3">
+                                <Select label="Payment provider" value={disputeThreshold.connectionId} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, connectionId: event.target.value })} options={[{ value: '', label: 'Select provider' }, ...integrationConnections.filter((item) => item.integration_type === 'payment_gateway').map((item) => ({ value: item.id, label: item.provider_code }))]} />
+                                <Input label="Rolling window (days)" type="number" min="1" max="90" value={disputeThreshold.windowDays} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, windowDays: event.target.value })} />
+                                <Input label="Warning count" type="number" min="1" value={disputeThreshold.warningCount} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, warningCount: event.target.value })} />
+                                <Input label="Critical count" type="number" min="1" value={disputeThreshold.criticalCount} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, criticalCount: event.target.value })} />
+                                <Input label="Warning rate (%)" type="number" min="0" max="100" step="0.01" value={disputeThreshold.warningRate} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, warningRate: event.target.value })} />
+                                <Input label="Critical rate (%)" type="number" min="0" max="100" step="0.01" value={disputeThreshold.criticalRate} onChange={(event) => setDisputeThreshold({ ...disputeThreshold, criticalRate: event.target.value })} />
+                            </div>
+                            <div className="mt-4"><Button variant="primary" onClick={saveDisputeThreshold}>Save thresholds</Button></div>
+                        </Card>
+                        <Card title="Active and recent disputes" subtitle="Record evidence gathering and submission status. Submit the response through the payment provider's portal, then mark it submitted here."><DataTable columns={[
+                            { key: 'external_dispute_id', title: 'Provider dispute' }, { key: 'amount', title: 'Amount', render: (row) => `${row.currency} ${formatCurrency(row.amount)}` },
+                            { key: 'reason', title: 'Reason' }, { key: 'response_due_at', title: 'Response due', render: (row) => row.response_due_at ? formatDateTime(row.response_due_at) : 'No provider deadline supplied' },
+                            { key: 'status', title: 'Workflow', render: (row) => <Badge variant={row.status === 'won' ? 'success' : ['lost','closed'].includes(row.status) ? 'danger' : 'warning'}>{row.status}</Badge> },
+                            { key: 'response_notes', title: 'Response notes' },
+                            { key: 'actions', title: 'Next step', render: (row) => !['won','lost','closed'].includes(row.status) ? <div className="flex flex-wrap gap-2">{(row.status === 'open' ? ['gathering_evidence'] : row.status === 'gathering_evidence' ? ['ready_to_submit'] : row.status === 'ready_to_submit' ? ['submitted'] : ['won','lost']).map((status) => <Button key={status} size="sm" variant={status === 'lost' ? 'danger' : 'primary'} onClick={() => updateDisputeCase(row,status)}>{status.replaceAll('_',' ')}</Button>)}</div> : null }
+                        ]} data={disputeCases} /></Card>
+                        <Card title="Chargeback alerts"><DataTable columns={[
+                            { key: 'alert_level', title: 'Level', render: (row) => <Badge variant={row.alert_level === 'critical' ? 'danger' : row.alert_level === 'warning' ? 'warning' : 'info'}>{row.alert_level}</Badge> },
+                            { key: 'message', title: 'Alert' }, { key: 'created_at', title: 'Raised', render: (row) => formatDateTime(row.created_at) },
+                            { key: 'acknowledged_at', title: 'Acknowledged', render: (row) => row.acknowledged_at ? formatDateTime(row.acknowledged_at) : <Button size="sm" variant="ghost" onClick={() => acknowledgeDisputeAlert(row)}>Acknowledge</Button> }
+                        ]} data={disputeAlerts} /></Card>
+                        <Card title="Dispute response history"><DataTable columns={[
+                            { key: 'dispute_id', title: 'Dispute', render: (row) => disputeCases.find((item) => item.id === row.dispute_id)?.external_dispute_id || row.dispute_id },
+                            { key: 'event_type', title: 'Event' }, { key: 'old_status', title: 'From' }, { key: 'new_status', title: 'To' },
+                            { key: 'notes', title: 'Response notes' }, { key: 'created_at', title: 'Recorded', render: (row) => formatDateTime(row.created_at) }
+                        ]} data={disputeHistory} /></Card>
                     </div>}
 
                     {activeTab === 'insurance' && (

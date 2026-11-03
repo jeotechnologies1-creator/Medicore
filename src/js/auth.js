@@ -658,6 +658,7 @@
                                 </Button>
                             </form>
                         </Card>
+                        <p className="mt-5 text-center text-sm"><a className="text-medical-700 underline" href="/refund-policy.html">Refund policy</a></p>
 
                     </div>
                 </main>
