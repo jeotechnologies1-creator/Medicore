@@ -4,6 +4,10 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const specialistAuthoring = await read('supabase/specialist_clinical_authoring.sql');
 const clinicalRetention = await read('supabase/clinical_record_retention.sql');
+const clinicalRetentionRollback = await read('supabase/rollback/20261103000026_clinical_record_retention.sql');
+const clinicalRetentionPlan = await read('docs/deployment/rollback-clinical-record-retention.md');
+const stagingGuide = await read('infra/supabase-staging/README.md');
+const stagingConfig = await read('infra/supabase-staging/supabase/config.toml');
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
@@ -148,6 +152,13 @@ assert.match(clinicalRls, /as restrictive for select/, 'Department permission mu
 assert.match(clinicalRls, /has_clinical_department_permission/, 'Clinical RLS must enforce department membership and scoped grants.');
 assert.match(clinicalRls, /'care_plan_goals','careplan.manage'/, 'Child care-plan rows must inherit patient and department scope.');
 assert.match(clinicalRetention, /as restrictive for delete to authenticated using \(false\)/, 'Authenticated clients must not hard-delete clinical records through the Data API.');
+assert.match(clinicalRetention, /set_config\('lock_timeout', '2s', true\)/, 'Clinical policy DDL must fail quickly rather than wait behind long-running transactions.');
+assert.match(clinicalRetentionRollback, /has_clinical_department_permission/, 'The prepared rollback must restore the previous department-scoped delete policy.');
+assert.match(clinicalRetentionPlan, /Status: written before migration execution/, 'The rollback plan must be documented before any migration execution.');
+assert.match(clinicalRetentionPlan, /Rollback procedure/, 'The retention migration must have a documented rollback procedure.');
+assert.match(stagingConfig, /project_id = "medicore-staging"/, 'Migration staging must use a distinct local Supabase project ID.');
+assert.match(stagingConfig, /port = 55422/, 'Migration staging must use isolated local database ports.');
+assert.match(stagingGuide, /supabase --workdir infra\/supabase-staging db reset/, 'Staging instructions must apply migrations to the isolated project first.');
 assert.match(clinicalRetention, /'encounter_workflow_events'[\s\S]*?'medication_reconciliations'[\s\S]*?'admissions'[\s\S]*?'surgeries'/, 'Clinical retention policy must cover clinical records, history, and inpatient/surgical workflows.');
 assert.equal(await read('supabase/migrations/20261103000026_clinical_record_retention.sql'), clinicalRetention, 'Clinical record retention must be present in the ordered Supabase migration chain.');
 for (const table of ['encounters', 'lab_orders', 'radiology_orders', 'prescriptions', 'vital_signs', 'consultations', 'patient_documents', 'immunizations', 'medication_administrations', 'patient_allergies', 'patient_conditions', 'medication_orders', 'care_plans', 'care_plan_goals', 'clinical_tasks', 'patient_consents', 'clinical_alerts', 'encounter_workflow_events', 'result_acknowledgements', 'medication_reconciliations', 'admissions', 'surgeries']) {

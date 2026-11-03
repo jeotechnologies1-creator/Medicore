@@ -44,6 +44,8 @@ Run the SQL files in this order in the Supabase SQL editor:
 26. `supabase/specialist_clinical_authoring.sql`
 27. `supabase/clinical_record_retention.sql`
 
+For the isolated local migration stage and the pre-migration rollback plan, see [`infra/supabase-staging/README.md`](infra/supabase-staging/README.md) and [`docs/deployment/rollback-clinical-record-retention.md`](docs/deployment/rollback-clinical-record-retention.md).
+
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
 OneMed has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.

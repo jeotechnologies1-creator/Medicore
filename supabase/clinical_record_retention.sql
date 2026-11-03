@@ -5,6 +5,11 @@
 do $$
 declare table_name text;
 begin
+  -- Fail quickly rather than queueing behind a long transaction and delaying
+  -- live clinical traffic. The entire policy replacement is one atomic block.
+  perform set_config('lock_timeout', '2s', true);
+  perform set_config('statement_timeout', '30s', true);
+
   foreach table_name in array array[
     'encounters','lab_orders','radiology_orders','prescriptions','vital_signs','consultations',
     'patient_documents','immunizations','medication_administrations','patient_allergies',

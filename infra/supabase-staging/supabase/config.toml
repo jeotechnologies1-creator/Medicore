@@ -1,0 +1,47 @@
+# Isolated local Supabase stack for migration staging. Ports differ from the
+# regular local project so both stacks can run side by side.
+project_id = "medicore-staging"
+
+[api]
+enabled = true
+port = 55421
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 55422
+shadow_port = 55420
+major_version = 17
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+enabled = false
+sql_paths = []
+
+[studio]
+enabled = true
+port = 55423
+api_url = "http://127.0.0.1:55421"
+
+[local_smtp]
+enabled = true
+port = 55424
+smtp_port = 55425
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.buckets.patient-documents]
+public = false
+file_size_limit = "10MiB"
+allowed_mime_types = ["application/pdf", "image/jpeg", "image/png"]
+
+[analytics]
+enabled = true
+port = 55427
+backend = "postgres"
