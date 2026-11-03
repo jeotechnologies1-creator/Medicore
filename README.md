@@ -43,8 +43,13 @@ Run the SQL files in this order in the Supabase SQL editor:
 25. `supabase/document_storage_scope.sql`
 26. `supabase/specialist_clinical_authoring.sql`
 27. `supabase/clinical_record_retention.sql`
+28. `supabase/migrations/20261103000027_payment_dispute_workflow.sql`
+29. `supabase/appointment_slot_integrity.sql`
+30. `supabase/patient_facility_scope.sql`
 
 For the isolated local migration stage and the pre-migration rollback plan, see [`infra/supabase-staging/README.md`](infra/supabase-staging/README.md) and [`docs/deployment/rollback-clinical-record-retention.md`](docs/deployment/rollback-clinical-record-retention.md).
+
+Before applying migration `20261103000029`, inventory existing patients with a null `home_facility_id` and assign each to its verified facility. Unassigned records remain visible only to the linked patient and Super Admin; staff cannot access them until mapped. The migration never guesses a facility. Apply its rollback only using the staging-first procedure in `supabase/rollback/20261103000029_patient_facility_scope.sql`.
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 

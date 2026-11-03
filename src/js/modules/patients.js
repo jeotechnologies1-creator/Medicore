@@ -18,6 +18,8 @@
             const [patientAccessError, setPatientAccessError] = useState('');
             const [patientAccessWarning, setPatientAccessWarning] = useState('');
             const [saving, setSaving] = useState(false);
+            const [registrationFacilities, setRegistrationFacilities] = useState([]);
+            const [registrationFacilityId, setRegistrationFacilityId] = useState('');
             const [form, setForm] = useState({
                 firstName: '',
                 lastName: '',
@@ -30,6 +32,21 @@
                 emergencyContactName: '',
                 emergencyContactPhone: ''
             });
+
+            useEffect(() => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.rpc('get_patient_registration_facilities').then(({ data, error }) => {
+                    if (error) {
+                        setPatientAccessError(`Facility choices unavailable: ${error.message}`);
+                        return;
+                    }
+                    const rows = data || [];
+                    setRegistrationFacilities(rows);
+                    const profileFacility = user?.facility_id || '';
+                    setRegistrationFacilityId(rows.some((row) => row.facility_id === profileFacility) ? profileFacility : rows.length === 1 ? rows[0].facility_id : '');
+                });
+            }, [user?.id]);
 
             useEffect(() => {
                 setPossibleDuplicates([]);
@@ -62,6 +79,7 @@
                 if (!form.gender) errors.gender = 'Gender is required.';
                 if (!form.phone.trim()) errors.phone = 'Phone number is required.';
                 if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address.';
+                if (!registrationFacilityId || !registrationFacilities.some((facility) => facility.facility_id === registrationFacilityId)) errors.facility = 'Select a facility where you have patient registration access.';
                 setFormErrors(errors);
                 if (Object.keys(errors).length) return;
 
@@ -94,6 +112,7 @@
                     emergency_contact_name: form.emergencyContactName,
                     emergency_contact_phone: form.emergencyContactPhone,
                     registration_date: new Date().toISOString().split('T')[0],
+                    home_facility_id: registrationFacilityId,
                     status: 'active',
                     allergies: 'None',
                     chronic_conditions: 'None'
@@ -1261,6 +1280,9 @@
                             </div>
                         }
                     >
+                        <Select label="Registering facility" value={registrationFacilityId} onChange={(event) => { setRegistrationFacilityId(event.target.value); setFormErrors((current) => ({ ...current, facility: '' })); }} options={[{ value: '', label: 'Select facility' }, ...registrationFacilities.map((facility) => ({ value: facility.facility_id, label: facility.facility_name }))]} />
+                        {formErrors.facility && <p role="alert" className="mt-1 text-sm text-red-700">{formErrors.facility}</p>}
+                        {!registrationFacilities.length && <p role="status" className="mt-1 text-sm text-amber-800">No facility is available for this account. Ask an administrator to configure facility membership and patient.create access.</p>}
                         {possibleDuplicates.length > 0 && (
                             <div className="col-span-2 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
                                 <h3 className="font-semibold text-amber-950">Possible existing patient record</h3>
