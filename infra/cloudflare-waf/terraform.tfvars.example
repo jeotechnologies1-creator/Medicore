@@ -1,2 +1,5 @@
 cloudflare_zone_id = "replace-with-cloudflare-zone-id"
 
+# These must be Cloudflare-proxied Supabase custom domains, not *.supabase.co.
+supabase_api_hostnames = ["api.example.org"]
+
