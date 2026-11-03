@@ -45,7 +45,7 @@ create policy "authorized read encounter workflow" on public.encounter_workflow_
   using (public.can_read_patient_record(patient_id));
 create policy "staff record encounter workflow" on public.encounter_workflow_events for insert
   with check (
-    public.has_any_role(array['super_admin','records_officer','receptionist','doctor','nurse'])
+    public.has_any_role(array['super_admin','records_officer','receptionist','doctor','nurse','specialist'])
     and actor_id = (select id from public.profiles where auth_user_id = auth.uid() limit 1)
     and exists (select 1 from public.encounters e where e.id = encounter_id and e.patient_id = patient_id)
   );
@@ -60,11 +60,11 @@ drop policy if exists "HIM register encounters" on public.encounters;
 create policy "authorized clinical read encounters" on public.encounters for select
   using (public.can_read_patient_record(patient_id));
 create policy "clinical manage encounters" on public.encounters for all
-  using (public.has_any_role(array['super_admin','doctor','nurse']))
-  with check (public.has_any_role(array['super_admin','doctor','nurse']));
+  using (public.has_any_role(array['super_admin','doctor','nurse','specialist']))
+  with check (public.has_any_role(array['super_admin','doctor','nurse','specialist']));
 create policy "HIM register encounters" on public.encounters for insert
   with check (
-    public.has_any_role(array['super_admin','records_officer','receptionist','doctor','nurse'])
+    public.has_any_role(array['super_admin','records_officer','receptionist','doctor','nurse','specialist'])
     and status = 'arrived'
     and ended_at is null
     and ((case_type <> 'bid' and death_assessment_status is null)

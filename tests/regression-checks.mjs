@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+const specialistAuthoring = await read('supabase/specialist_clinical_authoring.sql');
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
@@ -58,6 +59,10 @@ assert.match(portal, /sender_profile_id: user\.id/, 'Patient messages must carry
 assert.match(authorization, /can_manage_patient_table/, 'Clinical write permissions must be table and role specific.');
 assert.match(authorization, /when 'prescriptions' then public\.has_any_role\(array\['super_admin','doctor','specialist'\]\)/, 'Specialists must receive the scoped prescribing write permission already granted to their role.');
 assert.match(authorization, /when 'encounters' then public\.has_any_role\(array\['super_admin','doctor','nurse','specialist'\]\)/, 'Specialist encounter authoring must be enabled at the base role gate and still pass department RLS.');
+assert.match(hospitalWorkflows, /clinical manage encounters" on public\.encounters for all[\s\S]*?\['super_admin','doctor','nurse','specialist'\]/, 'Specialists with scoped grants must be allowed through the encounter workflow policy.');
+assert.match(hospitalWorkflows, /staff record encounter workflow" on public\.encounter_workflow_events for insert[\s\S]*?\['super_admin','records_officer','receptionist','doctor','nurse','specialist'\]/, 'Specialist encounter events must be insertable for authenticated actors.');
+assert.match(specialistAuthoring, /clinical manage result acknowledgements" on public\.result_acknowledgements for all[\s\S]*?\['super_admin','doctor','nurse','specialist'\]/, 'Specialists with scoped result.acknowledge grants must be able to acknowledge results.');
+assert.match(specialistAuthoring, /clinical read result acknowledgements" on public\.result_acknowledgements for select[\s\S]*?\['super_admin','doctor','nurse','specialist'\]/, 'Specialists must be able to load result acknowledgements within their assigned department.');
 assert.match(authorization, /'profiles','notifications','audit_logs','patient_messages','medication_refill_requests'/, 'Final authorization must reset every inherited sensitive-table policy.');
 assert.match(authorization, /profiles_role_allowed/, 'Profile roles must be constrained at the database layer.');
 assert.match(authorization, /billing_amounts_nonnegative/, 'Billing totals must reject negative values.');
