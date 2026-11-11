@@ -588,7 +588,8 @@
 
         const formatCurrency = (amount) => {
             const num = parseFloat(amount);
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+            if (!Number.isFinite(num)) return 'N/A';
+            return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(num);
         };
 
         const calculateAge = (dob) => {

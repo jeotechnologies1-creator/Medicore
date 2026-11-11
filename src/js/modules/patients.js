@@ -9,6 +9,7 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
             const [showRegistration, setShowRegistration] = useState(false);
+            const [editingPatient, setEditingPatient] = useState(null);
             const [activeTab, setActiveTab] = useState('overview');
             const [filterStatus, setFilterStatus] = useState('all');
             const [patients, setPatients] = useState((getLiveStore().patients || []));
@@ -147,6 +148,77 @@
                 } else {
                     notifyPersistenceFailure('register patient', error);
                 }
+                setSaving(false);
+            };
+
+            const openPatientEditor = (patient) => {
+                setEditingPatient(patient);
+                setForm({
+                    firstName: patient.firstName || '',
+                    lastName: patient.lastName || '',
+                    dateOfBirth: patient.dateOfBirth || '',
+                    gender: patient.gender || '',
+                    phone: patient.phone || '',
+                    email: patient.email || '',
+                    address: patient.address || '',
+                    bloodGroup: patient.bloodGroup || '',
+                    emergencyContactName: patient.emergencyContact?.name || patient.emergency_contact_name || '',
+                    emergencyContactPhone: patient.emergencyContact?.phone || patient.emergency_contact_phone || ''
+                });
+                setFormErrors({});
+                setShowRegistration(true);
+            };
+
+            const handleSavePatientDemographics = async () => {
+                const errors = {};
+                if (!form.firstName.trim()) errors.firstName = 'First name is required.';
+                if (!form.lastName.trim()) errors.lastName = 'Last name is required.';
+                if (!form.dateOfBirth) errors.dateOfBirth = 'Date of birth is required.';
+                else if (new Date(`${form.dateOfBirth}T00:00:00`) > new Date()) errors.dateOfBirth = 'Date of birth cannot be in the future.';
+                if (!form.gender) errors.gender = 'Gender is required.';
+                if (!form.phone.trim()) errors.phone = 'Phone number is required.';
+                if (form.email && !/^\S+@\S+\.\S+$/.test(form.email.trim())) errors.email = 'Enter a valid email address.';
+                setFormErrors(errors);
+                if (Object.keys(errors).length || !editingPatient) return;
+
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('update patient');
+                setSaving(true);
+                const patch = {
+                    first_name: form.firstName.trim(),
+                    last_name: form.lastName.trim(),
+                    date_of_birth: form.dateOfBirth,
+                    gender: form.gender,
+                    phone: form.phone.trim(),
+                    email: form.email.trim() || null,
+                    address: form.address.trim(),
+                    blood_group: form.bloodGroup || null,
+                    emergency_contact_name: form.emergencyContactName.trim(),
+                    emergency_contact_phone: form.emergencyContactPhone.trim()
+                };
+                const { data, error } = await client.from('patients').update(patch).eq('id', editingPatient.id).select().single();
+                if (error || !data) {
+                    notifyPersistenceFailure('update patient', error);
+                    setSaving(false);
+                    return;
+                }
+                const mapped = {
+                    ...editingPatient,
+                    ...data,
+                    patientNumber: data.patient_number || editingPatient.patientNumber,
+                    firstName: data.first_name,
+                    lastName: data.last_name,
+                    dateOfBirth: data.date_of_birth,
+                    bloodGroup: data.blood_group || '',
+                    emergencyContact: { name: data.emergency_contact_name || '', phone: data.emergency_contact_phone || '' }
+                };
+                const nextPatients = patients.map((patient) => patient.id === mapped.id ? mapped : patient);
+                appData.patients = nextPatients;
+                setPatients(nextPatients);
+                setSelectedPatient((current) => current?.id === mapped.id ? mapped : current);
+                setShowRegistration(false);
+                setEditingPatient(null);
+                setFormErrors({});
                 setSaving(false);
             };
 
@@ -611,10 +683,10 @@
                                     </div>
                                 </div>
                             </div>
-                            {!isAdministrativeViewer && <div className="flex gap-2">
-                                <Button variant="secondary" icon={Icons.Printer}>Print</Button>
-                                <Button variant="primary" icon={Icons.Edit}>Edit</Button>
-                            </div>}
+                            <div className="flex gap-2">
+                                <Button variant="secondary" icon={Icons.Printer} onClick={() => window.print()}>Print</Button>
+                                {['super_admin', 'doctor', 'nurse', 'receptionist', 'records_officer'].includes(user?.role) && <Button variant="primary" icon={Icons.Edit} onClick={() => openPatientEditor(patient)}>Edit demographics</Button>}
+                            </div>
                         </div>
 
                         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -1270,20 +1342,22 @@
 
                     <Modal
                         isOpen={showRegistration}
-                        onClose={() => setShowRegistration(false)}
-                        title="Register New Patient"
+                        onClose={() => { setShowRegistration(false); setEditingPatient(null); setFormErrors({}); }}
+                        title={editingPatient ? 'Edit Patient Demographics' : 'Register New Patient'}
                         size="lg"
                         footer={
                             <div className="flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => setShowRegistration(false)}>Cancel</Button>
-                                <Button variant="primary" icon={saving ? Icons.RefreshCw : Icons.Save} disabled={saving} onClick={handleRegisterPatient}>{saving ? 'Registering…' : 'Register Patient'}</Button>
+                                <Button variant="ghost" onClick={() => { setShowRegistration(false); setEditingPatient(null); setFormErrors({}); }}>Cancel</Button>
+                                <Button variant="primary" icon={saving ? Icons.RefreshCw : Icons.Save} disabled={saving} onClick={editingPatient ? handleSavePatientDemographics : handleRegisterPatient}>{saving ? 'Saving…' : editingPatient ? 'Save Demographics' : 'Register Patient'}</Button>
                             </div>
                         }
                     >
-                        <Select label="Registering facility" value={registrationFacilityId} onChange={(event) => { setRegistrationFacilityId(event.target.value); setFormErrors((current) => ({ ...current, facility: '' })); }} options={[{ value: '', label: 'Select facility' }, ...registrationFacilities.map((facility) => ({ value: facility.facility_id, label: facility.facility_name }))]} />
-                        {formErrors.facility && <p role="alert" className="mt-1 text-sm text-red-700">{formErrors.facility}</p>}
-                        {!registrationFacilities.length && <p role="status" className="mt-1 text-sm text-amber-800">No facility is available for this account. Ask an administrator to configure facility membership and patient.create access.</p>}
-                        {possibleDuplicates.length > 0 && (
+                        {!editingPatient && <>
+                            <Select label="Registering facility" value={registrationFacilityId} onChange={(event) => { setRegistrationFacilityId(event.target.value); setFormErrors((current) => ({ ...current, facility: '' })); }} options={[{ value: '', label: 'Select facility' }, ...registrationFacilities.map((facility) => ({ value: facility.facility_id, label: facility.facility_name }))]} />
+                            {formErrors.facility && <p role="alert" className="mt-1 text-sm text-red-700">{formErrors.facility}</p>}
+                            {!registrationFacilities.length && <p role="status" className="mt-1 text-sm text-amber-800">No facility is available for this account. Ask an administrator to configure facility membership and patient.create access.</p>}
+                        </>}
+                        {!editingPatient && possibleDuplicates.length > 0 && (
                             <div className="col-span-2 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
                                 <h3 className="font-semibold text-amber-950">Possible existing patient record</h3>
                                 <p className="mt-1 text-sm text-amber-900">Compare these records before creating another chart. A shared phone number or similar demographic details may be legitimate; continue only after checking the patient identity.</p>
