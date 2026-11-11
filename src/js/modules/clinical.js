@@ -43,7 +43,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Consultation Notes</h2>
                             <p className="text-slate-500 mt-1">Record patient assessments, diagnosis, and follow-up care plans</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>New Encounter</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'clinical_workflows' }))}>New Encounter</Button>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -332,7 +332,7 @@
             const [showAddItem, setShowAddItem] = useState(false);
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
-            const [itemForm, setItemForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', supplier: '', location: '' });
+            const [itemForm, setItemForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
 
             const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
 
@@ -357,6 +357,7 @@
                     unit_price: price,
                     expiry_date: itemForm.expiryDate || null,
                     batch_number: itemForm.batchNumber.trim() || null,
+                    barcode: itemForm.barcode.trim() || null,
                     supplier: itemForm.supplier.trim() || null,
                     location: itemForm.location.trim() || null,
                     status: quantity <= reorder ? 'low_stock' : 'active'
@@ -368,7 +369,7 @@
                 appData.pharmacyInventory = next;
                 persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
-                setItemForm({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', supplier: '', location: '' });
+                setItemForm({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
                 setMessage('');
                 setShowAddItem(false);
             };
@@ -422,6 +423,7 @@
                             <Input label="Unit price (NGN)" type="number" min="0" step="0.01" value={itemForm.unitPrice} onChange={(event) => setItemForm((form) => ({ ...form, unitPrice: event.target.value }))} />
                             <Input label="Expiry date" type="date" value={itemForm.expiryDate} onChange={(event) => setItemForm((form) => ({ ...form, expiryDate: event.target.value }))} />
                             <Input label="Batch / lot number" value={itemForm.batchNumber} onChange={(event) => setItemForm((form) => ({ ...form, batchNumber: event.target.value }))} />
+                            <Input label="Barcode" value={itemForm.barcode} onChange={(event) => setItemForm((form) => ({ ...form, barcode: event.target.value }))} />
                             <Input label="Supplier" value={itemForm.supplier} onChange={(event) => setItemForm((form) => ({ ...form, supplier: event.target.value }))} />
                             <Input label="Storage location" value={itemForm.location} onChange={(event) => setItemForm((form) => ({ ...form, location: event.target.value }))} className="col-span-2" />
                             {message && <p role="alert" className="col-span-2 text-sm text-red-700">{message}</p>}

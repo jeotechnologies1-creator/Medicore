@@ -160,6 +160,7 @@
             unitPrice: row.unit_price ?? row.unitPrice ?? 0,
             expiryDate: row.expiry_date || row.expiryDate,
             batchNumber: row.batch_number || row.batchNumber,
+            barcode: row.barcode || row.bar_code || '',
             supplier: row.supplier,
             location: row.location,
             status: row.status || 'active'

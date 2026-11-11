@@ -330,12 +330,13 @@
             );
         };
 
-        const SearchBar = ({ value, onChange, placeholder = 'Search...', className = '', ariaLabel = 'Search records' }) => (
+        const SearchBar = ({ value, onChange, placeholder = 'Search...', className = '', ariaLabel = 'Search records', id }) => (
             <div className={'relative ' + className}>
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                     <Icons.Search size={18} />
                 </div>
                 <input
+                    id={id}
                     type="text"
                     aria-label={ariaLabel}
                     value={value}

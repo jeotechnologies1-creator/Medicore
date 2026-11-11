@@ -283,6 +283,7 @@
         // WORKFORCE ANALYTICS MODULE
         // ==========================================
         const WorkforceModule = () => {
+            const { user } = useAuth();
             const staff = appData.users || [];
             const activeStaff = staff.filter((user) => user.status === 'active');
             const completedTasks = (appData.clinicalTasks || []).filter((task) => task.status === 'completed').length;
@@ -303,7 +304,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Workforce Analytics</h2>
                             <p className="text-slate-500 mt-1">Staffing coverage, productivity, and leave-risk monitoring</p>
                         </div>
-                        <Button variant="primary" icon={Icons.UserPlus}>Manage Roster</Button>
+                        {user?.role === 'super_admin' && <Button variant="primary" icon={Icons.UserPlus} onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'hr' }))}>Manage Roster</Button>}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -372,11 +373,14 @@
         // PHARMACY MODULE
         // ==========================================
         const PharmacyModule = ({ initialTab = 'dispensary' }) => {
+            const { user } = useAuth();
+            const canManageInventory = ['super_admin', 'pharmacist'].includes(user?.role);
             const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
             const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
             const [showAddStock, setShowAddStock] = useState(false);
-            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', supplier: '' });
+            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
+            const [stockMessage, setStockMessage] = useState('');
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -384,7 +388,8 @@
 
             const filteredDrugs = (inventory || []).filter(d => 
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (d.category || '').toLowerCase().includes(searchQuery.toLowerCase())
+                (d.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                String(d.barcode || d.bar_code || '').toLowerCase().includes(searchQuery.toLowerCase())
             );
 
             const tabs = [
@@ -407,15 +412,22 @@
             }).length;
 
             const handleAddStock = async () => {
-                if (!stockForm.name) return;
+                const quantity = Number(stockForm.stockQuantity || 0);
+                const reorder = Number(stockForm.reorderLevel || 0);
+                const price = Number(stockForm.unitPrice || 0);
+                if (!stockForm.name.trim()) return setStockMessage('Medication name is required.');
+                if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) return setStockMessage('Stock and reorder quantities must be whole numbers, and unit price cannot be negative.');
+                setStockMessage('');
                 const payload = {
-                    name: stockForm.name,
-                    genericName: stockForm.genericName,
-                    category: stockForm.category,
-                    stockQuantity: Number(stockForm.stockQuantity || 0),
-                    reorderLevel: Number(stockForm.reorderLevel || 0),
-                    unitPrice: Number(stockForm.unitPrice || 0),
+                    name: stockForm.name.trim(),
+                    genericName: stockForm.genericName.trim(),
+                    category: stockForm.category.trim(),
+                    stockQuantity: quantity,
+                    reorderLevel: reorder,
+                    unitPrice: price,
                     expiryDate: stockForm.expiryDate,
+                    batchNumber: stockForm.batchNumber,
+                    barcode: stockForm.barcode,
                     supplier: stockForm.supplier,
                     status: Number(stockForm.stockQuantity) <= Number(stockForm.reorderLevel) ? 'low_stock' : 'active'
                 };
@@ -426,15 +438,17 @@
                     name: payload.name, generic_name: payload.genericName || null, category: payload.category || null,
                     stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel,
                     unit_price: payload.unitPrice, expiry_date: payload.expiryDate || null,
+                    batch_number: payload.batchNumber.trim() || null, barcode: payload.barcode.trim() || null,
                     supplier: payload.supplier || null, status: payload.status
                 }]).select();
-                if (error || !data?.[0]) return notifyPersistenceFailure('add inventory', error);
+                if (error || !data?.[0]) return setStockMessage(error?.message || 'Inventory could not be saved.');
                 const mapped = { ...payload, id: data[0].id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
                 const next = [...inventory, mapped];
+                appData.pharmacyInventory = next;
                 persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
                 setShowAddStock(false);
-                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', supplier: '' });
+                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
             };
 
             const handleDispense = async (prescription) => {
@@ -451,6 +465,7 @@
                         : item;
                 });
 
+                appData.pharmacyInventory = nextInventory;
                 persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
                 const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
@@ -465,8 +480,8 @@
                             <p className="text-slate-500 mt-1">Medication dispensing and inventory</p>
                         </div>
                         <div className="flex gap-2">
-                            <Button variant="secondary" icon={Icons.ScanLine}>Scan Barcode</Button>
-                            <Button variant="primary" icon={Icons.Plus} onClick={() => setShowAddStock(true)}>Add Stock</Button>
+                            <Button variant="secondary" icon={Icons.ScanLine} onClick={() => document.getElementById('pharmacy-inventory-search')?.focus()}>Scan / Enter Barcode</Button>
+                            {canManageInventory && <Button variant="primary" icon={Icons.Plus} onClick={() => { setStockMessage(''); setShowAddStock(true); }}>Add Stock</Button>}
                         </div>
                     </div>
 
@@ -509,7 +524,7 @@
                                                     <p className="text-sm font-medium text-slate-900">{drug.name}</p>
                                                     <p className="text-xs text-slate-500">{drug.category} - Stock: {drug.stockQuantity}</p>
                                                 </div>
-                                                <Button variant="ghost" size="sm" icon={Icons.Plus} onClick={() => setShowAddStock(true)} />
+                                                {canManageInventory && <Button variant="ghost" size="sm" icon={Icons.Plus} aria-label="Add stock" onClick={() => { setStockMessage(''); setShowAddStock(true); }} />}
                                             </div>
                                         ))}
                                     </div>
@@ -522,9 +537,11 @@
                         <Card>
                             <div className="mb-4">
                                 <SearchBar
+                                    id="pharmacy-inventory-search"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search drugs by name or category..."
+                                    placeholder="Search drugs by name, category, or barcode..."
+                                    ariaLabel="Search drugs by name, category, or barcode"
                                 />
                             </div>
                             <DataTable
@@ -590,19 +607,19 @@
                             <div className="text-center py-12">
                                 <Icons.ShoppingCart size={48} className="mx-auto text-slate-300 mb-4" />
                                 <p className="text-slate-500">No active purchase orders</p>
-                                <Button variant="primary" icon={Icons.Plus} className="mt-4" onClick={() => setShowAddStock(true)}>Create PO</Button>
+                                <Button variant="primary" icon={Icons.Plus} className="mt-4" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'procurement' }))}>Create PO</Button>
                             </div>
                         </Card>
                     )}
 
                     <Modal
                         isOpen={showAddStock}
-                        onClose={() => setShowAddStock(false)}
+                        onClose={() => { setShowAddStock(false); setStockMessage(''); }}
                         title="Add Medical Stock"
                         size="md"
                         footer={
                             <div className="flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => setShowAddStock(false)}>Cancel</Button>
+                                <Button variant="ghost" onClick={() => { setShowAddStock(false); setStockMessage(''); }}>Cancel</Button>
                                 <Button variant="primary" icon={Icons.Save} onClick={handleAddStock}>Save Stock</Button>
                             </div>
                         }
@@ -615,7 +632,10 @@
                             <Input label="Reorder Level" type="number" value={stockForm.reorderLevel} onChange={(e) => setStockForm(prev => ({ ...prev, reorderLevel: e.target.value }))} />
                             <Input label="Unit Price" type="number" value={stockForm.unitPrice} onChange={(e) => setStockForm(prev => ({ ...prev, unitPrice: e.target.value }))} />
                             <Input label="Expiry Date" type="date" value={stockForm.expiryDate} onChange={(e) => setStockForm(prev => ({ ...prev, expiryDate: e.target.value }))} />
+                            <Input label="Batch / Lot Number" value={stockForm.batchNumber} onChange={(e) => setStockForm(prev => ({ ...prev, batchNumber: e.target.value }))} />
+                            <Input label="Barcode" value={stockForm.barcode} onChange={(e) => setStockForm(prev => ({ ...prev, barcode: e.target.value }))} />
                             <Input label="Supplier" value={stockForm.supplier} onChange={(e) => setStockForm(prev => ({ ...prev, supplier: e.target.value }))} className="col-span-2" />
+                            {stockMessage && <p role="alert" className="col-span-2 text-sm text-red-700">{stockMessage}</p>}
                         </div>
                     </Modal>
                 </div>

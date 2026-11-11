@@ -23,6 +23,7 @@
             const [checkoutMessage, setCheckoutMessage] = useState('');
             const [checkoutUrl, setCheckoutUrl] = useState('');
             const [messageError, setMessageError] = useState('');
+            const [selectedLabResult, setSelectedLabResult] = useState(null);
 
             useEffect(() => {
                 let active = true;
@@ -187,7 +188,7 @@
                                     <div className="space-y-2">
                                         <Button variant="secondary" className="w-full justify-start" icon={Icons.Calendar} onClick={() => setActiveTab('appointments')}>Book Appointment</Button>
                                         <Button variant="secondary" className="w-full justify-start" icon={Icons.MessageSquare} onClick={() => setActiveTab('messages')}>Message Doctor</Button>
-                                        <Button variant="secondary" className="w-full justify-start" icon={Icons.Download}>Download Records</Button>
+                                        <Button variant="secondary" className="w-full justify-start" icon={Icons.FileText} onClick={() => setActiveTab('lab_results')}>View Lab Results</Button>
                                         <Button variant="secondary" className="w-full justify-start" icon={Icons.CreditCard} onClick={() => setActiveTab('billing')}>Pay Bill</Button>
                                     </div>
                                 </Card>
@@ -269,9 +270,9 @@
                                         { key: 'category', title: 'Category' },
                                         { key: 'orderedDate', title: 'Date', render: (row) => formatDate(row.orderedDate) },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : 'warning'}>{row.status}</Badge> },
-                                        { key: 'results', title: 'Results', render: (row) => row.results ? <Button variant="primary" size="sm">View</Button> : 'Pending' }
+                                        { key: 'results', title: 'Results', render: (row) => row.results && ['final', 'corrected'].includes(row.result_status) ? <Button variant="primary" size="sm" onClick={() => setSelectedLabResult(row)}>View</Button> : 'Pending review' }
                                     ]}
-                                    data={appData.labOrders.filter(l => l.patientId === patient.id)}
+                                    data={appData.labOrders.filter(l => l.patientId === patient.id && ['final', 'corrected'].includes(l.result_status))}
                                 />
                             </Card>
                         )}
@@ -354,6 +355,23 @@
                             </Card>
                         )}
                     </div>
+                    <Modal isOpen={!!selectedLabResult} onClose={() => setSelectedLabResult(null)} title={`Laboratory result · ${selectedLabResult?.testType || 'Result'}`} size="md">
+                        {selectedLabResult && (() => {
+                            const results = selectedLabResult.results;
+                            const values = Array.isArray(results?.values)
+                                ? results.values
+                                : results?.values && typeof results.values === 'object'
+                                    ? Object.entries(results.values).map(([parameter, value]) => ({ parameter, value }))
+                                    : [];
+                            return <div className="space-y-4">
+                                <p className="text-sm text-slate-600">Finalized result from {formatDate(selectedLabResult.resultDate)}. Discuss the result with your care team if you have questions.</p>
+                                {typeof results === 'string' ? <pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{results}</pre> : <>
+                                    {values.length > 0 ? <DataTable columns={[{ key: 'parameter', title: 'Test' }, { key: 'value', title: 'Result' }, { key: 'unit', title: 'Unit' }, { key: 'range', title: 'Reference range' }, { key: 'flag', title: 'Flag' }]} data={values} /> : <p className="text-sm text-slate-500">No result values were supplied.</p>}
+                                    {results?.comments && <div><h3 className="text-sm font-semibold text-slate-700">Comments</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{results.comments}</p></div>}
+                                </>}
+                            </div>;
+                        })()}
+                    </Modal>
                 </div>
             );
         };

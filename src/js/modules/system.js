@@ -3,6 +3,7 @@
         // ==========================================
         const AuditModule = () => {
             const [filterSeverity, setFilterSeverity] = useState('all');
+            const [selectedAuditLog, setSelectedAuditLog] = useState(null);
 
             const filteredLogs = appData.auditLogs.filter(log =>
                 filterSeverity === 'all' || log.severity === filterSeverity
@@ -74,10 +75,6 @@
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Audit Logs</h2>
                             <p className="text-slate-500 mt-1">System activity, clinical risk monitoring, and automated compliance checks</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button variant="secondary" icon={Icons.Filter}>Filter</Button>
-                            <Button variant="secondary" icon={Icons.Download}>Export</Button>
                         </div>
                     </div>
 
@@ -192,10 +189,21 @@
                             ]}
                             data={filteredLogs}
                             actions={(row) => (
-                                <Button variant="ghost" size="sm" icon={Icons.Eye}>Details</Button>
+                                <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => setSelectedAuditLog(row)}>Details</Button>
                             )}
                         />
                     </Card>
+                    <Modal isOpen={!!selectedAuditLog} onClose={() => setSelectedAuditLog(null)} title="Audit event details" size="md">
+                        {selectedAuditLog && <dl className="grid grid-cols-2 gap-4 text-sm">
+                            <div><dt className="text-slate-500">Timestamp</dt><dd className="font-medium">{formatDateTime(selectedAuditLog.timestamp)}</dd></div>
+                            <div><dt className="text-slate-500">Severity</dt><dd className="font-medium">{selectedAuditLog.severity || 'info'}</dd></div>
+                            <div><dt className="text-slate-500">Action</dt><dd className="font-medium">{selectedAuditLog.action || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Entity type</dt><dd className="font-medium">{selectedAuditLog.entityType || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Entity ID</dt><dd className="break-all font-mono text-xs">{selectedAuditLog.entityId || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Actor profile</dt><dd className="break-all font-mono text-xs">{selectedAuditLog.userId || '—'}</dd></div>
+                            {selectedAuditLog.ipAddress && <div><dt className="text-slate-500">IP address</dt><dd className="font-mono">{selectedAuditLog.ipAddress}</dd></div>}
+                        </dl>}
+                    </Modal>
                 </div>
             );
         };
@@ -208,6 +216,7 @@
             const [exportPatientId, setExportPatientId] = useState('');
             const [exportMessage, setExportMessage] = useState('');
             const [exporting, setExporting] = useState(false);
+            const [documentMessage, setDocumentMessage] = useState('');
             const documents = appData.documents || [];
             const files = documents.map((document) => ({
                 id: document.id,
@@ -228,6 +237,15 @@
                 documents.some((item) => String(item.documentType || '').toLowerCase().includes('discharge'))
             ];
             const complianceRate = Math.round((complianceChecks.filter(Boolean).length / complianceChecks.length) * 100);
+
+            const openComplianceDocument = async (row) => {
+                const document = documents.find((item) => item.id === row.id);
+                if (!document?.fileUrl) return setDocumentMessage('This record has no stored file to open.');
+                setDocumentMessage('');
+                const { data, error } = await window.OneMedSupabase?.createDocumentUrl?.(document.fileUrl) || {};
+                if (error || !data?.signedUrl) return setDocumentMessage(error?.message || 'Unable to create a secure document link.');
+                window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+            };
 
             const automationSummary = [
                 { label: 'High-risk events', value: (appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
@@ -369,6 +387,7 @@
                         <Card title="Clinical document register"><p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Policies are not represented by a Supabase table in the current schema. The repository lists the persisted clinical documents below.</p></Card>
 
                         <Card title="Document repository">
+                            {documentMessage && <p role="alert" className="mb-3 text-sm text-red-700">{documentMessage}</p>}
                             {files.length ? (
                                 <DataTable
                                     columns={[
@@ -379,8 +398,8 @@
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant="info">{row.status}</Badge> }
                                     ]}
                                     data={files}
-                                    actions={() => (
-                                        <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                                    actions={(row) => (
+                                        <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => openComplianceDocument(row)}>View</Button>
                                     )}
                                 />
                             ) : (
@@ -396,6 +415,7 @@
         // SETTINGS MODULE
         // ==========================================
         const SettingsModule = () => {
+            const { user } = useAuth();
             const defaultSettings = {
                 facilityName: '',
                 facilityCode: '',
@@ -915,6 +935,10 @@
             };
 
             const handleAuditExport = async () => {
+                if (user?.role !== 'super_admin') {
+                    setSaveMessage('Audit log export is restricted to super administrators.');
+                    return;
+                }
                 const headers = ['timestamp', 'userId', 'action', 'entityType', 'severity', 'ipAddress'];
                 const rows = appData.auditLogs.map((log) => [
                     log.timestamp,
@@ -925,7 +949,29 @@
                     log.ipAddress
                 ]);
 
-                const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+                try {
+                    if (typeof window.OneMedSupabase?.recordComplianceExport !== 'function') throw new Error('The compliance export audit service is unavailable.');
+                    const result = await window.OneMedSupabase.recordComplianceExport('audit_csv', 'onemed-audit-export.csv', rows.length, { fileType: 'csv' });
+                    if (result?.error || !result?.data) throw result?.error || new Error('The export could not be recorded.');
+                    setExportHistory((previous) => [{
+                        id: result.data.id,
+                        exportType: result.data.export_type,
+                        fileName: result.data.file_name,
+                        recordCount: result.data.record_count,
+                        exportedAt: result.data.exported_at,
+                        metadata: result.data.metadata || {}
+                    }, ...previous]);
+                } catch (error) {
+                    setSaveMessage(`Audit export was not downloaded because it could not be recorded: ${error.message || 'audit logging failed.'}`);
+                    return;
+                }
+
+                const csvCell = (value) => {
+                    let text = String(value ?? '');
+                    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+                    return `"${text.replace(/"/g, '""')}"`;
+                };
+                const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -934,32 +980,7 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-
-                try {
-                    if (window.OneMedSupabase && typeof window.OneMedSupabase.recordComplianceExport === 'function') {
-                        const result = await window.OneMedSupabase.recordComplianceExport('audit_csv', 'onemed-audit-export.csv', rows.length, {
-                            generatedBy: 'super_admin',
-                            fileType: 'csv'
-                        });
-                        if (result && result.data) {
-                            setExportHistory(prev => [
-                                {
-                                    id: result.data.id,
-                                    exportType: result.data.export_type,
-                                    fileName: result.data.file_name,
-                                    recordCount: result.data.record_count,
-                                    exportedAt: result.data.exported_at,
-                                    metadata: result.data.metadata || {}
-                                },
-                                ...prev
-                            ]);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Compliance export history not persisted:', e);
-                }
-
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
                 setSaveMessage('Audit log export downloaded successfully.');
             };
 
@@ -1169,8 +1190,9 @@
                                     <ToggleRow label="Monitoring and compliance checks" checked={settings.complianceMonitoring} onChange={(value) => updateSetting('complianceMonitoring', value)} />
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button variant="secondary" onClick={handleAuditExport}>Export Audit CSV</Button>
-                                    <Button variant="primary">Archive Now</Button>
+                                    {user?.role === 'super_admin' && <Button variant="secondary" onClick={handleAuditExport}>Export Audit CSV</Button>}
+                                    <Button variant="primary" disabled title="No archive job is configured. Saving these settings does not archive records.">Archive Now</Button>
+                                    <p className="text-xs text-amber-700">Archiving is unavailable until a server-side retention job is configured; the values above only store policy settings.</p>
                                 </div>
                             </div>
                         </Card>

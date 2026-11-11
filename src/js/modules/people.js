@@ -360,7 +360,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Medical Offices</h2>
                             <p className="text-slate-500 mt-1">Clinic network, specialty hubs, and office-level operational performance</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>New Office</Button>
+                        <Button variant="primary" icon={Icons.Plus} onClick={() => document.getElementById('medical-office-setup')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>New Office</Button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -371,7 +371,7 @@
                     </div>
 
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                        <Card title="Office Setup" className="xl:col-span-2">
+                        <div id="medical-office-setup" className="xl:col-span-2"><Card title="Office Setup">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 <Input label="Office Name" value={officeForm.name} onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })} />
                                 <Select label="Office Type" value={officeForm.officeType} onChange={(e) => setOfficeForm({ ...officeForm, officeType: e.target.value })} options={[{ value: 'Clinic', label: 'Clinic' }, { value: 'Department', label: 'Department' }, { value: 'Specialty Center', label: 'Specialty Center' }, { value: 'Emergency Unit', label: 'Emergency Unit' }]} />
@@ -389,7 +389,7 @@
                                     </Button>
                                 </div>
                             </div>
-                        </Card>
+                        </Card></div>
 
                         <Card title="Live Service Load">
                             <div className="space-y-4">
@@ -452,6 +452,8 @@
         };
 
         const DoctorsModule = () => {
+            const { user } = useAuth();
+            const [selectedClinician, setSelectedClinician] = useState(null);
             const doctors = (appData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
             const activeDoctors = doctors.filter(doc => doc.status === 'active');
             const specialties = new Set(activeDoctors.map(doc => doc.department || 'General')).size;
@@ -465,7 +467,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Doctors & Clinical Staff</h2>
                             <p className="text-slate-500 mt-1">Manage physician rosters, specialties, and availability</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>Add Clinician</Button>
+                        {user?.role === 'super_admin' && <Button variant="primary" icon={Icons.Plus} onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'hr' }))}>Add Clinician</Button>}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -490,11 +492,20 @@
                                 { key: 'lastLogin', title: 'Last Login' }
                             ]}
                             data={doctors}
-                            actions={() => (
-                                <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                            actions={(row) => (
+                                <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => setSelectedClinician(row)}>View</Button>
                             )}
                         />
                     </Card>
+                    <Modal isOpen={!!selectedClinician} onClose={() => setSelectedClinician(null)} title="Clinician details" size="sm">
+                        {selectedClinician && <dl className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="col-span-2"><dt className="text-slate-500">Name</dt><dd className="font-medium text-slate-900">{selectedClinician.name || selectedClinician.fullName || 'Unknown'}</dd></div>
+                            <div><dt className="text-slate-500">Role</dt><dd className="font-medium text-slate-900">{selectedClinician.role || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Department</dt><dd className="font-medium text-slate-900">{selectedClinician.department || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Status</dt><dd className="font-medium text-slate-900">{selectedClinician.status || '—'}</dd></div>
+                            <div><dt className="text-slate-500">Last login</dt><dd className="font-medium text-slate-900">{selectedClinician.lastLogin || 'Not available'}</dd></div>
+                        </dl>}
+                    </Modal>
                 </div>
             );
         };

@@ -204,6 +204,7 @@
             const [activeTab, setActiveTab] = useState(initialTab);
             const [selectedOrder, setSelectedOrder] = useState(null);
             const [showResultEntry, setShowResultEntry] = useState(false);
+            const [showResultDetails, setShowResultDetails] = useState(false);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
@@ -356,7 +357,7 @@
                                         {!['completed', 'critical'].includes(row.status) && (
                                             <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', severity: 'normal', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
                                         )}
-                                        <Button variant="ghost" size="sm" icon={Icons.Eye}>View</Button>
+                                        <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>
                                     </>
                                 )}
                             />
@@ -385,7 +386,7 @@
                                 ]}
                                 data={labOrders.filter((row) => hasRecordedLabResults(row.results))}
                                 emptyMessage="No laboratory results have been entered yet. Enter results from a lab order, then return here."
-                                actions={(row) => row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}
+                                actions={(row) => <div className="flex gap-2"><Button size="sm" variant="ghost" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>{row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}</div>}
                             />
                         </Card>
                     )}
@@ -435,6 +436,30 @@
                                 <TextArea label="Comments" placeholder="Additional comments..." value={resultForm.comments} onChange={(e) => setResultForm(prev => ({ ...prev, comments: e.target.value }))} />
                             </div>
                         )}
+                    </Modal>
+
+                    <Modal isOpen={showResultDetails} onClose={() => setShowResultDetails(false)} title={`Laboratory result · ${selectedOrder?.testType || 'Order'}`} size="md">
+                        {selectedOrder && (() => {
+                            const patient = (appData.patients || []).find((entry) => entry.id === selectedOrder.patientId);
+                            const results = selectedOrder.results;
+                            const values = Array.isArray(results?.values)
+                                ? results.values
+                                : results?.values && typeof results.values === 'object'
+                                    ? Object.entries(results.values).map(([parameter, value]) => ({ parameter, value }))
+                                    : [];
+                            return <div className="space-y-4">
+                                <dl className="grid grid-cols-2 gap-3 text-sm">
+                                    <div><dt className="text-slate-500">Patient</dt><dd className="font-medium">{patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown'}</dd></div>
+                                    <div><dt className="text-slate-500">Order status</dt><dd className="font-medium">{selectedOrder.status || 'Unknown'}</dd></div>
+                                    <div><dt className="text-slate-500">Result date</dt><dd className="font-medium">{formatDate(selectedOrder.resultDate)}</dd></div>
+                                    <div><dt className="text-slate-500">Verification</dt><dd className="font-medium">{selectedOrder.result_status || 'Not verified'}</dd></div>
+                                </dl>
+                                {typeof results === 'string' ? <pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{results}</pre> : <>
+                                    {values.length > 0 ? <DataTable columns={[{ key: 'parameter', title: 'Test' }, { key: 'value', title: 'Result' }, { key: 'unit', title: 'Unit' }, { key: 'range', title: 'Reference range' }, { key: 'flag', title: 'Flag' }]} data={values} /> : <p className="text-sm text-slate-500">No result values have been entered.</p>}
+                                    {results?.comments && <div><h3 className="text-sm font-semibold text-slate-700">Comments</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{results.comments}</p></div>}
+                                </>}
+                            </div>;
+                        })()}
                     </Modal>
 
                     <Modal

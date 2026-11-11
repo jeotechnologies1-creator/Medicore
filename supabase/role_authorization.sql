@@ -117,6 +117,22 @@ begin
   end loop;
 end $$;
 
+-- Patient chart access is row-scoped above, but laboratory result release is
+-- separately controlled: a patient may read only finalized or corrected
+-- results through the Data API. Requires quality_safety_upgrade.sql.
+drop policy if exists "patients read finalized lab results" on public.lab_orders;
+create policy "patients read finalized lab results" on public.lab_orders
+  as restrictive for select to authenticated using (
+    coalesce((
+      select profile.role::text
+      from public.profiles profile
+      where profile.auth_user_id = auth.uid()
+        and profile.status::text = 'active'
+      limit 1
+    ), '') <> 'patient'
+    or result_status in ('final', 'corrected')
+  );
+
 create policy "finance read billing" on public.billing for select using (public.has_any_role(array['super_admin','accountant','receptionist']) or public.can_access_patient(patient_id));
 create policy "finance manage billing" on public.billing for all using (public.has_any_role(array['super_admin','accountant','receptionist'])) with check (public.has_any_role(array['super_admin','accountant','receptionist']));
 create policy "finance manage insurance" on public.insurance_claims for all using (public.has_any_role(array['super_admin','accountant'])) with check (public.has_any_role(array['super_admin','accountant']));
