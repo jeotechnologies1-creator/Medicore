@@ -8,7 +8,7 @@
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
                 department: '',
-                date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                date: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
                 time: '',
                 reason: '',
                 visitType: ''
@@ -137,7 +137,7 @@
                 if (routingError) setAppointmentMessage('Request sent and visible in the appointment queue. The chat notification could not be added; HIM can still manage the appointment request.');
                 setAppointmentDraft({
                     department: '',
-                    date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    date: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
                     time: '',
                     reason: '',
                     visitType: ''
@@ -217,7 +217,7 @@
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Next review</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id && a.date >= new Date().toISOString().slice(0, 10)).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id && a.date >= formatFacilityDate()).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
                                         </div>
                                     </div>
                                 </Card>

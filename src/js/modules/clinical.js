@@ -326,10 +326,52 @@
         };
 
         const InventoryModule = () => {
+            const { user } = useAuth();
             const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
             const [search, setSearch] = useState('');
+            const [showAddItem, setShowAddItem] = useState(false);
+            const [saving, setSaving] = useState(false);
+            const [message, setMessage] = useState('');
+            const [itemForm, setItemForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', supplier: '', location: '' });
 
             const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
+
+            const handleAddItem = async () => {
+                const quantity = Number(itemForm.stockQuantity);
+                const reorder = Number(itemForm.reorderLevel);
+                const price = Number(itemForm.unitPrice);
+                if (!itemForm.name.trim()) return setMessage('Enter the medication name.');
+                if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) {
+                    return setMessage('Stock and reorder quantities must be whole numbers, and the unit price cannot be negative.');
+                }
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setMessage('Supabase is unavailable. No inventory item was saved.');
+                setSaving(true);
+                setMessage('');
+                const payload = {
+                    name: itemForm.name.trim(),
+                    generic_name: itemForm.genericName.trim() || null,
+                    category: itemForm.category.trim() || null,
+                    stock_quantity: quantity,
+                    reorder_level: reorder,
+                    unit_price: price,
+                    expiry_date: itemForm.expiryDate || null,
+                    batch_number: itemForm.batchNumber.trim() || null,
+                    supplier: itemForm.supplier.trim() || null,
+                    location: itemForm.location.trim() || null,
+                    status: quantity <= reorder ? 'low_stock' : 'active'
+                };
+                const { data, error } = await client.from('pharmacy_inventory').insert(payload).select().single();
+                setSaving(false);
+                if (error || !data) return setMessage(error?.message || 'Inventory item could not be saved.');
+                const next = [...inventory, normalizeInventory([data])[0]];
+                appData.pharmacyInventory = next;
+                persistStoreTable('pharmacyInventory', next);
+                setInventory(next);
+                setItemForm({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', supplier: '', location: '' });
+                setMessage('');
+                setShowAddItem(false);
+            };
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -338,7 +380,7 @@
                             <h2 className="text-2xl font-bold text-slate-900">Inventory & Stock Control</h2>
                             <p className="text-slate-500 mt-1">Monitor stock levels, expiry dates, and reorder alerts</p>
                         </div>
-                        <Button variant="primary" icon={Icons.Plus}>Add Item</Button>
+                        {['super_admin', 'pharmacist'].includes(user?.role) && <Button variant="primary" icon={Icons.Plus} onClick={() => { setMessage(''); setShowAddItem(true); }}>Add Item</Button>}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -370,6 +412,21 @@
                             data={filtered}
                         />
                     </Card>
+                    <Modal isOpen={showAddItem} onClose={() => { if (!saving) setShowAddItem(false); }} title="Add Medication to Inventory" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" disabled={saving} onClick={() => setShowAddItem(false)}>Cancel</Button><Button variant="primary" disabled={saving} icon={saving ? Icons.RefreshCw : Icons.Save} onClick={handleAddItem}>{saving ? 'Saving…' : 'Save Item'}</Button></div>}>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input label="Medication name" required value={itemForm.name} onChange={(event) => setItemForm((form) => ({ ...form, name: event.target.value }))} className="col-span-2" />
+                            <Input label="Generic name" value={itemForm.genericName} onChange={(event) => setItemForm((form) => ({ ...form, genericName: event.target.value }))} className="col-span-2" />
+                            <Input label="Category" value={itemForm.category} onChange={(event) => setItemForm((form) => ({ ...form, category: event.target.value }))} />
+                            <Input label="Opening stock" type="number" min="0" step="1" value={itemForm.stockQuantity} onChange={(event) => setItemForm((form) => ({ ...form, stockQuantity: event.target.value }))} />
+                            <Input label="Reorder level" type="number" min="0" step="1" value={itemForm.reorderLevel} onChange={(event) => setItemForm((form) => ({ ...form, reorderLevel: event.target.value }))} />
+                            <Input label="Unit price (NGN)" type="number" min="0" step="0.01" value={itemForm.unitPrice} onChange={(event) => setItemForm((form) => ({ ...form, unitPrice: event.target.value }))} />
+                            <Input label="Expiry date" type="date" value={itemForm.expiryDate} onChange={(event) => setItemForm((form) => ({ ...form, expiryDate: event.target.value }))} />
+                            <Input label="Batch / lot number" value={itemForm.batchNumber} onChange={(event) => setItemForm((form) => ({ ...form, batchNumber: event.target.value }))} />
+                            <Input label="Supplier" value={itemForm.supplier} onChange={(event) => setItemForm((form) => ({ ...form, supplier: event.target.value }))} />
+                            <Input label="Storage location" value={itemForm.location} onChange={(event) => setItemForm((form) => ({ ...form, location: event.target.value }))} className="col-span-2" />
+                            {message && <p role="alert" className="col-span-2 text-sm text-red-700">{message}</p>}
+                        </div>
+                    </Modal>
                 </div>
             );
         };
@@ -386,7 +443,7 @@
             const [bidEncounter, setBidEncounter] = useState(null);
             const [bidForm, setBidForm] = useState({ status: 'under_assessment', notes: '', disposition: '' });
             const [encounterForm, setEncounterForm] = useState({ patientId: '', encounterType: 'outpatient', caseType: 'routine', location: '', reason: '', arrivalMode: '', referralSource: '', accompanyingPerson: '', presentingEmergency: '', triagePriority: 'routine' });
-            const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: new Date().toISOString().slice(0, 10), nextDueDate: '', notes: '' });
+            const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: formatFacilityDate(), nextDueDate: '', notes: '' });
             const [administrationForm, setAdministrationForm] = useState({ patientId: '', medicationName: '', dosage: '', notes: '' });
             const patients = getLiveStore().patients || [];
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))];
@@ -426,7 +483,7 @@
                 if (error || !data?.[0]) return notifyPersistenceFailure('record immunization', error);
                 const next = [normalizeImmunizations(data)[0], ...immunizations];
                 persistStoreTable('immunizations', next); setImmunizations(next);
-                setImmunizationForm({ patientId: '', vaccine: '', administeredDate: new Date().toISOString().slice(0, 10), nextDueDate: '', notes: '' });
+                setImmunizationForm({ patientId: '', vaccine: '', administeredDate: formatFacilityDate(), nextDueDate: '', notes: '' });
             };
             const saveAdministration = async () => {
                 if (!administrationForm.patientId || !administrationForm.medicationName.trim()) return;

@@ -18,7 +18,7 @@
 
             const avgOccupancy = Math.round(filteredDepartments.reduce((sum, item) => sum + item.occupancy, 0) / Math.max(1, filteredDepartments.length));
             const totalPatients = filteredDepartments.reduce((sum, item) => sum + item.patients, 0);
-            const today = new Date().toISOString().slice(0, 10);
+            const today = formatFacilityDate();
             const operationsPulse = [
                 { label: 'Admissions today', value: (appData.admissions || []).filter(item => item.admissionDate === today).length },
                 { label: 'Discharges today', value: (appData.admissions || []).filter(item => item.dischargeDate === today).length },
@@ -823,7 +823,7 @@
                 const payload = {
                     patientId: invoiceForm.patientId,
                     invoiceNumber: invoiceForm.invoiceNumber || 'INV-' + Date.now(),
-                    date: new Date().toISOString().split('T')[0],
+                    date: formatFacilityDate(),
                     subtotal: Number(invoiceForm.total || 0),
                     discount: 0,
                     tax: 0,
@@ -1475,7 +1475,7 @@
                 if (!client) return notifyPersistenceFailure('schedule surgery');
                 const { data, error } = await client.from('surgeries').insert([{
                     patient_id: payload.patientId, surgeon_id: payload.surgeonId || null, procedure: payload.procedure,
-                    scheduled_date: payload.scheduledDate || new Date().toISOString().slice(0, 10), scheduled_time: payload.scheduledTime || null,
+                    scheduled_date: payload.scheduledDate || formatFacilityDate(), scheduled_time: payload.scheduledTime || null,
                     duration: payload.duration, status: payload.status, ot_room: payload.otRoom || null,
                     anesthesia: payload.anesthesia || null, priority: payload.priority, indication: payload.indication,
                     diagnosis: payload.diagnosis, encounter_id: payload.encounterId || null, requesting_clinician_id: user?.id || null
@@ -1516,7 +1516,7 @@
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard title="Scheduled Today" value={surgeries.filter(s => s.scheduledDate === new Date().toISOString().slice(0, 10)).length} icon={Icons.Calendar} color="medical" />
+                        <StatCard title="Scheduled Today" value={surgeries.filter(s => s.scheduledDate === formatFacilityDate()).length} icon={Icons.Calendar} color="medical" />
                         <StatCard title="In Progress" value={surgeries.filter(s => s.status === 'in-progress').length} icon={Icons.Activity} color="amber" />
                         <StatCard title="Completed" value={surgeries.filter(s => s.status === 'completed').length} icon={Icons.CheckCircle} color="emerald" />
                         <StatCard title="Emergency" value={surgeries.filter(s => s.priority === 'emergency').length} icon={Icons.AlertCircle} color="red" />

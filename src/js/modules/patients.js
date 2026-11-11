@@ -112,7 +112,7 @@
                     blood_group: form.bloodGroup,
                     emergency_contact_name: form.emergencyContactName,
                     emergency_contact_phone: form.emergencyContactPhone,
-                    registration_date: new Date().toISOString().split('T')[0],
+                    registration_date: formatFacilityDate(),
                     home_facility_id: registrationFacilityId,
                     status: 'active',
                     allergies: 'None',
@@ -135,7 +135,7 @@
                         bloodGroup: created.blood_group || created.bloodGroup,
                         emergencyContact: { name: created.emergency_contact_name || '', phone: created.emergency_contact_phone || '' },
                         insurance: { provider: created.insurance_provider || 'Not Provided', policyNumber: created.insurance_policy_number || 'N/A' },
-                        registrationDate: created.registration_date || created.registrationDate || new Date().toISOString().split('T')[0]
+                        registrationDate: created.registration_date || created.registrationDate || formatFacilityDate()
                     };
                     const nextPatients = [...patients, mapped];
                     appData.patients = nextPatients;
@@ -291,11 +291,11 @@
                     ward: '',
                     bedNumber: '',
                     diagnosis: '',
-                    admissionDate: new Date().toISOString().split('T')[0],
+                    admissionDate: formatFacilityDate(),
                     acuity: 'stable'
                 });
                 const [dischargeForm, setDischargeForm] = useState({
-                    dischargeDate: new Date().toISOString().split('T')[0],
+                    dischargeDate: formatFacilityDate(),
                     summary: '',
                     followUp: '',
                     instructions: ''
@@ -303,7 +303,7 @@
                 const [followUpForm, setFollowUpForm] = useState({
                     clinic: '',
                     provider: '',
-                    nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    nextVisitDate: formatFacilityDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
                     reason: '',
                     instructions: ''
                 });
@@ -311,14 +311,14 @@
                     department: '',
                     provider: '',
                     urgency: 'routine',
-                    transferDate: new Date().toISOString().split('T')[0],
+                    transferDate: formatFacilityDate(),
                     reason: '',
                     notes: ''
                 });
                 const [outcomeForm, setOutcomeForm] = useState({
                     status: 'recovered',
                     summary: '',
-                    outcomeDate: new Date().toISOString().split('T')[0],
+                    outcomeDate: formatFacilityDate(),
                     dischargeInstructions: ''
                 });
                 const [qualityForm, setQualityForm] = useState({
@@ -333,7 +333,7 @@
                 const [careCoordinationForm, setCareCoordinationForm] = useState({
                     careCoordinator: '',
                     dischargePlan: '',
-                    plannedDischargeDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    plannedDischargeDate: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
                     readmissionRisk: 'Low',
                     handoffNote: ''
                 });
@@ -459,7 +459,7 @@
                 const handleSaveAdmissionNote = async () => {
                     const saved = await insertClinicalRecord('admissions', {
                         patient_id: patient.id, ward: admissionForm.ward || null, bed_number: admissionForm.bedNumber || null,
-                        admission_date: admissionForm.admissionDate || new Date().toISOString().split('T')[0],
+                        admission_date: admissionForm.admissionDate || formatFacilityDate(),
                         diagnosis: admissionForm.diagnosis || null, status: 'active', acuity: admissionForm.acuity || 'stable'
                     });
                     if (!saved) return;
@@ -468,7 +468,7 @@
                         ward: '',
                         bedNumber: '',
                         diagnosis: '',
-                        admissionDate: new Date().toISOString().split('T')[0],
+                        admissionDate: formatFacilityDate(),
                         acuity: 'stable'
                     });
                 };
@@ -488,13 +488,13 @@
                     }).select();
                     if (reconciliationError || !reconciliationData?.[0]) return notifyPersistenceFailure('complete medication reconciliation before discharge', reconciliationError);
                     appData.medicationReconciliations = [normalizeMedicationReconciliations(reconciliationData)[0], ...(appData.medicationReconciliations || [])];
-                    const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || new Date().toISOString().split('T')[0], diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
+                    const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || formatFacilityDate(), diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
                     if (error || !data?.[0]) return notifyPersistenceFailure('finalize discharge', error);
                     appData.admissions = (appData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);
                     await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: 'Discharge summary', plan: [dischargeForm.summary, dischargeForm.followUp, dischargeForm.instructions].filter(Boolean).join('\n'), status: 'completed' });
 
                     setDischargeForm({
-                        dischargeDate: new Date().toISOString().split('T')[0],
+                        dischargeDate: formatFacilityDate(),
                         summary: '',
                         followUp: '',
                         instructions: ''
@@ -510,7 +510,7 @@
                     setFollowUpForm({
                         clinic: '',
                         provider: '',
-                        nextVisitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        nextVisitDate: formatFacilityDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
                         reason: '',
                         instructions: ''
                     });
@@ -526,7 +526,7 @@
                         department: '',
                         provider: '',
                         urgency: 'routine',
-                        transferDate: new Date().toISOString().split('T')[0],
+                        transferDate: formatFacilityDate(),
                         reason: '',
                         notes: ''
                     });
@@ -541,7 +541,7 @@
                     setOutcomeForm({
                         status: 'recovered',
                         summary: '',
-                        outcomeDate: new Date().toISOString().split('T')[0],
+                        outcomeDate: formatFacilityDate(),
                         dischargeInstructions: ''
                     });
                 };
@@ -570,7 +570,7 @@
                     setCareCoordinationForm({
                         careCoordinator: 'Care Team',
                         dischargePlan: '',
-                        plannedDischargeDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        plannedDischargeDate: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
                         readmissionRisk: 'Low',
                         handoffNote: ''
                     });

@@ -66,8 +66,8 @@
                 const date = new Date(now);
                 date.setDate(date.getDate() - (6 - index));
                 const label = date.toLocaleDateString(undefined, { weekday: 'short' });
-                const admissions = appData.admissions.filter((entry) => entry.admissionDate === date.toISOString().slice(0, 10)).length;
-                const discharges = appData.admissions.filter((entry) => entry.dischargeDate === date.toISOString().slice(0, 10)).length;
+                const admissions = appData.admissions.filter((entry) => entry.admissionDate === formatFacilityDate(date)).length;
+                const discharges = appData.admissions.filter((entry) => entry.dischargeDate === formatFacilityDate(date)).length;
                 return { label, admissions, discharges };
             });
             const caseMix = Object.entries(appData.patients.reduce((counts, patient) => {

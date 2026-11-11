@@ -293,6 +293,13 @@
                 let active = true;
                 const applySettings = (settings) => {
                     if (!settings || typeof settings !== 'object') return;
+                    const configuredTimezone = String(settings.timezone || 'Africa/Lagos');
+                    try {
+                        new Intl.DateTimeFormat('en', { timeZone: configuredTimezone }).format(new Date());
+                        window.OneMedFacilityTimezone = configuredTimezone;
+                    } catch (error) {
+                        window.OneMedFacilityTimezone = 'Africa/Lagos';
+                    }
                     const timeout = Number(settings.sessionTimeoutMinutes);
                     setSessionSecurity({
                         timeoutMinutes: Number.isFinite(timeout) ? Math.min(1440, Math.max(5, timeout)) : 30,

@@ -87,7 +87,7 @@
                 provider: row.insurance_provider || row.insurance?.provider || 'Not Provided',
                 policyNumber: row.insurance_policy_number || row.insurance?.policyNumber || 'N/A'
             },
-            registrationDate: row.registration_date || row.registrationDate || new Date().toISOString().split('T')[0],
+            registrationDate: row.registration_date || row.registrationDate || formatFacilityDate(),
             status: row.status || 'active',
             allergies: row.allergies || 'None',
             chronicConditions: row.chronic_conditions || row.chronicConditions || 'None'
@@ -574,6 +574,21 @@
 // ==========================================
         // UTILITY FUNCTIONS
         // ==========================================
+        const formatFacilityDate = (date = new Date()) => {
+            let parts;
+            try {
+                parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: window.OneMedFacilityTimezone || 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit'
+                }).formatToParts(date);
+            } catch (error) {
+                parts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit'
+                }).formatToParts(date);
+            }
+            const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+            return `${values.year}-${values.month}-${values.day}`;
+        };
+
         const formatDate = (dateStr) => {
             if (!dateStr) return 'N/A';
             const d = new Date(dateStr);

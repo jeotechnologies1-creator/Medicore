@@ -267,7 +267,7 @@
             const activeOffices = offices.filter((office) => office.status === 'active').length;
             const totalSpecialties = new Set(offices.map((office) => office.specialty).filter(Boolean)).size;
             const occupancyLoad = offices.length ? Math.round((offices.filter((office) => office.status === 'active').length / Math.max(1, offices.length)) * 100) : 0;
-            const today = new Date().toISOString().slice(0, 10);
+            const today = formatFacilityDate();
             const serviceLoad = [
                 { label: 'Today\'s appointments', value: (appData.appointments || []).filter((item) => item.date === today).length, color: 'medical' },
                 { label: 'Emergency appointments', value: (appData.appointments || []).filter((item) => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length, color: 'red' },

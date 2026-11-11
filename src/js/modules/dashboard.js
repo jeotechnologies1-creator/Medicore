@@ -4,7 +4,7 @@
         const DashboardModule = () => {
             const { user } = useAuth();
             
-            const today = new Date().toISOString().slice(0, 10);
+            const today = formatFacilityDate();
             const stats = {
                 totalPatients: appData.patients.length,
                 todayAppointments: appData.appointments.filter(a => a.date === today).length,
@@ -20,7 +20,7 @@
             const appointmentData = Array.from({ length: 7 }, (_, index) => {
                 const date = new Date();
                 date.setDate(date.getDate() - (6 - index));
-                const dateKey = date.toISOString().slice(0, 10);
+                const dateKey = formatFacilityDate(date);
                 return { label: date.toLocaleDateString(undefined, { weekday: 'short' }), value: appData.appointments.filter(appointment => appointment.date === dateKey).length };
             });
             const departmentCounts = appData.appointments.reduce((counts, appointment) => {

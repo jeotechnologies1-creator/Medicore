@@ -1363,7 +1363,7 @@
             const [roleGrants, setRoleGrants] = useState([]);
             const [unitForm, setUnitForm] = useState({ name: '', code: '', unitType: 'department', parentUnitId: '', facilityId: '', description: '' });
             const [positionForm, setPositionForm] = useState({ title: '', code: '', organizationUnitId: '', reportsToPositionId: '', description: '' });
-            const [membershipForm, setMembershipForm] = useState({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: new Date().toISOString().slice(0, 10), justification: '' });
+            const [membershipForm, setMembershipForm] = useState({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: formatFacilityDate(), justification: '' });
             const [facilities, setFacilities] = useState([]);
             const [busy, setBusy] = useState(false);
             const [message, setMessage] = useState('');
@@ -1417,11 +1417,11 @@
                 if (!membershipForm.profileId || !membershipForm.organizationUnitId || !membershipForm.justification.trim()) return setMessage('Staff member, department, and assignment justification are required.');
                 setBusy(true); const { error } = await client.from('staff_organization_memberships').insert({ profile_id: membershipForm.profileId, organization_unit_id: membershipForm.organizationUnitId, job_position_id: membershipForm.jobPositionId || null, membership_type: membershipForm.membershipType, starts_on: membershipForm.startsOn, justification: membershipForm.justification.trim(), assigned_by: user.id, is_primary: !memberships.some((entry) => entry.profile_id === membershipForm.profileId && entry.is_primary && entry.status === 'active') }); setBusy(false);
                 if (error) return setMessage(error.message);
-                setMembershipForm({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: new Date().toISOString().slice(0, 10), justification: '' }); setMessage('Staff assignment recorded. Application role and access were not changed.'); await refresh();
+                setMembershipForm({ profileId: '', organizationUnitId: '', jobPositionId: '', membershipType: 'staff', startsOn: formatFacilityDate(), justification: '' }); setMessage('Staff assignment recorded. Application role and access were not changed.'); await refresh();
             };
 
             const endMembership = async (membership) => {
-                const { error } = await client.from('staff_organization_memberships').update({ status: 'ended', ends_on: new Date().toISOString().slice(0, 10) }).eq('id', membership.id);
+                const { error } = await client.from('staff_organization_memberships').update({ status: 'ended', ends_on: formatFacilityDate() }).eq('id', membership.id);
                 if (error) return setMessage(error.message);
                 await refresh();
             };

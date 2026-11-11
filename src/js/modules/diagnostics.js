@@ -3,14 +3,14 @@
             const { user } = useAuth();
             const isReceptionist = user?.role === 'receptionist';
             const [view, setView] = useState('list');
-            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+            const [selectedDate, setSelectedDate] = useState(formatFacilityDate());
             const [showNewAppointment, setShowNewAppointment] = useState(false);
             const [saveError, setSaveError] = useState('');
             const [appointments, setAppointments] = useState(getLiveStore().appointments || []);
             const [appointmentForm, setAppointmentForm] = useState({
                 patientId: '',
                 doctorId: '',
-                date: new Date().toISOString().slice(0, 10),
+                date: formatFacilityDate(),
                 time: '09:00',
                 type: 'consultation',
                 department: 'general',
@@ -151,7 +151,7 @@
                                                 {Array.from({ length: 7 }, (_, i) => {
                                                     const date = new Date(selectedDate + 'T00:00:00');
                                                     date.setDate(date.getDate() - date.getDay() + 1 + i);
-                                                    const dayAppointments = appointments.filter(appointment => appointment.date === date.toISOString().slice(0, 10) && appointment.time === time);
+                                                    const dayAppointments = appointments.filter(appointment => appointment.date === formatFacilityDate(date) && appointment.time === time);
                                                     return <div key={i} className="border border-slate-100 rounded p-1 min-h-[40px] hover:bg-slate-50 transition-colors">
                                                         {dayAppointments.map(appointment => {
                                                             const patient = appData.patients.find(p => p.id === appointment.patientId);
@@ -247,7 +247,7 @@
                     category: newOrderForm.category,
                     status: 'pending',
                     priority: newOrderForm.priority,
-                    orderedDate: new Date().toISOString().split('T')[0],
+                    orderedDate: formatFacilityDate(),
                     resultDate: null,
                     results: null,
                     technicianId: null
@@ -278,7 +278,7 @@
                     ...selectedOrder,
                     status: isCritical ? 'critical' : 'processing',
                     result_status: 'preliminary',
-                    resultDate: new Date().toISOString().split('T')[0],
+                    resultDate: formatFacilityDate(),
                     results: {
                         comments: resultForm.comments.trim() || null,
                         values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: isCritical ? 'critical' : resultForm.severity }))
@@ -552,7 +552,7 @@
                     status: 'requested',
                     scheduledDate: orderForm.scheduledDate,
                     report: orderForm.report || '',
-                    orderedDate: new Date().toISOString().split('T')[0]
+                    orderedDate: formatFacilityDate()
                 };
 
                 const client = window.OneMedSupabase?.getClient?.();
