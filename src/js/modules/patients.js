@@ -13,6 +13,8 @@
             const [editingPatient, setEditingPatient] = useState(null);
             const [activeTab, setActiveTab] = useState('overview');
             const [filterStatus, setFilterStatus] = useState('all');
+            const [patientPage, setPatientPage] = useState(0);
+            const [patientCount, setPatientCount] = useState(0);
             const [patients, setPatients] = useState((getLiveStore().patients || []));
             const [formErrors, setFormErrors] = useState({});
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
@@ -55,22 +57,22 @@
                 setDuplicateAcknowledged(false);
             }, [form]);
 
-            const filteredPatients = useMemo(() => {
-                let filtered = patients || [];
-                if (searchQuery) {
-                    const q = searchQuery.toLowerCase();
-                    filtered = filtered.filter(p => 
-                        (p.firstName || '').toLowerCase().includes(q) ||
-                        (p.lastName || '').toLowerCase().includes(q) ||
-                        (p.patientNumber || '').toLowerCase().includes(q) ||
-                        (p.phone || '').includes(q)
-                    );
-                }
-                if (filterStatus !== 'all') {
-                    filtered = filtered.filter(p => p.status === filterStatus);
-                }
-                return filtered;
-            }, [patients, searchQuery, filterStatus]);
+            useEffect(() => {
+                let cancelled = false;
+                const timer = setTimeout(async () => {
+                    const result = await loadSupabaseTables('patients', {
+                        search: searchQuery, status: filterStatus === 'all' ? null : filterStatus,
+                        page: patientPage, pageSize: 50
+                    });
+                    if (cancelled) return;
+                    const rows = result?.store?.patients || [];
+                    setPatients(rows);
+                    setPatientCount(result?.counts?.patients || 0);
+                }, 250);
+                return () => { cancelled = true; clearTimeout(timer); };
+            }, [searchQuery, filterStatus, patientPage]);
+
+            const filteredPatients = patients;
 
             const handleRegisterPatient = async () => {
                 const errors = {};
@@ -1419,13 +1421,13 @@
                                     <div className="flex-1">
                                         <SearchBar
                                             value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="Search by name, ID, or phone..."
+                                            onChange={(e) => { setSearchQuery(e.target.value); setPatientPage(0); }}
+                                            placeholder="Search by name, MRN, patient ID, or phone..."
                                         />
                                     </div>
                                     <Select
                                         value={filterStatus}
-                                        onChange={(e) => setFilterStatus(e.target.value)}
+                                        onChange={(e) => { setFilterStatus(e.target.value); setPatientPage(0); }}
                                         options={[
                                             { value: 'all', label: 'All Status' },
                                             { value: 'active', label: 'Active' },
@@ -1467,6 +1469,13 @@
                                         </>
                                     ) : undefined}
                                 />
+                                <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+                                    <span>{patientCount.toLocaleString()} patients · page {patientPage + 1}</span>
+                                    <div className="flex gap-2">
+                                        <Button variant="secondary" size="sm" disabled={patientPage === 0} onClick={() => setPatientPage((page) => Math.max(0, page - 1))}>Previous</Button>
+                                        <Button variant="secondary" size="sm" disabled={(patientPage + 1) * 50 >= patientCount} onClick={() => setPatientPage((page) => page + 1)}>Next</Button>
+                                    </div>
+                                </div>
                             </Card>
                         </div>
                     )}

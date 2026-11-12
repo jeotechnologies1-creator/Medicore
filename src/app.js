@@ -97,6 +97,7 @@
                         appData.notifications = next;
                         setNotifications(next);
                     })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'clinical_alerts' }, () => window.dispatchEvent(new CustomEvent('onemed:refresh-data', { detail: 'clinical_safety' })))
                     .subscribe();
                 return () => { client.removeChannel(channel); };
             }, [isAuthenticated, user?.id]);
@@ -113,45 +114,30 @@
 
             useEffect(() => {
                 if (!isAuthenticated) return undefined;
-
                 let cancelled = false;
-                const loadInitialData = async () => {
-                    setDataLoad({ loading: true, failures: [] });
+                const loadScreenData = async (moduleId = activeModule) => {
+                    setDataLoad((current) => ({ ...current, loading: true }));
                     try {
-                        const result = await loadSupabaseTables();
-                        if (!cancelled && result) {
-                            setNotifications((appData.notifications || []).slice(0));
-                            setDataLoad({ loading: false, failures: result.failures || [] });
-                            setDataVersion((value) => value + 1);
+                        const [result, notificationResult] = await Promise.all([
+                            loadSupabaseTables(moduleId),
+                            window.OneMedSupabase?.getClient?.()?.from('notifications').select('*').order('created_at', { ascending: false }).range(0, 49)
+                        ]);
+                        if (cancelled) return;
+                        if (notificationResult?.data) {
+                            appData.notifications = normalizeNotifications(notificationResult.data);
+                            setNotifications(appData.notifications.slice());
                         }
+                        setDataLoad({ loading: false, failures: result?.failures || [] });
+                        setDataVersion((value) => value + 1);
                     } catch (error) {
-                        if (!cancelled) {
-                            setDataLoad({
-                                loading: false,
-                                failures: [{ table: 'connection', message: error?.message || 'The authorized records could not be loaded.' }]
-                            });
-                        }
+                        if (!cancelled) setDataLoad({ loading: false, failures: [{ table: 'connection', message: error?.message || 'The authorized records could not be loaded.' }] });
                     }
                 };
-
-                // Load once after a successful sign-in. Do not poll or reload the
-                // screen in the background: subsequent remote data loads happen
-                // only when the user performs a normal browser refresh.
-                loadInitialData();
-                return () => {
-                    cancelled = true;
-                };
-            }, [isAuthenticated]);
-
-            useEffect(() => {
-                const refresh = async () => {
-                    const result = await loadSupabaseTables();
-                    setDataLoad({ loading: false, failures: result?.failures || [] });
-                    setDataVersion((value) => value + 1);
-                };
+                loadScreenData(activeModule);
+                const refresh = (event) => loadScreenData(event.detail || activeModule);
                 window.addEventListener('onemed:refresh-data', refresh);
-                return () => window.removeEventListener('onemed:refresh-data', refresh);
-            }, []);
+                return () => { cancelled = true; window.removeEventListener('onemed:refresh-data', refresh); };
+            }, [isAuthenticated, activeModule]);
 
             const handleLogin = () => setIsAuthenticated(true);
 

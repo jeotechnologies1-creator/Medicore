@@ -510,89 +510,124 @@
             window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: module }));
         };
 
-        // Supabase/PostgREST applies a server-side row cap to each request. Page
-        // through each registry so the browser does not silently treat the
-        // first page as the complete clinical dataset.
-        const loadAllTableRows = async (client, table, pageSize = 500) => {
-            const rows = [];
-            for (let offset = 0; ; offset += pageSize) {
-                const { data, error } = await client.from(table).select('*').order('id').range(offset, offset + pageSize - 1);
-                if (error) return { data: null, error };
-                const page = data || [];
-                rows.push(...page);
-                if (page.length < pageSize) return { data: rows, error: null };
-            }
+        const moduleTableLoaders = {
+            dashboard: ['patients', 'appointments', 'lab_orders', 'admissions', 'billing', 'profiles', 'wards', 'vital_signs', 'medication_orders', 'clinical_alerts', 'patient_documents', 'clinical_tasks', 'pharmacy_inventory', 'audit_logs'],
+            patients: ['patients'], patient: ['patients'], records: ['patients'],
+            people: ['profiles', 'medical_offices', 'office_staff', 'appointments', 'lab_orders', 'admissions'], hr: ['profiles'], staff: ['profiles'],
+            appointments: ['appointments', 'patients', 'profiles'], consultations: ['consultations', 'patients', 'profiles', 'encounters'],
+            laboratory: ['lab_orders', 'patients', 'profiles', 'result_acknowledgements'], radiology: ['radiology_orders', 'patients', 'profiles'],
+            pharmacy: ['prescriptions', 'pharmacy_inventory', 'patients', 'profiles'], billing: ['billing', 'payment_submissions', 'patients'], payments: ['billing', 'payment_submissions', 'patients'],
+            admissions: ['admissions', 'wards', 'beds', 'patients', 'profiles'], surgeries: ['surgeries', 'patients', 'profiles'], clinical_safety: ['clinical_alerts', 'vital_signs', 'patients', 'profiles'],
+            vitals: ['vital_signs', 'patients', 'profiles'], medications: ['prescriptions', 'medication_orders', 'medication_administrations', 'patients'],
+            documents: ['patient_documents', 'patients'], upload: ['patient_documents', 'patients'], audit: ['audit_logs', 'profiles'], reports: ['patients', 'appointments', 'lab_orders', 'billing'],
+            offices: ['medical_offices', 'office_staff', 'profiles'], organization: ['profiles'], settings: ['profiles'], portal: [], messages: [], lab_results: [],
+            immunizations: ['immunizations', 'patients'], results: ['lab_orders', 'patients'], ward: ['admissions', 'wards', 'beds', 'patients']
         };
-
-        const loadSupabaseTables = async () => {
+        const tableLoaders = {
+            profiles: { appTable: 'users', mapper: normalizeUsers, order: 'full_name', select: 'id,email,full_name,role,department,status,created_at,patient_id,facility_id' },
+            patients: { appTable: 'patients', mapper: normalizePatients, order: 'created_at', descending: true },
+            appointments: { appTable: 'appointments', mapper: normalizeAppointments, order: 'appointment_date', descending: true },
+            lab_orders: { appTable: 'labOrders', mapper: normalizeLabOrders, order: 'ordered_date', descending: true },
+            radiology_orders: { appTable: 'radiologyOrders', mapper: normalizeRadiologyOrders, order: 'ordered_date', descending: true },
+            prescriptions: { appTable: 'prescriptions', mapper: normalizePrescriptions, order: 'prescription_date', descending: true },
+            pharmacy_inventory: { appTable: 'pharmacyInventory', mapper: normalizeInventory, order: 'name' },
+            billing: { appTable: 'billing', mapper: normalizeBilling, order: 'created_at', descending: true },
+            payment_submissions: { appTable: 'paymentSubmissions', mapper: normalizePaymentSubmissions, order: 'created_at', descending: true },
+            admissions: { appTable: 'admissions', mapper: normalizeAdmissions, order: 'created_at', descending: true },
+            surgeries: { appTable: 'surgeries', mapper: normalizeSurgeries, order: 'created_at', descending: true },
+            encounters: { appTable: 'encounters', mapper: normalizeEncounters, order: 'created_at', descending: true },
+            audit_logs: { appTable: 'auditLogs', mapper: normalizeAuditLogs, order: 'created_at', descending: true },
+            vital_signs: { appTable: 'vitals', mapper: normalizeVitals, order: 'recorded_at', descending: true },
+            medication_administrations: { appTable: 'medicationAdministrations', mapper: normalizeMedicationAdministrations, order: 'administered_at', descending: true },
+            consultations: { appTable: 'consultations', mapper: normalizeConsultations, order: 'created_at', descending: true },
+            patient_documents: { appTable: 'documents', mapper: normalizeDocuments, order: 'created_at', descending: true },
+            immunizations: { appTable: 'immunizations', mapper: normalizeImmunizations, order: 'administered_at', descending: true },
+            patient_allergies: { appTable: 'allergies', mapper: normalizeAllergies, order: 'created_at', descending: true },
+            patient_conditions: { appTable: 'conditions', mapper: normalizeConditions, order: 'created_at', descending: true },
+            medication_orders: { appTable: 'medicationOrders', mapper: normalizeMedicationOrders, order: 'created_at', descending: true },
+            care_plans: { appTable: 'carePlans', mapper: normalizeCarePlans, order: 'created_at', descending: true },
+            clinical_tasks: { appTable: 'clinicalTasks', mapper: normalizeClinicalTasks, order: 'created_at', descending: true },
+            clinical_alerts: { appTable: 'clinicalAlerts', mapper: normalizeClinicalAlerts, order: 'created_at', descending: true },
+            wards: { appTable: 'wards', mapper: normalizeWards, order: 'name' }, beds: { appTable: 'beds', mapper: normalizeBeds, order: 'created_at', descending: true },
+            insurance_claims: { appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims, order: 'created_at', descending: true },
+            medication_refill_requests: { appTable: 'refillRequests', mapper: normalizeRefillRequests, order: 'created_at', descending: true },
+            medical_offices: { appTable: 'offices', mapper: normalizeOffices, order: 'created_at', descending: true },
+            office_staff: { appTable: 'officeStaff', mapper: normalizeOfficeStaff, order: 'created_at', descending: true },
+            result_acknowledgements: { appTable: 'resultAcknowledgements', mapper: normalizeResultAcknowledgements, order: 'created_at', descending: true },
+            medication_reconciliations: { appTable: 'medicationReconciliations', mapper: normalizeMedicationReconciliations, order: 'created_at', descending: true }
+        };
+        const moduleTables = {
+            patients: ['patients'], records: ['patients'], laboratory: ['lab_orders'], radiology: ['radiology_orders'], pharmacy: ['prescriptions','pharmacy_inventory'],
+            billing: ['billing','payment_submissions'], payments: ['payment_submissions'], admissions: ['admissions'], surgeries: ['surgeries'],
+            clinical_safety: ['clinical_alerts','vital_signs'], vitals: ['vital_signs'], consultations: ['consultations','encounters'],
+            appointments: ['appointments'], documents: ['patient_documents'], upload: ['patient_documents'], audit: ['audit_logs'], reports: ['billing','appointments','lab_orders'],
+            people: ['profiles','medical_offices','office_staff'], hr: ['profiles'], staff: ['profiles'], offices: ['medical_offices','office_staff'], organization: ['profiles'], settings: ['profiles'],
+            doctors: ['profiles','appointments','patients'], clinical_workflows: ['encounters','consultations','clinical_tasks','patients'],
+            clinical_decision_support: ['clinical_alerts','vital_signs','patients'], operations: ['admissions','surgeries','billing','payment_submissions','pharmacy_inventory','patients'],
+            procurement: ['pharmacy_inventory'], referrals: ['clinical_tasks','patients','profiles'], workforce: ['profiles','medical_offices','office_staff'],
+            inventory: ['pharmacy_inventory'], insurance: ['insurance_claims','patients'], compliance: ['audit_logs','clinical_alerts'],
+            dashboard: moduleTableLoaders.dashboard
+        };
+        const loadModuleData = async (moduleId, options = {}) => {
             const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function'
                 ? window.OneMedSupabase.getClient()
                 : null;
             if (!client) {
-                initializeEmptyStore();
                 return {
                     store: appData,
                     failures: [{ table: 'connection', message: 'Supabase is not configured or is unavailable.' }]
                 };
             }
-
-            const nextStore = { users: [], patients: [], appointments: [], labOrders: [], radiologyOrders: [], prescriptions: [], pharmacyInventory: [], billing: [], paymentSubmissions: [], admissions: [], surgeries: [], encounters: [], notifications: [], auditLogs: [], vitals: [], medicationAdministrations: [], consultations: [], documents: [], immunizations: [], allergies: [], conditions: [], medicationOrders: [], carePlans: [], clinicalTasks: [], clinicalAlerts: [], wards: [], beds: [], insuranceClaims: [], refillRequests: [], offices: [], officeStaff: [], resultAcknowledgements: [], medicationReconciliations: [] };
-            const officeLookups = [
-                { dbTable: 'profiles', appTable: 'users', mapper: normalizeUsers },
-                { dbTable: 'patients', appTable: 'patients', mapper: normalizePatients },
-                { dbTable: 'appointments', appTable: 'appointments', mapper: normalizeAppointments },
-                { dbTable: 'lab_orders', appTable: 'labOrders', mapper: normalizeLabOrders },
-                { dbTable: 'radiology_orders', appTable: 'radiologyOrders', mapper: normalizeRadiologyOrders },
-                { dbTable: 'prescriptions', appTable: 'prescriptions', mapper: normalizePrescriptions },
-                { dbTable: 'pharmacy_inventory', appTable: 'pharmacyInventory', mapper: normalizeInventory },
-                { dbTable: 'billing', appTable: 'billing', mapper: normalizeBilling },
-                { dbTable: 'payment_submissions', appTable: 'paymentSubmissions', mapper: normalizePaymentSubmissions },
-                { dbTable: 'admissions', appTable: 'admissions', mapper: normalizeAdmissions },
-                { dbTable: 'surgeries', appTable: 'surgeries', mapper: normalizeSurgeries },
-                { dbTable: 'encounters', appTable: 'encounters', mapper: normalizeEncounters },
-                { dbTable: 'notifications', appTable: 'notifications', mapper: normalizeNotifications },
-                { dbTable: 'audit_logs', appTable: 'auditLogs', mapper: normalizeAuditLogs },
-                { dbTable: 'vital_signs', appTable: 'vitals', mapper: normalizeVitals },
-                { dbTable: 'medication_administrations', appTable: 'medicationAdministrations', mapper: normalizeMedicationAdministrations },
-                { dbTable: 'consultations', appTable: 'consultations', mapper: normalizeConsultations },
-                { dbTable: 'patient_documents', appTable: 'documents', mapper: normalizeDocuments },
-                { dbTable: 'immunizations', appTable: 'immunizations', mapper: normalizeImmunizations },
-                { dbTable: 'patient_allergies', appTable: 'allergies', mapper: normalizeAllergies },
-                { dbTable: 'patient_conditions', appTable: 'conditions', mapper: normalizeConditions },
-                { dbTable: 'medication_orders', appTable: 'medicationOrders', mapper: normalizeMedicationOrders },
-                { dbTable: 'care_plans', appTable: 'carePlans', mapper: normalizeCarePlans },
-                { dbTable: 'clinical_tasks', appTable: 'clinicalTasks', mapper: normalizeClinicalTasks },
-                { dbTable: 'clinical_alerts', appTable: 'clinicalAlerts', mapper: normalizeClinicalAlerts },
-                { dbTable: 'wards', appTable: 'wards', mapper: normalizeWards },
-                { dbTable: 'beds', appTable: 'beds', mapper: normalizeBeds },
-                { dbTable: 'insurance_claims', appTable: 'insuranceClaims', mapper: normalizeInsuranceClaims },
-                { dbTable: 'medication_refill_requests', appTable: 'refillRequests', mapper: normalizeRefillRequests },
-                { dbTable: 'medical_offices', appTable: 'offices', mapper: normalizeOffices },
-                { dbTable: 'office_staff', appTable: 'officeStaff', mapper: normalizeOfficeStaff },
-                { dbTable: 'result_acknowledgements', appTable: 'resultAcknowledgements', mapper: normalizeResultAcknowledgements },
-                { dbTable: 'medication_reconciliations', appTable: 'medicationReconciliations', mapper: normalizeMedicationReconciliations }
-            ];
-            const loadedTables = await Promise.all(officeLookups.map(async (entry) => {
-                const { data, error } = await loadAllTableRows(client, entry.dbTable);
+            const tables = moduleTables[moduleId] || [];
+            const page = Math.max(0, Number(options.page) || 0);
+            const pageSize = Math.min(100, Math.max(1, Number(options.pageSize) || 50));
+            const loadedTables = await Promise.all(tables.map(async (table) => {
+                const entry = tableLoaders[table];
+                let query = client.from(table).select(entry.select || '*', { count: 'exact' });
+                if (table === 'patients' && (options.search?.trim() || options.status || options.facilityId)) {
+                    const { data, error } = await client.rpc('search_patients_page', { p_query: options.search?.trim() || '', p_status: options.status || null, p_facility_id: options.facilityId || null, p_offset: page * pageSize, p_limit: pageSize });
+                    if (error) return { appTable: entry.appTable, rows: [], failure: { table, message: error.message || 'The table could not be read.' } };
+                    return { appTable: entry.appTable, rows: entry.mapper((data || []).map((row) => row.patient)), count: Number(data?.[0]?.total_count || 0) };
+                }
+                const order = options.orderBy && /^[a-z_]+$/.test(options.orderBy) ? options.orderBy : entry.order;
+                query = query.order(order, { ascending: options.ascending ?? !entry.descending }).range(page * pageSize, page * pageSize + pageSize - 1);
+                const filters = { ...(options.filters || {}) };
+                if (options.status && table === 'patients') filters.status = options.status;
+                if (options.facilityId && table === 'patients') filters.home_facility_id = options.facilityId;
+                Object.entries(filters).forEach(([column, value]) => {
+                    if (!/^[a-z_]+$/.test(column) || value === undefined || value === null || value === '') return;
+                    if (Array.isArray(value)) query = query.in(column, value);
+                    else if (typeof value === 'object' && value.operator && ['gte','lte','gt','lt'].includes(value.operator)) query = query[value.operator](column, value.value);
+                    else query = query.eq(column, value);
+                });
+                if (options.search?.trim() && options.searchColumn && /^[a-z_]+$/.test(options.searchColumn) && table !== 'patients') {
+                    query = query.ilike(options.searchColumn, `%${options.search.trim()}%`);
+                }
+                const { data, error, count } = await query;
                 if (error) {
-                    console.error(`Failed to load ${entry.dbTable}:`, error);
+                    console.error(`Failed to load ${table}:`, error);
                     return {
                         appTable: entry.appTable,
                         rows: [],
-                        failure: { table: entry.dbTable, message: error.message || 'The table could not be read.' }
+                        failure: { table, message: error.message || 'The table could not be read.' }
                     };
                 }
-                return { appTable: entry.appTable, rows: entry.mapper(data || []) };
+                return { appTable: entry.appTable, rows: entry.mapper(data || []), count };
             }));
-            loadedTables.forEach(({ appTable, rows }) => { nextStore[appTable] = rows; });
-
-            Object.keys(appData).forEach((key) => delete appData[key]);
-            Object.assign(appData, nextStore);
+            loadedTables.forEach(({ appTable, rows }) => { appData[appTable] = rows; });
+            if (moduleId === 'dashboard') {
+                const today = formatFacilityDate();
+                const { data, error } = await client.rpc('get_screen_kpis', { p_facility_id: null, p_from: today, p_to: today });
+                if (!error && data) appData.dashboardKpis = data;
+                else if (error) loadedTables.push({ failure: { table: 'dashboard_kpis', message: error.message || 'Dashboard totals could not be loaded.' } });
+            }
             return {
-                store: nextStore,
+                store: appData,
+                counts: Object.fromEntries(loadedTables.map((entry) => [entry.appTable, entry.count || 0])),
                 failures: loadedTables.filter((entry) => entry.failure).map((entry) => entry.failure)
             };
         };
+        const loadSupabaseTables = (moduleId = 'dashboard', options = {}) => loadModuleData(moduleId, options);
 
 // ==========================================
         // UTILITY FUNCTIONS
@@ -698,4 +733,4 @@
             return colors[status] || 'bg-slate-100 text-slate-600 border-slate-200';
         };
 
-export { appData, normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, getLiveStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadAllTableRows, loadSupabaseTables, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };
+export { appData, normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, getLiveStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadSupabaseTables, loadModuleData, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };

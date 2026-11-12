@@ -5,11 +5,12 @@
             const { user } = useAuth();
             
             const today = formatFacilityDate();
+            const kpis = appData.dashboardKpis || {};
             const stats = {
-                totalPatients: appData.patients.length,
-                todayAppointments: appData.appointments.filter(a => a.date === today).length,
-                pendingLabs: appData.labOrders.filter(l => l.status === 'pending').length,
-                occupiedBeds: appData.admissions.filter(a => a.status === 'active').length,
+                totalPatients: Number(kpis.patients ?? appData.patients.length),
+                todayAppointments: Number(kpis.appointments ?? appData.appointments.filter(a => a.date === today).length),
+                pendingLabs: Number(kpis.pending_labs ?? appData.labOrders.filter(l => l.status === 'pending').length),
+                occupiedBeds: Number(kpis.active_admissions ?? appData.admissions.filter(a => a.status === 'active').length),
                 criticalPatients: appData.admissions.filter(a => a.acuity === 'critical').length,
                 pendingBills: appData.billing.filter(b => b.status === 'pending' || b.status === 'partial').length,
                 staffOnline: appData.users.filter(u => u.status === 'active').length

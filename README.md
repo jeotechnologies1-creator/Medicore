@@ -62,6 +62,8 @@ OneMed has no seed script and never persists clinical records in browser storage
 
 For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The numbered migration files are regular files and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 
+`scripts/load-test.sql` creates 100,000 synthetic patients and 2,000,000 vitals rows inside one transaction, measures indexed patient and recent-vitals list queries with `EXPLAIN ANALYZE`, then rolls everything back. Run it only on a disposable local or staging database using `psql`; never point it at production. The target is for both 50-row list queries to complete in under 1 second on a production-equivalent database class. The script generates no persistent seed data.
+
 ## Required production setup
 
 `supabase/migrations/20261026000006_clinical_safety.sql` deliberately removes the legacy `profiles.password` field. Create staff accounts in **Supabase Auth** (email/password or SSO) instead. A profile is created or linked by email on first sign-up; a super admin must then assign its `role` in `profiles`. The automatic first role is `receptionist`, never administrator.
