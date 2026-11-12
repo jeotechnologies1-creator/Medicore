@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const specialistAuthoring = await read('supabase/specialist_clinical_authoring.sql');
-const clinicalRetention = await read('supabase/clinical_record_retention.sql');
+const specialistAuthoring = await read('supabase/migrations/20261103000025_specialist_clinical_authoring.sql');
+const clinicalRetention = await read('supabase/migrations/20261103000026_clinical_record_retention.sql');
 const clinicalRetentionRollback = await read('supabase/rollback/20261103000026_clinical_record_retention.sql');
 const clinicalRetentionPlan = await read('docs/deployment/rollback-clinical-record-retention.md');
-const himRecords = await read('supabase/him_records.sql');
+const himRecords = await read('supabase/migrations/20261103000030_him_records.sql');
 const himMigration = await read('supabase/migrations/20261103000030_him_records.sql');
 const himRollback = await read('supabase/rollback/20261103000030_him_records.sql');
 const stagingGuide = await read('infra/supabase-staging/README.md');
@@ -15,43 +15,42 @@ const pendingAuthMigration = await read('supabase/migrations/20261112000033_pend
 const financialFacilityMigration = await read('supabase/migrations/20261112000034_financial_facility_scope.sql');
 const localAuthConfig = await read('supabase/config.toml');
 const pendingAuthTest = await read('supabase/tests/pending_auth_access_gate.test.sql');
-const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
+const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, roleMigration, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
     read('src/js/auth.js'),
     read('src/js/modules/portal.js'),
     read('src/supabase.js'),
-    read('supabase/schema.sql'),
+    read('supabase/migrations/20261026000001_schema.sql'),
     read('src/js/modules/diagnostics.js'),
-    read('supabase/quality_safety_upgrade.sql'),
-    read('supabase/production_hardening.sql'),
-    read('supabase/app_activation.sql'),
-    read('supabase/role_authorization.sql'),
+    read('supabase/migrations/20261026000010_quality_safety_upgrade.sql'),
+    read('supabase/migrations/20261026000008_production_hardening.sql'),
+    read('supabase/migrations/20261026000011_app_activation.sql'),
+    read('supabase/migrations/20261026000012_role_authorization.sql'),
     read('src/js/modules/system.js'),
     read('src/js/modules/patients.js'),
-    read('supabase/safe_core_multibranch.sql'),
+    read('supabase/migrations/20261026000013_safe_core_multibranch.sql'),
     read('src/js/modules/records.js'),
     read('src/js/layout.js'),
     read('src/js/modules/people.js'),
     read('supabase/functions/create-staff/index.ts'),
-    read('supabase/legacy_role_enum_compatibility.sql'),
-    read('supabase/hospital_workflows.sql'),
-    read('supabase/workflow_completion.sql'),
-    read('supabase/organization_permissions.sql'),
+    read('supabase/migrations/20261026000012_role_authorization.sql'),
+    read('supabase/migrations/20261026000017_hospital_workflows.sql'),
+    read('supabase/migrations/20261026000018_workflow_completion.sql'),
+    read('supabase/migrations/20261026000019_organization_permissions.sql'),
     read('src/js/modules/system.js'),
     read('supabase/tests/core_workflows.test.sql'),
-    read('supabase/finance_posting_refunds.sql'),
+    read('supabase/migrations/20261026000020_finance_posting_refunds.sql'),
     read('supabase/tests/core_workflows.test.sql'),
     read('src/js/modules/operations.js'),
-    read('supabase/clinical_department_rls.sql'),
     read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
-    read('supabase/atomic_pharmacy_dispensing.sql'),
+    read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
+    read('supabase/migrations/20261026000009_atomic_pharmacy_dispensing.sql'),
     read('src/styles.css'),
     read('src/js/ui.js')
 ]);
 const criticalLabMigration = await read('supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql');
-const criticalLabSource = await read('supabase/critical_lab_in_app_alerts.sql');
-assert.equal(criticalLabMigration, criticalLabSource, 'The ordered critical lab migration must stay synchronized with the source SQL.');
+assert.match(criticalLabMigration, /set local lock_timeout\s*=\s*'2s'/, 'Critical lab migration must bound lock acquisition.');
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
 assert.match(app, /persistNotificationReadState/, 'Notification read changes must be persisted.');
@@ -140,7 +139,7 @@ assert.match(staffFunction, /requesterProfile\?\.status !== 'active'/, 'Staff cr
 assert.match(staffFunction, /'records_officer'/, 'The staff provisioning endpoint must accept the Records Officer role.');
 assert.match(staffFunction, /status: 'active'/, 'New Records Officer accounts must be activated during provisioning.');
 assert.match(authorization, /role::text in \([^\n]*'records_officer'/, 'The profile role constraint must accept Records Officers.');
-assert.match(legacyRoles, /'accountant','records_officer','surgeon',[\s\S]*?'patient','unassigned'/, 'Legacy role enums must include supported staff roles and the quarantined unassigned role.');
+assert.match(roleMigration, /'accountant','records_officer',[\s\S]*?'patient','unassigned'/, 'Legacy role enums must include supported staff roles and the quarantined unassigned role.');
 assert.match(pendingAuthMigration, /'unassigned','pending'/, 'New Auth identities must be quarantined until trusted provisioning activates them.');
 assert.match(pendingAuthMigration, /as restrictive for all to authenticated/, 'Pending profiles must be denied by restrictive table policies.');
 assert.match(localAuthConfig, /enable_signup = false[\s\S]*?\[auth\.email\][\s\S]*?enable_signup = false[\s\S]*?enable_confirmations = true[\s\S]*?secure_password_change = true/, 'Local Auth must disable signup and require confirmation and secure password changes.');
@@ -208,7 +207,7 @@ assert.match(pharmacy, /has_clinical_department_permission\(prescription_row\.pa
 assert.match(financeTest, /failed multi-item dispense rolls back earlier stock changes/, 'Database tests must check atomic rollback for multi-item dispensing.');
 
 const [integrations, integrationWorker, integrationWebhook, integrationMigration, deploymentDocs, billingUi] = await Promise.all([
-    read('supabase/external_finance_integrations.sql'),
+    read('supabase/migrations/20261026000022_external_finance_integrations.sql'),
     read('supabase/functions/integration-dispatch/index.ts'),
     read('supabase/functions/integration-webhook/index.ts'),
     read('supabase/migrations/20261026000022_external_finance_integrations.sql'),
@@ -271,22 +270,22 @@ assert.match(auth, /onemed:session-expiring/, 'Configured idle sessions must war
 assert.match(auth, /onemed_last_activity_/, 'Idle activity must be coordinated across open browser tabs.');
 assert.match(patients, /canUploadPatientDocument = \['super_admin', 'doctor', 'nurse'\]/, 'Document upload controls must match database-authorized writer roles.');
 
-const documentStorageScope = await read('supabase/document_storage_scope.sql');
+const documentStorageScope = await read('supabase/migrations/20261103000024_document_storage_scope.sql');
 assert.match(documentStorageScope, /has_clinical_department_permission\(patient\.id, null, 'patient\.read', true\)/, 'Storage reads must inherit patient and department read authorization.');
 assert.match(documentStorageScope, /has_clinical_department_permission\(patient\.id, null, 'document\.manage', false\)/, 'Storage writes must require scoped document permissions.');
 assert.match(documentStorageScope, /file_size_limit, allowed_mime_types/, 'Patient documents must enforce bucket-level MIME and size limits.');
 
-const labVisibility = await read('supabase/lab_result_patient_visibility.sql');
+const labVisibility = await read('supabase/migrations/20261111000031_lab_result_patient_visibility.sql');
 const labVisibilityMigration = await read('supabase/migrations/20261111000031_lab_result_patient_visibility.sql');
 const labVisibilityRollback = await read('supabase/rollback/20261111000031_lab_result_patient_visibility.sql');
-assert.equal(labVisibilityMigration, labVisibility, 'The ordered lab visibility migration must stay synchronized with its source SQL.');
+assert.match(labVisibilityMigration, /set local lock_timeout\s*=\s*'2s'/, 'Lab visibility migration must bound lock acquisition.');
 assert.match(labVisibilityMigration, /as restrictive for select to authenticated using[\s\S]*?result_status in \('final', 'corrected'\)/, 'Patients must not read unfinalized laboratory results through the Data API.');
 assert.match(labVisibilityRollback, /drop policy if exists "patients read finalized lab results"/, 'The lab visibility migration must have a matching rollback.');
 assert.doesNotMatch(labVisibilityRollback, /delete from|truncate|drop table/i, 'Lab visibility rollback must preserve clinical result data.');
-assert.match(stagingGuide, /through `20261112000032_critical_lab_in_app_alerts\.sql`/, 'Staging instructions must include the latest critical lab alert migration.');
-assert.match(deploymentDocs, /31\. `migrations\/20261111000031_lab_result_patient_visibility\.sql`/, 'Deployment order must include the latest lab visibility migration.');
+assert.match(stagingGuide, /applies every ordered migration in `supabase\/migrations\//, 'Staging instructions must track the complete timestamped migration directory.');
+assert.match(deploymentDocs, /migrations\/20261111000031_lab_result_patient_visibility\.sql/, 'Deployment documentation must describe the lab visibility migration.');
 assert.match(deploymentDocs, /migrations\/20261111000031_lab_result_patient_visibility\.sql` limits patient reads/, 'Deployment instructions must document lab visibility rollout.');
-assert.match(deploymentDocs, /32\. `migrations\/20261112000032_critical_lab_in_app_alerts\.sql`/, 'Deployment order must include critical lab alerting.');
+assert.match(deploymentDocs, /migrations\/20261112000032_critical_lab_in_app_alerts\.sql/, 'Deployment documentation must describe critical lab alerting.');
 
 const patientPortalFunction = await read('supabase/functions/create-patient-portal/index.ts');
 assert.match(patientPortalFunction, /if \(!url \|\| !anonKey \|\| !serviceKey\)/, 'Patient portal provisioning must fail clearly when required server secrets are absent.');

@@ -12,82 +12,59 @@ The app uses ordered browser scripts (no bundler is required). `src/app.js` is n
 
 Keep the script order in `index.html`, because each file deliberately uses the shared browser scope from the files before it.
 
-## Clinical safety upgrade
+## Database migrations and staging deployment
 
-Run the SQL files in this order in the Supabase SQL editor:
+`supabase/migrations/` is the only authoritative schema-change stream. Supabase applies timestamped migrations in order; do not apply migration SQL by hand or use the hosted SQL Editor. The old SQL snapshots are retained under [`supabase/legacy/`](supabase/legacy/README.md) for reference only.
 
-1. `supabase/schema.sql`
-2. `supabase/medical_offices.sql`
-3. `supabase/office_staff.sql`
-4. `supabase/wards_beds_insurance.sql`
-5. `supabase/clinical_modules.sql`
-6. `supabase/clinical_safety.sql`
-7. `supabase/patient_portal.sql`
-8. `supabase/production_hardening.sql`
-9. `supabase/atomic_pharmacy_dispensing.sql`
-10. `supabase/quality_safety_upgrade.sql`
-11. `supabase/app_activation.sql`
-12. `supabase/legacy_role_enum_compatibility.sql` (only for legacy projects using `public.user_role`)
-13. `supabase/role_authorization.sql`
-14. `supabase/safe_core_multibranch.sql`
-15. `supabase/receptionist_records_referrals.sql`
-16. `supabase/patient_appointment_coordination.sql`
-17. `supabase/accounts_payment_approval.sql`
-18. `supabase/hospital_workflows.sql`
-19. `supabase/workflow_completion.sql`
-20. `supabase/organization_permissions.sql`
-21. `supabase/finance_posting_refunds.sql`
-22. `supabase/clinical_department_rls.sql`
-23. `supabase/external_finance_integrations.sql`
-24. `supabase/patient_portal_chat_payments.sql`
-25. `supabase/document_storage_scope.sql`
-26. `supabase/specialist_clinical_authoring.sql`
-27. `supabase/clinical_record_retention.sql`
-28. `supabase/migrations/20261103000027_payment_dispute_workflow.sql`
-29. `supabase/appointment_slot_integrity.sql`
-30. `supabase/patient_facility_scope.sql`
-31. `supabase/migrations/20261111000031_lab_result_patient_visibility.sql`
-32. `supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql`
+Link this checkout to the staging project and push the pending migrations there first:
 
-For the isolated local migration stage and the pre-migration rollback plan, see [`infra/supabase-staging/README.md`](infra/supabase-staging/README.md) and [`docs/deployment/rollback-clinical-record-retention.md`](docs/deployment/rollback-clinical-record-retention.md).
+```sh
+supabase link --project-ref "$STAGING_PROJECT_REF"
+supabase db push --remote
+supabase migration list --remote
+```
 
-Before applying migration `20261103000029`, inventory existing patients with a null `home_facility_id` and assign each to its verified facility. Unassigned records remain visible only to the linked patient and Super Admin; staff cannot access them until mapped. The migration never guesses a facility. Apply its rollback only using the staging-first procedure in `supabase/rollback/20261103000029_patient_facility_scope.sql`.
+Review the migration list and run the staging acceptance checks before promoting the same reviewed migration commit to production. For a pre-existing project, reconcile its remote migration history against the actual schema on a staging copy before pushing; do not mark migrations applied based only on their filenames. For a disposable local database, use `supabase start`, `supabase db reset`, and `npm run test:db`. Never run `supabase db reset` against a linked or hosted project.
 
-Apply migration `20261111000031` after HIM migration `20261103000030`. It limits patient Data API reads of laboratory orders to results with `result_status` `final` or `corrected`; verify patient, clinician, and laboratory access in staging before promotion. Its rollback drops only the additional restrictive policy.
+Run `node scripts/check-migrations.mjs` before committing schema changes. It checks that each migration is a regular timestamped file, has transaction-scoped lock and statement timeouts, and has a matching rollback plan.
 
-Apply migration `20261112000032` after migration 31. It sends finalized critical lab results to the assigned active clinician through the existing in-app notification feed; legacy critical results without an active clinician alert active Super Admins for assignment. It also reopens acknowledgement tracking when a final result is corrected. No SMS, email, or push delivery is configured. Verify recipient visibility and corrected-result behavior in staging.
+Before pushing migration `20261103000029` to staging, inventory existing patients with a null `home_facility_id` and assign each to its verified facility. Unassigned records remain visible only to the linked patient and Super Admin; staff cannot access them until mapped. The migration never guesses a facility. Treat its rollback file as a reviewed plan; encode any approved reversal as a new forward migration and push that migration through the staging workflow.
+
+Migration `20261111000031` follows HIM migration `20261103000030`. It limits patient Data API reads of laboratory orders to results with `result_status` `final` or `corrected`; verify patient, clinician, and laboratory access in staging before promotion. Its rollback drops only the additional restrictive policy.
+
+Migration `20261112000032` follows migration 31. It sends finalized critical lab results to the assigned active clinician through the existing in-app notification feed; legacy critical results without an active clinician alert active Super Admins for assignment. It also reopens acknowledgement tracking when a final result is corrected. No SMS, email, or push delivery is configured. Verify recipient visibility and corrected-result behavior in staging.
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
 OneMed has no seed script and never persists clinical records in browser storage. It reads from and writes to Supabase only; if Supabase is unavailable, records remain empty and clinical saves fail safely.
 
-`clinical_safety.sql` adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the workflow for maintaining allergies, problems, and care plans.
+`supabase/migrations/20261026000006_clinical_safety.sql` adds encounters, structured allergy/intolerance and problem lists, medication orders, care plans/goals, clinical tasks, consent records, persisted alerts, safety indexes, and vital-sign alerting. The **Clinical Safety** screen provides the workflow for maintaining allergies, problems, and care plans.
 
-`hospital_workflows.sql` adds emergency and Brought In Dead (BID/BOD) intake fields and an append-only encounter workflow history. HIM and reception can open an encounter at its initial arrived state; death-related cases remain pending an authorized clinical assessment. Apply it after the authorization migration.
+`supabase/migrations/20261026000017_hospital_workflows.sql` adds emergency and Brought In Dead (BID/BOD) intake fields and an append-only encounter workflow history. HIM and reception can open an encounter at its initial arrived state; death-related cases remain pending an authorized clinical assessment. The timestamped stream applies it after the authorization migration.
 
-`workflow_completion.sql` adds family cards, per-patient insurance memberships and manual eligibility history, encounter-linked diagnostic/surgical/inpatient records, and transactional bed allocation/disposition operations. Beds are allocated under a row lock to prevent simultaneous assignment. Apply this migration after `hospital_workflows.sql` and test database permissions in staging before clinical use.
+`supabase/migrations/20261026000018_workflow_completion.sql` adds family cards, per-patient insurance memberships and manual eligibility history, encounter-linked diagnostic/surgical/inpatient records, and transactional bed allocation/disposition operations. Beds are allocated under a row lock to prevent simultaneous assignment. The timestamped stream applies it after `supabase/migrations/20261026000017_hospital_workflows.sql` and test database permissions in staging before clinical use.
 
-`organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. `clinical_department_rls.sql` intersects existing clinical role policies with active facility and department membership permissions. Configure organization-unit codes or names to match department values stored on clinical records; untagged records use a staff member's primary unit, or their only active unit. Apply after `finance_posting_refunds.sql` and verify with the local RLS suite before deployment.
+`supabase/migrations/20261026000019_organization_permissions.sql` adds configurable organization units, reporting positions, effective-dated staff memberships, a permission catalog, scoped role grants, temporary individual overrides, and audit records. `supabase/migrations/20261026000021_clinical_department_rls.sql` intersects existing clinical role policies with active facility and department membership permissions. Configure organization-unit codes or names to match department values stored on clinical records; untagged records use a staff member's primary unit, or their only active unit. It follows `supabase/migrations/20261026000020_finance_posting_refunds.sql` and verify with the local RLS suite before deployment.
 
-`finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. `external_finance_integrations.sql` adds provider-neutral payer claim submission, gateway checkout, signed webhook ingestion, retryable outbox processing, remittance review, and immutable balanced general-ledger journals. `patient_portal_chat_payments.sql` adds the portal chat inbox, facility-scoped HIM appointment coordination, and patient-owned checkout requests. Configure the `integration-dispatch` and `integration-webhook` Edge Functions with server-side secrets using the contract in `supabase/DEPLOYMENT.md`. Vendor-specific sandbox mappings and credentials are required before live external connectivity; no vendor is preconfigured.
+`supabase/migrations/20261026000020_finance_posting_refunds.sql` adds idempotent payment submission, profile-correct payment posting, independent payment review, and two-person refund request/review with immutable reversal records. `supabase/migrations/20261026000022_external_finance_integrations.sql` adds provider-neutral payer claim submission, gateway checkout, signed webhook ingestion, retryable outbox processing, remittance review, and immutable balanced general-ledger journals. `supabase/migrations/20261026000023_patient_portal_chat_payments.sql` adds the portal chat inbox, facility-scoped HIM appointment coordination, and patient-owned checkout requests. Configure the `integration-dispatch` and `integration-webhook` Edge Functions with server-side secrets using the contract in `supabase/DEPLOYMENT.md`. Vendor-specific sandbox mappings and credentials are required before live external connectivity; no vendor is preconfigured.
 
-`document_storage_scope.sql` restricts private patient document objects to the patient's authorized facility/department scope and configures the bucket to accept PDF/JPEG/PNG files up to 10 MiB.
+`supabase/migrations/20261103000024_document_storage_scope.sql` restricts private patient document objects to the patient's authorized facility/department scope and configures the bucket to accept PDF/JPEG/PNG files up to 10 MiB.
 
-For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above through migration 32, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
+For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The numbered migration files are regular files and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 
 ## Required production setup
 
-`clinical_safety.sql` deliberately removes the legacy `profiles.password` field. Create staff accounts in **Supabase Auth** (email/password or SSO) instead. A profile is created or linked by email on first sign-up; a super admin must then assign its `role` in `profiles`. The automatic first role is `receptionist`, never administrator.
+`supabase/migrations/20261026000006_clinical_safety.sql` deliberately removes the legacy `profiles.password` field. Create staff accounts in **Supabase Auth** (email/password or SSO) instead. A profile is created or linked by email on first sign-up; a super admin must then assign its `role` in `profiles`. The automatic first role is `receptionist`, never administrator.
 
-`production_hardening.sql` replaces the temporary "any authenticated user" policies with staff/patient-scoped policies and creates a private document bucket. Test it using every role before entering patient data, and keep the Supabase service-role key strictly server-side.
+`supabase/migrations/20261026000008_production_hardening.sql` replaces the temporary "any authenticated user" policies with staff/patient-scoped policies and creates a private document bucket. Test it using every role before entering patient data, and keep the Supabase service-role key strictly server-side.
 
 The same migration creates server-side audit triggers for clinical and operational changes. Audit records are read-only to application users and visible only to a super administrator.
 
-`quality_safety_upgrade.sql` adds result acknowledgement records, overdue-result escalation support, medication reconciliation records, and optional terminology/barcode/lot fields. Configure a server-side scheduled job to call `escalate_overdue_results()`; it is intentionally not callable from the browser.
+`supabase/migrations/20261026000010_quality_safety_upgrade.sql` adds result acknowledgement records, overdue-result escalation support, medication reconciliation records, and optional terminology/barcode/lot fields. Configure a server-side scheduled job to call `escalate_overdue_results()`; it is intentionally not callable from the browser.
 
-`app_activation.sql` enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
+`supabase/migrations/20261026000011_app_activation.sql` enables the staff directory required by appointment and office assignment screens, makes notifications private to their recipient, prevents inactive accounts from being considered clinical staff, and adds indexes for active application queries.
 
-Apply `role_authorization.sql` after `app_activation.sql` and before the subsequent workflow migrations, as shown in the ordered list above. It resets inherited policies before applying role-specific authorization. Later workflow migrations add narrow policies and grants for their new features. It also restricts clinical authorship by record type, aligns document storage with document-write roles, and adds write-time data-integrity constraints. Validate the new `NOT VALID` constraints after resolving any legacy-data exceptions.
+The timestamped stream applies `supabase/migrations/20261026000012_role_authorization.sql` after `supabase/migrations/20261026000011_app_activation.sql` and before subsequent workflow migrations. It resets inherited policies before applying role-specific authorization. Later workflow migrations add narrow policies and grants for their new features. It also restricts clinical authorship by record type, aligns document storage with document-write roles, and adds write-time data-integrity constraints. Validate the new `NOT VALID` constraints after resolving any legacy-data exceptions.
 
 Deploy the staff and patient-portal account provisioning Edge Functions after applying the SQL migrations:
 

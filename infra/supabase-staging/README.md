@@ -17,7 +17,7 @@ supabase --workdir infra/supabase-staging db reset
 supabase --workdir infra/supabase-staging test db
 ```
 
-`db reset` is destructive to this **local staging database only**. It creates a clean database and applies the ordered migration chain through `20261112000032_critical_lab_in_app_alerts.sql`. Migration 29 intentionally stops if patient rows have no `home_facility_id`; the clean staging database has no patients. Keep test fixtures synthetic; do not load identifiable production patient data.
+`db reset` is destructive to this **local staging database only**. It creates a clean database and applies every ordered migration in `supabase/migrations/`. Migration 29 intentionally stops if patient rows have no `home_facility_id`; the clean staging database has no patients. Keep test fixtures synthetic; do not load identifiable production patient data.
 
 The local API, database, Studio, and mail UI use ports `55421`, `55422`, `55423`, and `55424`, respectively. Use `supabase --workdir infra/supabase-staging status` to inspect local credentials and endpoints. Stop the stack with:
 

@@ -54,6 +54,6 @@ These were not populated with invented codes, legal requirements, report definit
 
 ## Added in this implementation
 
-Migration `20261103000030_him_records.sql` (source `supabase/him_records.sql`) adds the records-file register, movement register, append-only movement events, facility-scoped RLS, dedicated HIM permissions, and transactional RPCs. `src/js/modules/records.js` adds the circulation register to the existing HIM page. The rollback is `supabase/rollback/20261103000030_him_records.sql` and requires exporting operational casework before use.
+Migration `20261103000030_him_records.sql` (source `supabase/migrations/20261103000030_him_records.sql`) adds the records-file register, movement register, append-only movement events, facility-scoped RLS, dedicated HIM permissions, and transactional RPCs. `src/js/modules/records.js` adds the circulation register to the existing HIM page. The rollback is `supabase/rollback/20261103000030_him_records.sql` and requires exporting operational casework before use.
 
 The migration must be tested in staging after migrations 1–29. Staff besides Super Admin need an active membership at the patient's verified facility as well as the Records Officer grants. This repository change does not mean the migration has been applied to any Supabase environment.

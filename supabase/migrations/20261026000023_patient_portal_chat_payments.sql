@@ -1,3 +1,7 @@
+begin;
+set local lock_timeout='2s';
+set local statement_timeout='30s';
+
 -- Patient portal chat, HIM-scoped access, and patient-owned provider checkout.
 -- Apply after external_finance_integrations.sql.
 
@@ -194,3 +198,5 @@ revoke all on function public.get_appointment_providers() from public,anon;
 grant execute on function public.get_appointment_providers() to authenticated;
 
 notify pgrst,'reload schema';
+
+commit;
