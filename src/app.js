@@ -313,7 +313,10 @@
                             <Header 
                                 notifications={notifications}
                                 onNavigate={setActiveModule}
-                                onNotificationClick={(notif) => persistNotificationReadState(notif.id)}
+                                onNotificationClick={(notif) => {
+                                    persistNotificationReadState(notif.id);
+                                    if (notif.type === 'critical_lab_result') setActiveModule('laboratory');
+                                }}
                                 onMarkAllNotificationsRead={() => persistNotificationReadState(notifications.filter((n) => !n.read).map((n) => n.id))}
                                 onLogout={handleLogout}
                                 theme={theme}

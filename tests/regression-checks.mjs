@@ -45,9 +45,13 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('src/styles.css'),
     read('src/js/ui.js')
 ]);
+const criticalLabMigration = await read('supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql');
+const criticalLabSource = await read('supabase/critical_lab_in_app_alerts.sql');
+assert.equal(criticalLabMigration, criticalLabSource, 'The ordered critical lab migration must stay synchronized with the source SQL.');
 
 assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
 assert.match(app, /persistNotificationReadState/, 'Notification read changes must be persisted.');
+assert.match(app, /notif\.type === 'critical_lab_result'\) setActiveModule\('laboratory'\)/, 'Selecting a critical lab notification must open the laboratory module.');
 assert.match(core, /failures:/, 'Data-load failures must be returned to the UI.');
 assert.match(hardening, /staff or patient read patients/, 'Patient data must have a scoped read policy.');
 assert.match(hardening, /admins read audit logs/, 'Audit logs must remain administrator-only.');
@@ -94,6 +98,13 @@ assert.match(diagnostics, /emptyMessage="No laboratory results have been entered
 assert.match(diagnostics, /Array\.isArray\(row\.results\.values\) \? row\.results\.values : \[\]/, 'Legacy or partial result payloads must not crash the laboratory results table.');
 assert.match(quality, /update of status, result_status, responsible_clinician_id/, 'Final lab results must queue acknowledgement when status changes.');
 assert.match(quality, /update of status, report_status, responsible_clinician_id/, 'Final radiology reports must queue acknowledgement when status changes.');
+assert.match(diagnostics, /responsible_clinician_id: payload\.doctorId/, 'New laboratory orders must persist the responsible clinician used for result routing.');
+assert.match(criticalLabMigration, /jsonb_array_elements\(new\.results->'values'\)/, 'Critical lab result alerts must recognize structured critical result flags.');
+assert.match(criticalLabMigration, /public\.notifications\(user_id, type, title, message, priority\)/, 'Critical finalized lab results must create an in-app notification.');
+assert.match(criticalLabMigration, /new\.result_status not in \('final', 'corrected'\)/, 'Only finalized or corrected critical results should alert.');
+assert.match(criticalLabMigration, /status = 'unacknowledged', due_at = excluded\.due_at/, 'Corrected results must reopen acknowledgement tracking.');
+assert.match(criticalLabMigration, /p\.role::text = 'super_admin' and p\.status::text = 'active'/, 'Unassigned legacy critical results must alert active Super Admins for assignment.');
+assert.match(criticalLabMigration, /after insert or update on public\.lab_orders/, 'Result changes must trigger alerts and acknowledgement updates.');
 assert.match(system, /resourceType: 'Bundle', type: 'collection'/, 'Patient export must use a FHIR collection bundle.');
 assert.match(system, /fhir_version: '4\.0\.1'/, 'FHIR exports must record the FHIR R4 version.');
 assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match the database export-audit authorization.');
@@ -257,9 +268,10 @@ assert.equal(labVisibilityMigration, labVisibility, 'The ordered lab visibility 
 assert.match(labVisibilityMigration, /as restrictive for select to authenticated using[\s\S]*?result_status in \('final', 'corrected'\)/, 'Patients must not read unfinalized laboratory results through the Data API.');
 assert.match(labVisibilityRollback, /drop policy if exists "patients read finalized lab results"/, 'The lab visibility migration must have a matching rollback.');
 assert.doesNotMatch(labVisibilityRollback, /delete from|truncate|drop table/i, 'Lab visibility rollback must preserve clinical result data.');
-assert.match(stagingGuide, /through `20261111000031_lab_result_patient_visibility\.sql`/, 'Staging instructions must include the latest lab visibility migration.');
+assert.match(stagingGuide, /through `20261112000032_critical_lab_in_app_alerts\.sql`/, 'Staging instructions must include the latest critical lab alert migration.');
 assert.match(deploymentDocs, /31\. `migrations\/20261111000031_lab_result_patient_visibility\.sql`/, 'Deployment order must include the latest lab visibility migration.');
-assert.match(deploymentDocs, /20261111000031_lab_result_patient_visibility\.sql`\./, 'Deployment instructions must document lab visibility rollout.');
+assert.match(deploymentDocs, /migrations\/20261111000031_lab_result_patient_visibility\.sql` limits patient reads/, 'Deployment instructions must document lab visibility rollout.');
+assert.match(deploymentDocs, /32\. `migrations\/20261112000032_critical_lab_in_app_alerts\.sql`/, 'Deployment order must include critical lab alerting.');
 
 const patientPortalFunction = await read('supabase/functions/create-patient-portal/index.ts');
 assert.match(patientPortalFunction, /if \(!url \|\| !anonKey \|\| !serviceKey\)/, 'Patient portal provisioning must fail clearly when required server secrets are absent.');
