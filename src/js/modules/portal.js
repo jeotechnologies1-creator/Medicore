@@ -14,6 +14,8 @@
                 visitType: ''
             });
             const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
+            const [refillMessage, setRefillMessage] = useState('');
+            const [submittingRefill, setSubmittingRefill] = useState(false);
             const [portalMessages, setPortalMessages] = useState([]);
             const [bankAccounts, setBankAccounts] = useState([]);
             const [appointmentRequests, setAppointmentRequests] = useState([]);
@@ -147,12 +149,34 @@
             };
 
             const handleRequestRefill = async () => {
-                if (!refillDraft.medication.trim()) return;
+                const medication = refillDraft.medication.trim();
+                const quantity = Number(refillDraft.quantity);
+                if (!medication || !Number.isFinite(quantity) || quantity <= 0) {
+                    setRefillMessage('Enter a medication name and a quantity greater than zero.');
+                    return;
+                }
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !patient?.id) return;
-                const { error } = await client.from('medication_refill_requests').insert({ patient_id: patient.id, medication_name: refillDraft.medication.trim(), quantity: Number(refillDraft.quantity || 0), notes: refillDraft.notes || null });
-                if (error) return;
-                setRefillDraft({ medication: refillDraft.medication, quantity: refillDraft.quantity, notes: '' });
+                if (!client || !patient?.id) {
+                    setRefillMessage('The refill request service is unavailable. Please try again later.');
+                    return;
+                }
+                setSubmittingRefill(true);
+                setRefillMessage('');
+                try {
+                    const { error } = await client.from('medication_refill_requests').insert({
+                        patient_id: patient.id,
+                        medication_name: medication,
+                        quantity,
+                        notes: refillDraft.notes.trim() || null
+                    });
+                    if (error) throw error;
+                    setRefillDraft({ medication: '', quantity: '30', notes: '' });
+                    setRefillMessage('Refill request sent to your care team.');
+                } catch (error) {
+                    setRefillMessage(error?.message || 'Your refill request could not be sent. Please try again.');
+                } finally {
+                    setSubmittingRefill(false);
+                }
             };
 
             if (!patient) {
@@ -194,12 +218,13 @@
                                 </Card>
                                 <Card title="Medication refill request" className="lg:col-span-3">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <Input label="Medication" value={refillDraft.medication} onChange={(e) => setRefillDraft(prev => ({ ...prev, medication: e.target.value }))} />
-                                        <Input label="Quantity" value={refillDraft.quantity} onChange={(e) => setRefillDraft(prev => ({ ...prev, quantity: e.target.value }))} />
+                                        <Input label="Medication" value={refillDraft.medication} onChange={(e) => { setRefillMessage(''); setRefillDraft(prev => ({ ...prev, medication: e.target.value })); }} />
+                                        <Input label="Quantity" type="number" min="0.01" step="any" value={refillDraft.quantity} onChange={(e) => { setRefillMessage(''); setRefillDraft(prev => ({ ...prev, quantity: e.target.value })); }} />
                                         <Input label="Notes" value={refillDraft.notes} onChange={(e) => setRefillDraft(prev => ({ ...prev, notes: e.target.value }))} />
                                     </div>
+                                    {refillMessage && <p role="status" className="mt-3 text-sm text-slate-600">{refillMessage}</p>}
                                     <div className="mt-4 flex justify-end">
-                                        <Button variant="primary" icon={Icons.Pill} onClick={handleRequestRefill}>Request refill</Button>
+                                        <Button variant="primary" icon={Icons.Pill} onClick={handleRequestRefill} disabled={submittingRefill}>{submittingRefill ? 'Sending…' : 'Request refill'}</Button>
                                     </div>
                                 </Card>
                                 <Card title="Care summary" className="lg:col-span-3">

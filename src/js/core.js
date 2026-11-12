@@ -502,6 +502,20 @@
             window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: module }));
         };
 
+        // Supabase/PostgREST applies a server-side row cap to each request. Page
+        // through each registry so the browser does not silently treat the
+        // first page as the complete clinical dataset.
+        const loadAllTableRows = async (client, table, pageSize = 500) => {
+            const rows = [];
+            for (let offset = 0; ; offset += pageSize) {
+                const { data, error } = await client.from(table).select('*').order('id').range(offset, offset + pageSize - 1);
+                if (error) return { data: null, error };
+                const page = data || [];
+                rows.push(...page);
+                if (page.length < pageSize) return { data: rows, error: null };
+            }
+        };
+
         const loadSupabaseTables = async () => {
             const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function'
                 ? window.OneMedSupabase.getClient()
@@ -551,7 +565,7 @@
                 { dbTable: 'medication_reconciliations', appTable: 'medicationReconciliations', mapper: normalizeMedicationReconciliations }
             ];
             const loadedTables = await Promise.all(officeLookups.map(async (entry) => {
-                const { data, error } = await client.from(entry.dbTable).select('*');
+                const { data, error } = await loadAllTableRows(client, entry.dbTable);
                 if (error) {
                     console.error(`Failed to load ${entry.dbTable}:`, error);
                     return {

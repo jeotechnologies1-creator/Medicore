@@ -686,34 +686,45 @@
                 let active = true;
                 window.OneMedSupabase?.loadSystemSettings?.().then((settings) => {
                     if (active) setBankAccounts(Array.isArray(settings?.bankAccounts) ? settings.bankAccounts : []);
-                }).catch(() => {});
+                }).catch((error) => {
+                    if (active) setIntegrationMessage(error?.message || 'Payment account settings could not be loaded.');
+                });
                 return () => { active = false; };
             }, []);
 
             useEffect(() => {
                 if (activeTab !== 'memberships') return;
-                window.OneMedSupabase?.getClient?.()?.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setMembershipMessage('Supabase is not configured. Membership records are unavailable.');
+                client.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
                     if (error) setMembershipMessage(`Membership records unavailable: ${error.message}`);
-                    else setInsuranceMemberships(data || []);
-                });
+                    else { setInsuranceMemberships(data || []); setMembershipMessage(''); }
+                }).catch((error) => setMembershipMessage(`Membership records unavailable: ${error?.message || 'Connection failed.'}`));
             }, [activeTab]);
 
             useEffect(() => {
                 if (!['insurance', 'payments', 'memberships', 'ledger', 'disputes'].includes(activeTab)) return;
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return;
+                if (!client) {
+                    if (activeTab === 'insurance' || activeTab === 'payments' || activeTab === 'ledger') setIntegrationMessage('Supabase is not configured. Financial records are unavailable.');
+                    return;
+                }
                 client.from('integration_connections').select('id,facility_id,integration_type,provider_code,status').eq('status', 'active').then(({ data, error }) => {
-                    if (!error) setIntegrationConnections(data || []);
-                });
+                    if (error) setIntegrationMessage(`Payment integrations could not be loaded: ${error.message}`);
+                    else setIntegrationConnections(data || []);
+                }).catch((error) => setIntegrationMessage(`Payment integrations could not be loaded: ${error?.message || 'Connection failed.'}`));
                 if (activeTab === 'payments') client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,external_reference,checkout_url,created_at').order('created_at', { ascending: false }).then(({ data, error }) => {
-                    if (!error) setProviderTransactions(data || []);
-                });
+                    if (error) setIntegrationMessage(`Provider payment transactions could not be loaded: ${error.message}`);
+                    else setProviderTransactions(data || []);
+                }).catch((error) => setIntegrationMessage(`Provider payment transactions could not be loaded: ${error?.message || 'Connection failed.'}`));
                 if (activeTab === 'insurance') client.from('insurance_memberships').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
-                    if (!error) setInsuranceMemberships(data || []);
-                });
+                    if (error) setIntegrationMessage(`Insurance membership records could not be loaded: ${error.message}`);
+                    else setInsuranceMemberships(data || []);
+                }).catch((error) => setIntegrationMessage(`Insurance membership records could not be loaded: ${error?.message || 'Connection failed.'}`));
                 if (activeTab === 'insurance') client.from('payer_remittances').select('*').order('received_at', { ascending: false }).then(({ data, error }) => {
-                    if (!error) setPayerRemittances(data || []);
-                });
+                    if (error) setIntegrationMessage(`Payer remittances could not be loaded: ${error.message}`);
+                    else setPayerRemittances(data || []);
+                }).catch((error) => setIntegrationMessage(`Payer remittances could not be loaded: ${error?.message || 'Connection failed.'}`));
                 if (activeTab === 'ledger') client.from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }).then(({ data, error }) => {
                     if (!error) setLedgerEntries(data || []);
                     else setIntegrationMessage(error.message);
