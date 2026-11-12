@@ -530,7 +530,7 @@
                 return () => window.removeEventListener('onemed:access-policy-updated', refreshAccessPolicy);
             }, []);
 
-            const login = useCallback(async (email, password) => {
+            const login = useCallback(async (email, password, captchaToken = '') => {
                 setLoading(true);
                 try {
                     let found = null;
@@ -539,7 +539,7 @@
 
                     if (window.OneMedSupabase && typeof window.OneMedSupabase.loginProfile === 'function') {
                         try {
-                            found = await window.OneMedSupabase.loginProfile(normalizedEmail, normalizedPassword);
+                            found = await window.OneMedSupabase.loginProfile(normalizedEmail, normalizedPassword, captchaToken);
                         } catch (error) {
                             console.warn('Supabase login failed:', error);
                             found = null;
