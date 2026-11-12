@@ -14,7 +14,7 @@ const server = createServer(async (request, response) => {
     const content = await readFile(file);
     response.writeHead(200, {
       'content-type': types[extname(file)] || 'application/octet-stream',
-      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://wlarlseefitzcnfigyib.supabase.co; connect-src 'self' https://wlarlseefitzcnfigyib.supabase.co wss://wlarlseefitzcnfigyib.supabase.co https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; upgrade-insecure-requests",
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://wlarlseefitzcnfigyib.supabase.co; connect-src 'self' data: https://wlarlseefitzcnfigyib.supabase.co wss://wlarlseefitzcnfigyib.supabase.co https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; upgrade-insecure-requests",
       'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
