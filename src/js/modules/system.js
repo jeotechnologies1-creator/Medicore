@@ -434,7 +434,6 @@
                 auditRetentionDays: 2555,
                 autoLogoutIdle: true,
                 requirePatientIdVerification: true,
-                requireAllergyCheck: true,
                 requireMedicationVerification: true,
                 requireClinicalNoteBeforeDischarge: true,
                 enableBarcodeMedicationCheck: true,
@@ -1109,7 +1108,6 @@
                                 <Input label="Pharmacy reorder warning threshold (%)" type="number" value={settings.pharmacyReorderLevelThreshold} onChange={(e) => updateSetting('pharmacyReorderLevelThreshold', Number(e.target.value || 30))} />
                                 <div className="space-y-3">
                                     <ToggleRow label="Require patient ID verification" description="Supports positive patient identification before treatment" checked={settings.requirePatientIdVerification} onChange={(value) => updateSetting('requirePatientIdVerification', value)} />
-                                    <ToggleRow label="Require allergy check before medication" description="Critical for medication safety and risk reduction" checked={settings.requireAllergyCheck} onChange={(value) => updateSetting('requireAllergyCheck', value)} />
                                     <ToggleRow label="Require medication verification" description="Helps prevent wrong-drug and wrong-dose errors" checked={settings.requireMedicationVerification} onChange={(value) => updateSetting('requireMedicationVerification', value)} />
                                     <ToggleRow label="Clinical note required before discharge" description="Supports continuity of care and documentation quality" checked={settings.requireClinicalNoteBeforeDischarge} onChange={(value) => updateSetting('requireClinicalNoteBeforeDischarge', value)} />
                                     <ToggleRow label="Barcode scan for medication administration" description="Standard for safer medication workflows" checked={settings.enableBarcodeMedicationCheck} onChange={(value) => updateSetting('enableBarcodeMedicationCheck', value)} />

@@ -278,6 +278,8 @@
                 const patientCarePlans = (appData.carePlans || []).filter(c => c.patientId === patient.id);
                 const encounterNotes = (appData.consultations || []).filter(c => c.patientId === patient.id);
                 const [selectedLabResult, setSelectedLabResult] = useState(null);
+                const [medicationSafetyFindings, setMedicationSafetyFindings] = useState([]);
+                const [medicationSafetyMessage, setMedicationSafetyMessage] = useState('');
                 const [medicationForm, setMedicationForm] = useState({
                     formularyItemId: '',
                     dose: '',
@@ -292,6 +294,10 @@
                     client.from('formulary_items').select('id,generic_name,form,strength,unit,route').eq('active', true).order('generic_name')
                         .then(({ data, error }) => { if (!error && data) setFormularyItems(data); });
                 }, []);
+                useEffect(() => {
+                    setMedicationSafetyFindings([]);
+                    setMedicationSafetyMessage('');
+                }, [patient.id, medicationForm.formularyItemId]);
                 const [himReferralReason, setHimReferralReason] = useState('');
                 const [himReferralMessage, setHimReferralMessage] = useState('');
                 const [sendingHimReferral, setSendingHimReferral] = useState(false);
@@ -417,13 +423,6 @@
                 };
 
                 const selectedFormularyItem = formularyItems.find((item) => item.id === medicationForm.formularyItemId);
-                const allergyMatch = selectedFormularyItem
-                    ? patientAllergies.find((allergy) => {
-                        const substance = (allergy.substance || '').toLowerCase();
-                        const medName = selectedFormularyItem.generic_name.toLowerCase();
-                        return substance && (substance.includes(medName) || medName.includes(substance));
-                    })
-                    : null;
 
                 const insertClinicalRecord = async (table, payload) => {
                     const client = window.OneMedSupabase?.getClient?.();
@@ -438,6 +437,31 @@
 
                 const handleSaveMedicationOrder = async () => {
                     if (!selectedFormularyItem || !medicationForm.dose || Number(medicationForm.dose) <= 0) return;
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) {
+                        setMedicationSafetyMessage('Medication safety service is unavailable. The order was not saved.');
+                        return;
+                    }
+                    setMedicationSafetyMessage('');
+                    const safetyItem = {
+                        formulary_item_id: selectedFormularyItem.id,
+                        dose: Number(medicationForm.dose),
+                        dose_unit: medicationForm.doseUnit || selectedFormularyItem.unit,
+                        frequency: medicationForm.frequency,
+                        route: selectedFormularyItem.route,
+                        quantity: 1
+                    };
+                    const { data: safetyResult, error: safetyError } = await client.rpc('check_prescription', {
+                        p_patient_id: patient.id,
+                        p_items: [safetyItem]
+                    });
+                    if (safetyError) {
+                        setMedicationSafetyMessage(safetyError.message || 'Medication safety check failed. The order was not saved.');
+                        return;
+                    }
+                    const findings = safetyResult?.findings || [];
+                    setMedicationSafetyFindings(findings);
+                    if (safetyResult?.blocking?.length) return;
                     const saved = await insertClinicalRecord('medication_orders', {
                         patient_id: patient.id, formulary_item_id: selectedFormularyItem.id, medication_name: selectedFormularyItem.generic_name,
                         dose: medicationForm.dose, dose_unit: medicationForm.doseUnit || selectedFormularyItem.unit, route: selectedFormularyItem.route, frequency: medicationForm.frequency,
@@ -447,6 +471,7 @@
                     const next = [normalizeMedicationOrders([saved])[0], ...(appData.medicationOrders || [])];
                     appData.medicationOrders = next;
                     setMedicationForm({ formularyItemId: '', dose: '', doseUnit: '', frequency: 'Daily', indication: '' });
+                    setMedicationSafetyMessage('Medication order saved after server safety checks.');
                 };
 
                 const handleSaveEncounterNote = async () => {
@@ -902,7 +927,7 @@
                                             </div>
                                         </Card>
 
-                                        <Card title="Medication safety" subtitle="Allergy-aware prescribing">
+                                        <Card title="Medication safety" subtitle="Server-checked allergies, interactions and dose rules">
                                             <div className="space-y-4">
                                                 <Select label="Formulary medication" value={medicationForm.formularyItemId} onChange={(e) => { const item = formularyItems.find((entry) => entry.id === e.target.value); setMedicationForm((prev) => ({ ...prev, formularyItemId: e.target.value, doseUnit: item?.unit || '' })); }} options={[{value:'',label:formularyItems.length ? 'Select medication...' : 'No active formulary items'},...formularyItems.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}`}))]} />
                                                 <div className="grid grid-cols-2 gap-4">
@@ -913,11 +938,12 @@
                                                     <Select label="Frequency" value={medicationForm.frequency} onChange={(e) => setMedicationForm(prev => ({ ...prev, frequency: e.target.value }))} options={[{ value: 'Daily', label: 'Daily' }, { value: 'BD', label: 'BD' }, { value: 'TDS', label: 'TDS' }, { value: 'PRN', label: 'PRN' }]} />
                                                 </div>
                                                 <Input label="Indication" value={medicationForm.indication} onChange={(e) => setMedicationForm(prev => ({ ...prev, indication: e.target.value }))} />
-                                                {allergyMatch && (
-                                                    <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
-                                                        Allergy warning: {allergyMatch.substance} has already been recorded for this patient.
+                                                {medicationSafetyFindings.map((finding, index) => (
+                                                    <div key={`${finding.finding_key || finding.type}-${index}`} className={`p-3 rounded-lg border text-sm ${finding.blocking ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                                                        <strong>{finding.blocking ? 'Blocking finding' : 'Safety warning'}:</strong> {finding.message}
                                                     </div>
-                                                )}
+                                                ))}
+                                                {medicationSafetyMessage && <p role="status" className="text-sm text-slate-600">{medicationSafetyMessage}</p>}
                                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Pill} onClick={handleSaveMedicationOrder}>Save Medication Order</Button>
                                             </div>
                                         </Card>
