@@ -208,7 +208,7 @@
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
-            const [resultForm, setResultForm] = useState({ comments: '', severity: 'normal', values: {} });
+            const [resultForm, setResultForm] = useState({ comments: '', values: {} });
             const hasRecordedLabResults = (results) => {
                 if (typeof results === 'string') return results.trim().length > 0;
                 if (Array.isArray(results)) return results.length > 0;
@@ -277,29 +277,32 @@
 
             const handleSaveResults = async () => {
                 if (!selectedOrder) return notifyPersistenceFailure('record laboratory results', new Error('Select an order before entering results.'));
-                if (!Object.values(resultForm.values || {}).some((value) => String(value).trim())) {
+                if (!Object.values(resultForm.values || {}).some((entry) => String(entry?.value ?? '').trim())) {
                     return notifyPersistenceFailure('record laboratory results', new Error('Enter at least one result value before saving.'));
                 }
-                const isCritical = resultForm.severity === 'critical';
                 const nextOrder = {
                     ...selectedOrder,
-                    status: isCritical ? 'critical' : 'processing',
+                    status: 'processing',
                     result_status: 'preliminary',
                     resultDate: formatFacilityDate(),
                     results: {
                         comments: resultForm.comments.trim() || null,
-                        values: Object.entries(resultForm.values || {}).map(([parameter, value]) => ({ parameter, value, unit: 'unit', range: 'normal', flag: isCritical ? 'critical' : resultForm.severity }))
+                        values: Object.entries(resultForm.values || {}).filter(([, entry]) => String(entry?.value ?? '').trim()).map(([parameter, entry]) => ({
+                            parameter, value: entry.value, unit: entry.unit || null,
+                            code_system: entry.codeSystem || null, code: entry.code || null
+                        }))
                     }
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
-                const { error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'preliminary', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id);
+                const { data, error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'preliminary', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id).select().single();
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
-                const next = labOrders.map(order => order.id === selectedOrder.id ? nextOrder : order);
+                const savedOrder = normalizeLabOrders([data])[0];
+                const next = labOrders.map(order => order.id === selectedOrder.id ? savedOrder : order);
                 persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowResultEntry(false);
-                setResultForm({ comments: '', severity: 'normal', values: {} });
+                setResultForm({ comments: '', values: {} });
             };
 
             const collectSpecimen = async (order) => {
@@ -361,7 +364,7 @@
                                     <>
                                         {row.status === 'pending' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => collectSpecimen(row)}>Specimen collected</Button>}
                                         {!['completed', 'critical'].includes(row.status) && (
-                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', severity: 'normal', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
+                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
                                         )}
                                         <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>
                                     </>
@@ -430,15 +433,19 @@
                                     <p className="text-sm text-slate-600">Test: {selectedOrder.testType}</p>
                                 </div>
                                 <div className="space-y-3">
-                                    {['WBC', 'RBC', 'Hemoglobin', 'Hematocrit', 'Platelets', 'MCV'].map(param => (
-                                        <div key={param} className="grid grid-cols-3 gap-4 items-center">
+                                    {['WBC', 'RBC', 'Hemoglobin', 'Hematocrit', 'Platelets', 'MCV'].map(param => {
+                                        const entry = resultForm.values[param] || {};
+                                        return <div key={param} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 p-3">
                                             <span className="text-sm font-medium text-slate-700">{param}</span>
-                                            <Input placeholder="Value" value={resultForm.values[param] || ''} onChange={(e) => setResultForm(prev => ({ ...prev, values: { ...prev.values, [param]: e.target.value } }))} />
-                                            <span className="text-xs text-slate-500">Ref: 4.0-11.0</span>
-                                        </div>
-                                    ))}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <Input label="Value" type="number" step="any" value={entry.value || ''} onChange={(e) => setResultForm(prev => ({ ...prev, values: { ...prev.values, [param]: { ...prev.values[param], value: e.target.value } } }))} />
+                                                <Input label="Unit" value={entry.unit || ''} onChange={(e) => setResultForm(prev => ({ ...prev, values: { ...prev.values, [param]: { ...prev.values[param], unit: e.target.value } } }))} />
+                                            </div>
+                                            <CodedConceptInput label={`${param} test concept`} value={entry.display || ''} codeSystem={entry.codeSystem} code={entry.code} display={entry.display} onChange={(term) => setResultForm(prev => ({ ...prev, values: { ...prev.values, [param]: { ...prev.values[param], codeSystem: term.codeSystem, code: term.code, display: term.display } } }))} />
+                                        </div>;
+                                    })}
                                 </div>
-                                <Select label="Overall result assessment" value={resultForm.severity} onChange={(e) => setResultForm(prev => ({ ...prev, severity: e.target.value }))} options={[{ value: 'normal', label: 'Normal' }, { value: 'abnormal', label: 'Abnormal' }, { value: 'critical', label: 'Critical — immediate follow-up required' }]} />
+                                <p className="text-xs text-slate-500">Flags and reference-range interpretation are calculated by the server from approved coded ranges. Values without a matching coded range remain unclassified.</p>
                                 <TextArea label="Comments" placeholder="Additional comments..." value={resultForm.comments} onChange={(e) => setResultForm(prev => ({ ...prev, comments: e.target.value }))} />
                             </div>
                         )}

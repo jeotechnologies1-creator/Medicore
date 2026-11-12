@@ -266,8 +266,17 @@
             const acknowledgeResult = async (acknowledgement) => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !user?.id) return notifyPersistenceFailure('acknowledge result');
+                const method = window.prompt('How was this result communicated? (for example: phone, in person, secure message)');
+                if (!method?.trim()) return;
+                const isCritical = acknowledgement.severity === 'critical';
+                const readBackConfirmed = !isCritical || window.confirm('Did the recipient read back the critical result correctly?');
+                if (isCritical && !readBackConfirmed) return;
+                const readBackNotes = isCritical ? window.prompt('Record the critical result read-back details:') : null;
+                if (isCritical && !readBackNotes?.trim()) return;
                 const { data, error } = await client.from('result_acknowledgements').update({
-                    status: 'acknowledged', acknowledged_at: new Date().toISOString(), acknowledged_by: user.id
+                    status: 'acknowledged', acknowledged_at: new Date().toISOString(), acknowledged_by: user.id,
+                    acknowledgement_method: method.trim(), read_back_confirmed: readBackConfirmed,
+                    read_back_notes: readBackNotes?.trim() || null
                 }).eq('id', acknowledgement.id).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('acknowledge result', error);
                 const updated = normalizeResultAcknowledgements(data)[0];
@@ -295,6 +304,7 @@
                             columns={[
                                 { key: 'patient', title: 'Patient', render: (row) => patientName(row.patientId) },
                                 { key: 'resultType', title: 'Result type' },
+                                { key: 'severity', title: 'Severity', render: (row) => <Badge variant={row.severity === 'critical' ? 'danger' : row.severity === 'urgent' ? 'warning' : 'neutral'}>{row.severity || 'routine'}</Badge> },
                                 { key: 'dueAt', title: 'Due', render: (row) => formatDateTime(row.dueAt) },
                                 { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'escalated' ? 'danger' : 'warning'}>{row.status}</Badge> }
                             ]}

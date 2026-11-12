@@ -1,5 +1,5 @@
 begin;
-select plan(54);
+select plan(57);
 
 select has_table('public','organization_units','organization hierarchy table exists');
 select has_table('public','job_positions','reporting position table exists');
@@ -163,25 +163,40 @@ reset role;
 insert into auth.users(id,aud,role,email,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 values ('10000000-0000-4000-8000-000000000005','authenticated','authenticated','rls-admin@example.test',now(),'{"provider":"email","providers":["email"]}','{}',now(),now());
 update public.profiles set role='super_admin',facility_id=(select id from public.facilities where code='TEST-A') where email='rls-admin@example.test';
+-- Synthetic non-clinical terminology fixtures exercise server range flags;
+-- the application migration ships no reference ranges or medical codes.
+insert into public.code_systems(code,name) values('TEST-RESULTS','Synthetic test-only terminology');
+insert into public.concepts(system,code,display) values
+ ('TEST-RESULTS','TEST-K','Synthetic test potassium'),('TEST-RESULTS','TEST-NA','Synthetic test sodium');
+insert into public.reference_ranges(code_system,test_code,sex,low,high,unit,critical_low,critical_high,approved,approved_by,approved_at) values
+ ('TEST-RESULTS','TEST-K','any',3.5,5.1,'mmol/L',2.5,6.0,true,(select id from public.profiles where email='rls-doctor@example.test'),now()),
+ ('TEST-RESULTS','TEST-NA','any',135,145,'mmol/L',120,160,true,(select id from public.profiles where email='rls-doctor@example.test'),now());
 insert into public.lab_orders(id,patient_id,doctor_id,responsible_clinician_id,test_type,status,result_status,results)
 values ('80000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
   (select id from public.profiles where email='rls-doctor@example.test'),
   (select id from public.profiles where email='rls-doctor@example.test'),
-  'Synthetic critical test','critical','final','{"values":[{"parameter":"potassium","value":"6.8","flag":"critical"}]}'::jsonb);
+  'Synthetic critical test','critical','final','{"values":[{"parameter":"potassium","code_system":"TEST-RESULTS","code":"TEST-K","value":"6.8","unit":"mmol/L","flag":"normal"}]}'::jsonb);
+select is((select results->'values'->0->>'flag' from public.lab_orders where id='80000000-0000-4000-8000-000000000001'),'critical','the server computes a critical flag from an approved range and replaces the client flag');
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),1,'finalized critical result sends one in-app alert to its responsible clinician');
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-admin@example.test') and type='critical_lab_result'),0,'assigned critical result does not alert unrelated Super Admins');
 select is((select status from public.result_acknowledgements where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001'),'unacknowledged','finalized critical result opens a clinician acknowledgement task');
-update public.result_acknowledgements set status='acknowledged',acknowledged_at=now(),acknowledged_by=(select id from public.profiles where email='rls-doctor@example.test') where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001';
-update public.lab_orders set result_status='corrected',results='{"values":[{"parameter":"potassium","value":"6.5","flag":"critical"}]}'::jsonb where id='80000000-0000-4000-8000-000000000001';
+update public.result_acknowledgements set status='acknowledged',acknowledged_at=now(),acknowledged_by=(select id from public.profiles where email='rls-doctor@example.test'),acknowledgement_method='phone',read_back_confirmed=true,read_back_notes='Synthetic verified read-back.' where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001';
+update public.lab_orders set result_status='corrected',result_verified_by=(select id from public.profiles where email='rls-doctor@example.test'),results='{"values":[{"parameter":"potassium","code_system":"TEST-RESULTS","code":"TEST-K","value":"6.5","unit":"mmol/L","flag":"normal"}]}'::jsonb where id='80000000-0000-4000-8000-000000000001';
 select is((select status from public.result_acknowledgements where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001'),'unacknowledged','correcting a finalized result reopens its acknowledgement task');
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'corrected critical result sends a renewed in-app alert');
 update public.lab_orders set category='Hematology follow-up' where id='80000000-0000-4000-8000-000000000001';
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'unrelated order edits do not resend critical alerts');
 insert into public.lab_orders(id,patient_id,test_type,status,result_status,results)
 values ('80000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',
-  'Unassigned critical test','critical','final','{"values":[{"parameter":"sodium","value":"118","flag":"critical"}]}'::jsonb);
+  'Unassigned critical test','critical','final','{"values":[{"parameter":"sodium","code_system":"TEST-RESULTS","code":"TEST-NA","value":"118","unit":"mmol/L","flag":"normal"}]}'::jsonb);
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-admin@example.test') and type='critical_lab_result'),1,'unassigned legacy critical result alerts active Super Admin for assignment');
 select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'unassigned result is not misrouted to an unrelated clinician');
+insert into public.radiology_orders(id,patient_id,doctor_id,radiologist_id,responsible_clinician_id,study_type,status,report_status,report,critical_finding)
+values('80000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000001',
+ (select id from public.profiles where email='rls-doctor@example.test'),(select id from public.profiles where email='rls-doctor@example.test'),
+ (select id from public.profiles where email='rls-doctor@example.test'),'Synthetic imaging finding','reported','final','Synthetic urgent imaging finding',true);
+select is((select severity from public.result_acknowledgements where result_type='radiology' and result_id='80000000-0000-4000-8000-000000000003'),'critical','critical radiology findings enter the same severity-aware acknowledgement queue');
+select throws_ok($$update public.result_acknowledgements set status='acknowledged',acknowledged_at=now(),acknowledged_by=(select id from public.profiles where email='rls-doctor@example.test'),acknowledgement_method='phone' where result_type='radiology' and result_id='80000000-0000-4000-8000-000000000003'$$,'P0001','Critical results require documented read-back confirmation.','critical radiology acknowledgement is rejected without read-back');
 
 select * from finish();
 rollback;
