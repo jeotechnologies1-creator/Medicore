@@ -225,7 +225,18 @@
         // CARE COORDINATION / REFERRALS MODULE
         // ==========================================
         const CareCoordinationModule = () => {
+            const { user } = useAuth();
             const [activeTab, setActiveTab] = useState('referrals');
+            const [referralForm, setReferralForm] = useState({ patientId: '', destination: '', reason: '', summary: '' });
+            const [referralError, setReferralError] = useState('');
+
+            const saveReferralLetter = async () => {
+                const { data: id, error } = await window.OneMedSupabase.getClient().rpc('create_patient_referral_letter', { p_patient_id: referralForm.patientId, p_destination: referralForm.destination, p_reason: referralForm.reason, p_clinical_summary: referralForm.summary });
+                if (error) return setReferralError(error.message);
+                setReferralError('');
+                window.printEMRDocument({ type: 'referral_letter', id, patientId: referralForm.patientId, title: 'Clinical Referral Letter', author: user?.name, fields: [['Date', formatFacilityDate()], ['Referred to', referralForm.destination], ['Reason for referral', referralForm.reason], ['Clinical summary', referralForm.summary]] }).catch((printError) => notifyPersistenceFailure('print referral letter', printError));
+                setReferralForm({ patientId: '', destination: '', reason: '', summary: '' });
+            };
 
             const followUpTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'follow_up' || task.taskType === 'followup');
             const handoffTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'handoff');
@@ -255,8 +266,8 @@
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
                     {activeTab === 'referrals' && (
-                        <Card>
-                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">Referral records are not configured in this Supabase schema. This screen only displays persisted follow-up and handoff tasks.</div>
+                        <Card title="Create clinical referral letter">
+                            <div className="max-w-2xl space-y-3"><Select label="Patient" value={referralForm.patientId} onChange={(event) => setReferralForm((form) => ({ ...form, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient' }, ...(appData.patients || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} /><Input label="Referred to" value={referralForm.destination} onChange={(event) => setReferralForm((form) => ({ ...form, destination: event.target.value }))} /><Input label="Reason for referral" value={referralForm.reason} onChange={(event) => setReferralForm((form) => ({ ...form, reason: event.target.value }))} /><TextArea label="Clinical summary" value={referralForm.summary} onChange={(event) => setReferralForm((form) => ({ ...form, summary: event.target.value }))} rows={5} />{referralError && <p className="text-sm text-red-700" role="alert">{referralError}</p>}<Button variant="primary" disabled={!referralForm.patientId || !referralForm.destination || !referralForm.reason || !referralForm.summary} onClick={saveReferralLetter}>Save and print referral</Button></div>
                         </Card>
                     )}
 
@@ -652,6 +663,7 @@
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : row.status === 'dispensed' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
                                 data={appData.prescriptions}
+                                actions={(row) => <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'prescription', id: row.id, patientId: row.patientId, title: 'Prescription', author: appData.users.find((entry) => entry.id === row.doctorId)?.name, fields: [['Diagnosis', row.diagnosis], ['Date', row.prescriptionDate], ['Medications', row.medications], ['Notes', row.notes]] }).catch((error) => notifyPersistenceFailure('print prescription', error))}>Print</Button>}
                             />
                         </Card>
                     )}
@@ -1092,6 +1104,7 @@
                                 data={invoices}
                                 actions={(row) => (
                                     <>
+                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'invoice', id: row.id, patientId: row.patientId, title: `Invoice ${row.invoiceNumber}`, author: user?.name, fields: [['Date', row.date], ['Service', row.service], ['Department', row.department], ['Subtotal', formatCurrency(row.subtotal)], ['Discount', formatCurrency(row.discount)], ['Tax', formatCurrency(row.tax)], ['Total', formatCurrency(row.total)], ['Paid', formatCurrency(row.paid)], ['Balance', formatCurrency(row.balance)]] }).catch((error) => notifyPersistenceFailure('print invoice', error))}>Print invoice</Button>
                                         <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }); setShowPaymentModal(true); }}>Post Payment</Button>
                                     </>
                                 )}
@@ -1136,7 +1149,7 @@
                             { key: 'invoice', title: 'Invoice', render: (row) => invoices.find((invoice) => invoice.id === row.billing_id)?.invoiceNumber || 'Invoice unavailable' },
                             { key: 'amount', title: 'Posted amount', render: (row) => formatCurrency(row.amount) },
                             { key: 'payment_method', title: 'Method' }, { key: 'external_reference', title: 'Reference' }
-                        ]} data={paymentPostings} /></Card>
+                        ]} data={paymentPostings} actions={(row) => { const invoice = invoices.find((entry) => entry.id === row.billing_id); return <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'receipt', id: row.id, patientId: row.patient_id, title: 'Payment Receipt', author: appData.users.find((entry) => entry.id === row.recorded_by)?.name, fields: [['Receipt reference', row.id], ['Invoice', invoice?.invoiceNumber], ['Amount', formatCurrency(row.amount)], ['Payment method', row.payment_method], ['External reference', row.external_reference], ['Paid at', formatDateTime(row.recorded_at)]] }).catch((error) => notifyPersistenceFailure('print receipt', error))}>Print receipt</Button>; }} /></Card>
                         <Card title="Refund approval queue"><DataTable columns={[
                             { key: 'payment_posting_id', title: 'Payment', render: (row) => paymentPostings.find((posting) => posting.id === row.payment_posting_id)?.external_reference || row.payment_posting_id },
                             { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) }, { key: 'reason', title: 'Reason' },
@@ -1434,6 +1447,7 @@
                 if (!dispositionAdmission || !dispositionForm.summary.trim()) return setWorkflowError('A discharge or transfer summary is required.');
                 const { error } = await window.OneMedSupabase.getClient().rpc('complete_inpatient_disposition', { p_admission_id: dispositionAdmission.id, p_disposition: dispositionForm.type, p_summary: dispositionForm.summary.trim(), p_instructions: dispositionForm.instructions.trim() || null });
                 if (error) return setWorkflowError(error.message || 'The inpatient disposition was not saved.');
+                if (dispositionForm.type === 'discharged') window.printEMRDocument({ type: 'discharge_summary', id: dispositionAdmission.id, patientId: dispositionAdmission.patientId, title: 'Discharge Summary', author: user?.name, fields: [['Admission date', dispositionAdmission.admissionDate], ['Discharge date', formatFacilityDate()], ['Diagnosis', dispositionAdmission.diagnosis], ['Summary', dispositionForm.summary], ['Instructions and follow-up', dispositionForm.instructions]] }).catch((printError) => notifyPersistenceFailure('print discharge summary', printError));
                 setDispositionAdmission(null); setDispositionForm({ type: 'discharged', summary: '', instructions: '' }); setWorkflowError('');
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };

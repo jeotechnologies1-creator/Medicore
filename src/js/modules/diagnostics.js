@@ -362,6 +362,7 @@
                                 data={labOrders}
                                 actions={(row) => (
                                     <>
+                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'lab_report', id: row.id, patientId: row.patientId, title: `Laboratory report · ${row.testType}`, author: appData.users.find((entry) => entry.id === row.result_verified_by || entry.id === row.technicianId)?.name, fields: [['Test', row.testType], ['Category', row.category], ['Ordered', row.orderedDate], ['Result date', row.resultDate], ['Status', row.result_status || row.status], ['Results', row.results]] }).catch((error) => notifyPersistenceFailure('print lab report', error))}>Print</Button>
                                         {row.status === 'pending' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => collectSpecimen(row)}>Specimen collected</Button>}
                                         {!['completed', 'critical'].includes(row.status) && (
                                             <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
@@ -675,6 +676,7 @@
                             data={studies}
                             actions={(row) => (
                                 <>
+                                    <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'radiology_report', id: row.id, patientId: row.patientId, title: `Radiology report · ${row.studyType}`, author: appData.users.find((entry) => entry.id === row.radiologistId || entry.id === row.doctorId)?.name, fields: [['Study', row.studyType], ['Modality', row.modality], ['Ordered', row.orderedDate], ['Status', row.report_status || row.status], ['Report', row.report]] }).catch((error) => notifyPersistenceFailure('print radiology report', error))}>Print</Button>
                                     <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View Images</Button>
                                     {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(row.report || ''); setShowReportEntry(true); }}>Report</Button>}
                                 </>
