@@ -16,6 +16,7 @@ export default defineConfig({
   server: { headers: securityHeaders },
   preview: { headers: securityHeaders },
   build: {
+    target: 'esnext',
     rollupOptions: {
       input: ['index.html', 'privacy-notice.html', 'terms.html', 'refund-policy.html']
     }
