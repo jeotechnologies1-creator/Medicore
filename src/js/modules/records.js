@@ -38,7 +38,30 @@ const RecordsModule = () => {
     const [himPatients, setHimPatients] = useState(appData.patients || []);
     const [patientDirectoryLoading, setPatientDirectoryLoading] = useState(false);
     const [patientDirectoryError, setPatientDirectoryError] = useState('');
+    const [privacyRequests, setPrivacyRequests] = useState([]);
+    const [privacyRequestError, setPrivacyRequestError] = useState('');
     const patients = himPatients;
+
+    const refreshPrivacyRequests = async () => {
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client || !['super_admin','records_officer'].includes(user?.role)) return;
+        const { data, error } = await client.rpc('list_data_subject_request_queue');
+        if (error) setPrivacyRequestError('The privacy request queue could not be loaded.');
+        else { setPrivacyRequests(data || []); setPrivacyRequestError(''); }
+    };
+
+    useEffect(() => { refreshPrivacyRequests(); }, [user?.id, user?.role]);
+
+    const updatePrivacyRequest = async (request, status) => {
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return;
+        const { error } = await client.rpc('update_data_subject_request', {
+            p_request_id: request.id, p_status: status, p_assigned_to: user.id,
+            p_resolution_note: status === 'completed' ? 'Reviewed by the Health Information Management team.' : null
+        });
+        if (error) setPrivacyRequestError(`The request was not updated. ${error.message || ''}`.trim());
+        else refreshPrivacyRequests();
+    };
 
     useEffect(() => {
         if (!['super_admin', 'records_officer'].includes(user?.role)) return undefined;
@@ -427,6 +450,10 @@ const RecordsModule = () => {
                     ['Files indexed', himSummary?.files_total], ['Files available', himSummary?.files_available], ['In circulation', himSummary?.files_circulating], ['Awaiting release', himSummary?.files_requested], ['Overdue', himSummary?.files_overdue], ['Missing', himSummary?.files_missing], ['Requests today', himSummary?.requests_today], ['Retrieved today', himSummary?.files_retrieved_today], ['Returned today', himSummary?.files_returned_today]
                 ].map(([label, value]) => <Card key={label}><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-900">{value == null ? '—' : Number(value).toLocaleString()}</p></Card>)}
             </div>}
+            {['super_admin','records_officer'].includes(user?.role) && <Card title="Data-subject request queue" subtitle="Requests show facility-configured provisional due dates; legal deadlines require local counsel confirmation." action={<Button size="sm" variant="ghost" onClick={refreshPrivacyRequests}>Refresh</Button>}>
+                {privacyRequestError && <p role="alert" className="mb-3 text-sm text-red-700">{privacyRequestError}</p>}
+                {privacyRequests.length ? <div className="space-y-3">{privacyRequests.map((request) => <div key={request.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 p-3"><div className="min-w-[16rem] flex-1"><p className="font-medium capitalize">{request.request_type} request · {request.status.replaceAll('_',' ')}</p><p className="mt-1 text-sm text-slate-600">{request.description}</p><p className="mt-1 text-xs text-slate-500">Received {formatDateTime(request.received_at)} · due {formatDateTime(request.due_at)} · patient {request.patient_id || 'not linked'}</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => updatePrivacyRequest(request,'in_progress')}>Start review</Button><Button size="sm" variant="primary" onClick={() => updatePrivacyRequest(request,'completed')}>Complete</Button></div></div>)}</div> : <p className="text-sm text-slate-500">No open data-subject requests.</p>}
+            </Card>}
             {['super_admin', 'records_officer'].includes(user?.role) && <Card title="Medical record circulation register" subtitle="Facility scoped physical file tracking. Requests, handovers, returns, and missing-file actions are recorded in an append-only event history." action={<Button size="sm" variant="ghost" onClick={refreshRecordFiles}>Refresh</Button>}>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6 items-end">
                     <Select label="Patient" value={fileRequest.patientId} disabled={patientDirectoryLoading || Boolean(patientDirectoryError)} onChange={(event) => setFileRequest((current) => ({ ...current, patientId: event.target.value }))} options={[{ value: '', label: patientDirectoryLoading ? 'Loading hospital patients…' : patientDirectoryError ? 'Patient list unavailable' : patients.length ? `Select from ${patients.length.toLocaleString()} patients…` : 'No patients available' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.medicalRecordNumber || patient.patientNumber || patient.id.slice(0, 8)}` }))]} />

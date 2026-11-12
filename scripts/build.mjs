@@ -42,4 +42,6 @@ await writeFile(resolve(output, 'index.html'), html, 'utf8');
 await mkdir(resolve(output, 'src'), { recursive: true });
 await cp(resolve(root, 'src/styles.css'), resolve(output, 'src/styles.css'));
 await cp(resolve(root, 'refund-policy.html'), resolve(output, 'refund-policy.html'));
+await cp(resolve(root, 'privacy-notice.html'), resolve(output, 'privacy-notice.html'));
+await cp(resolve(root, 'terms.html'), resolve(output, 'terms.html'));
 console.log(`Built frontend into ${output}`);

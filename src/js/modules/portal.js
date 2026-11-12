@@ -29,6 +29,11 @@
             const [checkoutMessage, setCheckoutMessage] = useState('');
             const [checkoutUrl, setCheckoutUrl] = useState('');
             const [messageError, setMessageError] = useState('');
+            const [privacyRequestType, setPrivacyRequestType] = useState('access');
+            const [privacyRequestDescription, setPrivacyRequestDescription] = useState('');
+            const [privacyRequests, setPrivacyRequests] = useState([]);
+            const [privacyRequestMessage, setPrivacyRequestMessage] = useState('');
+            const [privacyRequestBusy, setPrivacyRequestBusy] = useState(false);
 
             useEffect(() => {
                 if (!patient?.id) { setRefillItems([]); return; }
@@ -103,11 +108,36 @@
                 { id: 'prescriptions', label: 'Prescriptions' },
                 { id: 'billing', label: 'Billing' },
                 { id: 'messages', label: 'Messages' },
+                { id: 'privacy', label: 'Privacy requests' },
             ];
 
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
+
+            useEffect(() => {
+                if (activeTab !== 'privacy') return;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) { setPrivacyRequestMessage('The privacy request service is unavailable.'); return; }
+                client.rpc('list_my_data_subject_requests').then(({ data, error }) => {
+                    if (error) setPrivacyRequestMessage('Your privacy requests could not be loaded.');
+                    else setPrivacyRequests(data || []);
+                });
+            }, [activeTab]);
+
+            const submitPrivacyRequest = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !privacyRequestDescription.trim()) { setPrivacyRequestMessage('Describe what you are asking the facility to do.'); return; }
+                setPrivacyRequestBusy(true); setPrivacyRequestMessage('');
+                try {
+                    const { error } = await client.rpc('create_data_subject_request', { p_patient_id: patient?.id || null, p_request_type: privacyRequestType, p_description: privacyRequestDescription.trim() });
+                    if (error) throw error;
+                    const { data, error: listError } = await client.rpc('list_my_data_subject_requests');
+                    if (listError) throw listError;
+                    setPrivacyRequests(data || []); setPrivacyRequestDescription(''); setPrivacyRequestMessage('Request received. The displayed due date uses the facility’s configurable provisional schedule.');
+                } catch (error) { setPrivacyRequestMessage(`Request could not be submitted. ${error?.message || ''}`.trim()); }
+                finally { setPrivacyRequestBusy(false); }
+            };
 
             useEffect(() => {
                 let active = true;
@@ -277,6 +307,7 @@
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                    <p className="mt-2 text-xs text-slate-500">Documents: <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">Draft privacy notice</a> · <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">Draft terms</a></p>
                     {portalDataError && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{portalDataError}</p>}
 
                     <div className="mt-6">
@@ -330,6 +361,22 @@
                                             <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id && a.date >= formatFacilityDate()).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
                                         </div>
                                     </div>
+                                </Card>
+                            </div>
+                        )}
+
+                        {activeTab === 'privacy' && (
+                            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                                <Card title="Request access, correction, or restriction" subtitle="The facility will review your request and contact you if it needs more information.">
+                                    <div className="space-y-3">
+                                        <Select label="Request type" value={privacyRequestType} onChange={(event) => setPrivacyRequestType(event.target.value)} options={[{value:'access',label:'Access to my information'},{value:'correction',label:'Correction of information'},{value:'restriction',label:'Restriction request'}]} />
+                                        <TextArea label="Describe your request" rows={5} value={privacyRequestDescription} onChange={(event) => setPrivacyRequestDescription(event.target.value)} />
+                                        {privacyRequestMessage && <p role="status" className="text-sm text-slate-700">{privacyRequestMessage}</p>}
+                                        <Button variant="primary" onClick={submitPrivacyRequest} disabled={privacyRequestBusy}>{privacyRequestBusy ? 'Submitting…' : 'Submit privacy request'}</Button>
+                                    </div>
+                                </Card>
+                                <Card title="My privacy requests">
+                                    {privacyRequests.length ? <div className="space-y-3">{privacyRequests.map((request) => <div key={request.id} className="rounded-lg border border-slate-200 p-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium capitalize">{request.request_type} · {request.status.replaceAll('_',' ')}</span><span className="text-slate-500">Due {formatDate(request.due_at)}</span></div><p className="mt-1 text-slate-600">{request.description}</p><p className="mt-1 text-xs text-slate-500">Received {formatDate(request.received_at)} · provisional facility schedule</p></div>)}</div> : <p className="text-sm text-slate-500">No requests submitted yet.</p>}
                                 </Card>
                             </div>
                         )}

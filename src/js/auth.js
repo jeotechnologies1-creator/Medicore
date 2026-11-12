@@ -671,12 +671,22 @@
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
             const [showPassword, setShowPassword] = useState(false);
-            const { login, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa } = useAuth();
+            const { login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa } = useAuth();
             const [mfaCode, setMfaCode] = useState('');
             const [mfaBusy, setMfaBusy] = useState(false);
             const [captchaToken, setCaptchaToken] = useState('');
             const [captchaError, setCaptchaError] = useState('');
+            const [noticeAccepted, setNoticeAccepted] = useState(false);
             const captchaWidgetId = useRef(null);
+
+            const recordNoticeAcceptance = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) throw new Error('Privacy acceptance could not be recorded because the service is unavailable.');
+                const { error: acceptanceError } = await client.rpc('record_privacy_notice_acceptance', {
+                    p_privacy_version: 'draft-2026-11-12-v1', p_terms_version: 'draft-2026-11-12-v1'
+                });
+                if (acceptanceError) throw new Error(`Privacy acceptance could not be recorded. ${acceptanceError.message || ''}`.trim());
+            };
 
             useEffect(() => {
                 if (mfaGate) return undefined;
@@ -721,20 +731,27 @@
                 setError('');
                 try {
                     if (mfaGate) {
+                        if (!noticeAccepted) throw new Error('Review and acknowledge the draft privacy notice and terms to continue.');
                         setMfaBusy(true);
                         await verifyMfa(mfaCode);
+                        await recordNoticeAcceptance();
                         onLogin();
                         return;
                     }
+                    if (!noticeAccepted) throw new Error('Review and acknowledge the draft privacy notice and terms to continue.');
                     if (!captchaToken) {
                         const captchaRequired = new Error(captchaError || 'Complete the CAPTCHA check before signing in.');
                         captchaRequired.code = 'CAPTCHA_REQUIRED';
                         throw captchaRequired;
                     }
                     const result = await login(email, password, captchaToken);
-                    if (!result?.mfaRequired) onLogin();
+                    if (!result?.mfaRequired) {
+                        await recordNoticeAcceptance();
+                        onLogin();
+                    }
                 } catch (err) {
-                    setError(mfaGate ? (err?.message || 'Authenticator verification failed.') : err?.code === 'CAPTCHA_REQUIRED' ? err.message : 'Invalid email or password. Contact your administrator if you need an account.');
+                    if (String(err?.message || '').startsWith('Privacy acceptance could not be recorded')) logout();
+                    setError(err?.code === 'CAPTCHA_REQUIRED' ? err.message : err?.message?.includes('privacy') || err?.message?.includes('Privacy') || mfaGate ? (err?.message || 'Authenticator verification failed.') : 'Invalid email or password. Contact your administrator if you need an account.');
                     if (!mfaGate && captchaWidgetId.current && window.turnstile) {
                         window.turnstile.reset(captchaWidgetId.current);
                         setCaptchaToken('');
@@ -803,6 +820,7 @@
                                             </>
                                         )}
                                         <Button type="button" variant="ghost" className="w-full justify-center" onClick={handleCancelMfa} disabled={mfaBusy}>Sign out</Button>
+                                        <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={noticeAccepted} onChange={(event) => setNoticeAccepted(event.target.checked)} /><span>I have reviewed the <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">draft privacy notice</a> and <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">draft terms</a>. They are pending facility legal review.</span></label>
                                     </div>
                                 ) : <>
                                 <Input
@@ -849,12 +867,13 @@
                                         </span>
                                     ) : 'Sign In'}
                                 </Button>
+                                <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={noticeAccepted} onChange={(event) => setNoticeAccepted(event.target.checked)} /><span>I have reviewed the <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">draft privacy notice</a> and <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">draft terms</a>. They are pending facility legal review.</span></label>
                                 <div id="onemed-turnstile-widget" className="flex justify-center" aria-label="CAPTCHA verification" />
                                 {captchaError && <p role="status" className="text-center text-xs text-red-700">{captchaError}</p>}
                                 </>}
                             </form>
                         </Card>
-                        <p className="mt-5 text-center text-sm"><a className="text-medical-700 underline" href="/refund-policy.html">Refund policy</a></p>
+                        <p className="mt-5 text-center text-sm"><a className="text-medical-700 underline" href="/refund-policy.html">Refund policy</a><span className="px-2 text-slate-400">·</span><a className="text-medical-700 underline" href="/privacy-notice.html">Privacy notice</a><span className="px-2 text-slate-400">·</span><a className="text-medical-700 underline" href="/terms.html">Terms</a></p>
 
                     </div>
                 </main>

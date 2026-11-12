@@ -380,6 +380,40 @@
                 const [documentLink, setDocumentLink] = useState(null);
                 const patientDocuments = chart ? normalizeDocuments(chart.patient_documents || []) : (appData.documents || []).filter((document) => document.patientId === patient.id);
                 const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse'].includes(user?.role);
+                const [patientConsents, setPatientConsents] = useState([]);
+                const [consentForm, setConsentForm] = useState({ type: 'treatment', status: 'granted', witness: '', notes: '' });
+                const [consentMessage, setConsentMessage] = useState('');
+                const [consentBusy, setConsentBusy] = useState(false);
+
+                useEffect(() => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client || !patient?.id) return undefined;
+                    let active = true;
+                    client.rpc('read_patient_consents', { p_patient_id: patient.id }).then(({ data, error }) => {
+                        if (!active) return;
+                        if (error) setConsentMessage(`Consent records could not be loaded. ${error.message || ''}`.trim());
+                        else setPatientConsents(data || []);
+                    });
+                    return () => { active = false; };
+                }, [patient?.id]);
+
+                const savePatientConsent = async () => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client || consentBusy) return;
+                    setConsentBusy(true); setConsentMessage('');
+                    try {
+                        const { error } = await client.rpc('record_patient_consent', {
+                            p_patient_id: patient.id, p_consent_type: consentForm.type, p_status: consentForm.status,
+                            p_version: 'facility-consent-v1', p_witness: consentForm.witness, p_notes: consentForm.notes
+                        });
+                        if (error) throw error;
+                        const { data, error: readError } = await client.rpc('read_patient_consents', { p_patient_id: patient.id });
+                        if (readError) throw readError;
+                        setPatientConsents(data || []); setConsentForm((current) => ({ ...current, witness: '', notes: '' }));
+                        setConsentMessage('Consent record saved with its version and timestamp.');
+                    } catch (error) { setConsentMessage(`Consent could not be saved. ${error?.message || ''}`.trim()); }
+                    finally { setConsentBusy(false); }
+                };
 
                 const uploadDocument = async () => {
                     if (!canUploadPatientDocument || !documentFile || documentBusy) return;
@@ -695,6 +729,7 @@
                     { id: 'billing', label: 'Billing' },
                     { id: 'admissions', label: 'Admissions' },
                     { id: 'documents', label: 'Documents' },
+                    { id: 'consent', label: 'Consent' },
                 ];
 
                 const handleReferToRecords = async () => {
@@ -899,6 +934,26 @@
                                             </div>
                                         </Card>
                                     </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'consent' && !isAdministrativeViewer && (
+                                <div className="space-y-5">
+                                    <Card title="Consent history" subtitle="Consent is recorded by type, version, date, and witness. Withdrawals are retained as history.">
+                                        <div className="space-y-2">
+                                            {patientConsents.length ? patientConsents.map((consent) => <div key={consent.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm"><span className="font-medium capitalize">{consent.consent_type.replaceAll('_',' ')}</span><span>{consent.status}</span><span className="text-slate-500">{consent.consent_version} · {formatDateTime(consent.withdrawn_at || consent.granted_at || consent.created_at)}</span>{consent.witness_name && <span className="text-slate-500">Witness: {consent.witness_name}</span>}</div>) : <p className="text-sm text-slate-500">No consent records have been recorded.</p>}
+                                        </div>
+                                    </Card>
+                                    {['super_admin','doctor','nurse'].includes(user?.role) && <Card title="Record consent or withdrawal" subtitle="Record the patient's choice. A withdrawal adds a new history row and does not erase earlier consent.">
+                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                            <Select label="Consent type" value={consentForm.type} onChange={(event) => setConsentForm((current) => ({...current,type:event.target.value}))} options={['treatment','data_sharing','portal','procedure'].map((value) => ({value,label:value.replaceAll('_',' ')}))} />
+                                            <Select label="Patient's choice" value={consentForm.status} onChange={(event) => setConsentForm((current) => ({...current,status:event.target.value}))} options={[{value:'granted',label:'Granted'},{value:'declined',label:'Declined'},{value:'withdrawn',label:'Withdrawn'}]} />
+                                            <Input label="Witness (optional)" value={consentForm.witness} onChange={(event) => setConsentForm((current) => ({...current,witness:event.target.value}))} />
+                                            <Input label="Notes" value={consentForm.notes} onChange={(event) => setConsentForm((current) => ({...current,notes:event.target.value}))} />
+                                        </div>
+                                        {consentMessage && <p role="status" className="mt-3 text-sm text-slate-700">{consentMessage}</p>}
+                                        <Button className="mt-3" variant="primary" onClick={savePatientConsent} disabled={consentBusy}>{consentBusy ? 'Saving…' : 'Save consent record'}</Button>
+                                    </Card>}
                                 </div>
                             )}
 
