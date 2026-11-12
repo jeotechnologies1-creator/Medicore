@@ -24,7 +24,7 @@ for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
     };
 }
 
-const legacyModules = import.meta.glob('./js/**/*.{js,jsx}');
+const legacyModules = import.meta.glob(['./app.js', './js/**/*.{js,jsx}']);
 
 const loadLegacyModule = async (path) => {
   const loadModule = legacyModules[path];
