@@ -4,6 +4,8 @@
 
 Local and staging `config.toml` files disable self-registration, require email confirmation, and require secure password changes. These files do not change an already hosted Supabase project's settings. In each hosted Supabase Dashboard, open **Authentication → Settings** and disable new user signups, enable email confirmations, and enable secure password changes. Apply these settings to every hosted environment before allowing users to sign in. Staff and patient portal accounts must be provisioned through the approved Edge Functions; new Auth identities remain pending with the `unassigned` role until that workflow activates them.
 
+Migration `20261112000034_financial_facility_scope.sql` derives financial record facilities from each patient's verified `home_facility_id` and linked parent rows. Rows whose patient has no verified facility remain NULL and are restricted to Super Admin. Reconcile missing facility assignments in staging; never assign facilities from the current user's membership. The migration adds a facility derivation trigger and restrictive facility membership checks to billing, claims, payments, refunds, disputes and remittances.
+
 Apply these files in the Supabase SQL Editor, in this exact order, to a new project. Each script is additive/idempotent where practical; always test upgrades against a staging copy first.
 
 1. `schema.sql`

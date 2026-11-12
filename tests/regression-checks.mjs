@@ -12,6 +12,7 @@ const himRollback = await read('supabase/rollback/20261103000030_him_records.sql
 const stagingGuide = await read('infra/supabase-staging/README.md');
 const stagingConfig = await read('infra/supabase-staging/supabase/config.toml');
 const pendingAuthMigration = await read('supabase/migrations/20261112000033_pending_auth_access_gate.sql');
+const financialFacilityMigration = await read('supabase/migrations/20261112000034_financial_facility_scope.sql');
 const localAuthConfig = await read('supabase/config.toml');
 const pendingAuthTest = await read('supabase/tests/pending_auth_access_gate.test.sql');
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
@@ -144,6 +145,9 @@ assert.match(pendingAuthMigration, /'unassigned','pending'/, 'New Auth identitie
 assert.match(pendingAuthMigration, /as restrictive for all to authenticated/, 'Pending profiles must be denied by restrictive table policies.');
 assert.match(localAuthConfig, /enable_signup = false[\s\S]*?\[auth\.email\][\s\S]*?enable_signup = false[\s\S]*?enable_confirmations = true[\s\S]*?secure_password_change = true/, 'Local Auth must disable signup and require confirmation and secure password changes.');
 assert.match(pendingAuthTest, /cannot read patient rows[\s\S]*?cannot write patient rows[\s\S]*?cannot read storage objects[\s\S]*?cannot use a privileged RPC/, 'Database regression coverage must deny pending users table, storage, and RPC access.');
+assert.match(financialFacilityMigration, /update public\.billing b set facility_id=p\.home_facility_id[\s\S]*?create or replace function public\.set_financial_scope_from_patient/, 'Financial facilities must be backfilled from patient records and derived on insert.');
+assert.match(financialFacilityMigration, /create policy %I on public\.%I as restrictive for select to authenticated/, 'Financial records must have restrictive facility-scoped read policies.');
+assert.match(financialFacilityMigration, /using \(public\.has_any_role\(array\[''super_admin''\]\)\)/, 'Financial record deletes must remain Super Admin only.');
 assert.match(authorization, /or public\.has_any_role\(array\['records_officer'\]\)/, 'Records Officers must have read-only clinical chart access.');
 assert.match(hospitalWorkflows, /HIM register encounters/, 'HIM staff must be able to open an encounter in its initial state.');
 assert.match(hospitalWorkflows, /drop policy if exists "authorized clinical read encounters" on public\.encounters/, 'Encounter authorization policies must be replaceable when the workflow migration is rerun.');
