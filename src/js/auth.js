@@ -2,6 +2,7 @@
         // AUTH CONTEXT
         // ==========================================
         const AuthContext = React.createContext(null);
+        const aal2RequiredRoles = ['super_admin', 'accountant', 'doctor', 'pharmacist', 'surgeon', 'specialist'];
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
@@ -286,7 +287,68 @@
             const [user, setUser] = useState(null);
             const [roleMatrix, setRoleMatrix] = useState(defaultRoleMatrix);
             const [loading, setLoading] = useState(false);
+            const [mfaGate, setMfaGate] = useState(null);
             const [sessionSecurity, setSessionSecurity] = useState({ timeoutMinutes: 30, autoLogoutIdle: true });
+
+            const requiresMfa = useCallback(async (profile, client) => {
+                const role = String(profile?.role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+                if (!aal2RequiredRoles.includes(role)) return false;
+                const { data, error } = await client.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
+                if (error) return true;
+                return data?.setting_value?.enabled !== false;
+            }, []);
+
+            const setMfaChallenge = useCallback(async (profile, client) => {
+                let factor = null;
+                let factorError = null;
+                try {
+                    const { data, error } = await client.auth.mfa.listFactors();
+                    factorError = error;
+                    factor = (data?.totp || []).find((entry) => entry.status === 'verified') || null;
+                } catch (error) {
+                    factorError = error;
+                }
+                setMfaGate({
+                    profile,
+                    mode: factor ? 'challenge' : 'enroll',
+                    factorId: factor?.id || null,
+                    qrCode: null,
+                    secret: null,
+                    error: factorError ? 'Authenticator status is unavailable. Retry setup or contact an administrator.' : ''
+                });
+            }, []);
+
+            const beginMfaEnrollment = useCallback(async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !mfaGate?.profile) throw new Error('Authenticator setup is unavailable. Sign in again.');
+                const { data, error } = await client.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'OneMed authenticator' });
+                if (error || !data?.id || !data?.totp?.qr_code) throw error || new Error('Could not start authenticator setup.');
+                setMfaGate((current) => current ? { ...current, mode: 'enroll', factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret, error: '' } : current);
+            }, [mfaGate]);
+
+            const verifyMfa = useCallback(async (code) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !mfaGate?.factorId || !mfaGate?.profile) throw new Error('Authenticator verification is not ready.');
+                const normalizedCode = String(code || '').replace(/\s/g, '');
+                if (!/^\d{6,8}$/.test(normalizedCode)) throw new Error('Enter the current code from your authenticator app.');
+                const { error } = await client.auth.mfa.challengeAndVerify({ factorId: mfaGate.factorId, code: normalizedCode });
+                if (error) throw new Error('The authenticator code could not be verified. Check the code and try again.');
+                const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+                if (assuranceError || assurance?.currentLevel !== 'aal2') throw new Error('AAL2 could not be confirmed. Sign in again and retry.');
+                const profile = mfaGate.profile;
+                const safeUser = { ...profile, name: profile.name || profile.full_name || profile.email, role: profile.role, patientId: profile.patientId || profile.patient_id || null };
+                delete safeUser.password;
+                setMfaGate(null);
+                setUser(safeUser);
+                return safeUser;
+            }, [mfaGate]);
+
+            const cancelMfa = useCallback(async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                setMfaGate(null);
+                setUser(null);
+                if (client) await client.auth.signOut();
+            }, []);
 
             useEffect(() => {
                 if (!user?.id) return undefined;
@@ -401,6 +463,7 @@
                 let sessionRevision = 0;
                 const clearSignedOutState = () => {
                     initializeEmptyStore();
+                    setMfaGate(null);
                     setUser(null);
                 };
                 const applySession = async (session) => {
@@ -421,13 +484,23 @@
                         return;
                     }
                     if (data) {
+                        if (await requiresMfa(data, client)) {
+                            const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+                            if (!active || revision !== sessionRevision) return;
+                            if (assuranceError || assurance?.currentLevel !== 'aal2') {
+                                await setMfaChallenge(data, client);
+                                if (active && revision === sessionRevision) setUser(null);
+                                return;
+                            }
+                        }
+                        if (active && revision === sessionRevision) setMfaGate(null);
                         setUser({ ...data, name: data.full_name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null });
                     }
                 };
                 client.auth.getSession().then(({ data }) => applySession(data.session));
                 const { data: subscription } = client.auth.onAuthStateChange((_event, session) => applySession(session));
                 return () => { active = false; subscription.subscription.unsubscribe(); };
-            }, []);
+            }, [requiresMfa, setMfaChallenge]);
 
             useEffect(() => {
                 const hydrateRoleMatrix = async () => {
@@ -485,6 +558,17 @@
                             patientId: found.patientId || null
                         };
                         delete safeUser.password;
+                        const client = window.OneMedSupabase?.getClient?.();
+                        if (!client) throw new Error('Authentication is unavailable.');
+                        if (await requiresMfa(safeUser, client)) {
+                            const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+                            if (assuranceError || assurance?.currentLevel !== 'aal2') {
+                                setUser(null);
+                                await setMfaChallenge(safeUser, client);
+                                return { mfaRequired: true };
+                            }
+                        }
+                        setMfaGate(null);
                         setUser(safeUser);
                         return safeUser;
                     }
@@ -492,9 +576,10 @@
                 } finally {
                     setLoading(false);
                 }
-            }, []);
+            }, [requiresMfa, setMfaChallenge]);
 
             const logout = useCallback(() => {
+                setMfaGate(null);
                 setUser(null);
                 window.OneMedSupabase?.logout?.();
             }, []);
@@ -566,7 +651,7 @@
             }, [user, roleMatrix]);
 
             return (
-                <AuthContext.Provider value={{ user, login, logout, loading, hasPermission, hasModuleAccess, getRolePermissions }}>
+                <AuthContext.Provider value={{ user, login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, hasPermission, hasModuleAccess, getRolePermissions }}>
                     {children}
                 </AuthContext.Provider>
             );
@@ -586,17 +671,91 @@
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
             const [showPassword, setShowPassword] = useState(false);
-            const { login, loading } = useAuth();
+            const { login, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa } = useAuth();
+            const [mfaCode, setMfaCode] = useState('');
+            const [mfaBusy, setMfaBusy] = useState(false);
+            const [captchaToken, setCaptchaToken] = useState('');
+            const [captchaError, setCaptchaError] = useState('');
+            const captchaWidgetId = useRef(null);
+
+            useEffect(() => {
+                if (mfaGate) return undefined;
+                const siteKey = String(window.__ONEMED_CAPTCHA_SITE_KEY__ || '').trim();
+                if (!siteKey) {
+                    setCaptchaError('Turnstile site key is not configured. Contact the system administrator.');
+                    return undefined;
+                }
+                setCaptchaError('');
+                let widgetId = null;
+                let attempts = 0;
+                let timer = null;
+                const renderWidget = () => {
+                    if (widgetId) return;
+                    const element = document.getElementById('onemed-turnstile-widget');
+                    if (!window.turnstile || !element) {
+                        attempts += 1;
+                        if (attempts >= 50) setCaptchaError('Turnstile could not load. Try again later.');
+                        return;
+                    }
+                    widgetId = window.turnstile.render(element, {
+                        sitekey: siteKey,
+                        callback: (token) => { setCaptchaToken(token); setCaptchaError(''); },
+                        'expired-callback': () => setCaptchaToken(''),
+                        'error-callback': () => { setCaptchaToken(''); setCaptchaError('Turnstile verification failed. Refresh the page and try again.'); }
+                    });
+                    captchaWidgetId.current = widgetId;
+                    if (timer) window.clearInterval(timer);
+                };
+                timer = window.setInterval(renderWidget, 100);
+                renderWidget();
+                return () => {
+                    window.clearInterval(timer);
+                    setCaptchaToken('');
+                    if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+                    captchaWidgetId.current = null;
+                };
+            }, [mfaGate]);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setError('');
                 try {
-                    await login(email, password);
-                    onLogin();
+                    if (mfaGate) {
+                        setMfaBusy(true);
+                        await verifyMfa(mfaCode);
+                        onLogin();
+                        return;
+                    }
+                    if (!captchaToken) {
+                        const captchaRequired = new Error(captchaError || 'Complete the CAPTCHA check before signing in.');
+                        captchaRequired.code = 'CAPTCHA_REQUIRED';
+                        throw captchaRequired;
+                    }
+                    const result = await login(email, password, captchaToken);
+                    if (!result?.mfaRequired) onLogin();
                 } catch (err) {
-                    setError('Invalid email or password. Contact your administrator if you need an account.');
+                    setError(mfaGate ? (err?.message || 'Authenticator verification failed.') : err?.code === 'CAPTCHA_REQUIRED' ? err.message : 'Invalid email or password. Contact your administrator if you need an account.');
+                    if (!mfaGate && captchaWidgetId.current && window.turnstile) {
+                        window.turnstile.reset(captchaWidgetId.current);
+                        setCaptchaToken('');
+                    }
+                } finally {
+                    setMfaBusy(false);
                 }
+            };
+
+            const handleBeginMfaEnrollment = async () => {
+                setError('');
+                setMfaBusy(true);
+                try { await beginMfaEnrollment(); }
+                catch (err) { setError(err?.message || 'Authenticator setup could not start.'); }
+                finally { setMfaBusy(false); }
+            };
+
+            const handleCancelMfa = async () => {
+                setMfaBusy(true);
+                try { await cancelMfa(); }
+                finally { setMfaBusy(false); setMfaCode(''); setPassword(''); }
             };
 
             return (
@@ -619,6 +778,33 @@
                                         {error}
                                     </div>
                                 )}
+                                {mfaGate ? (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-slate-900">{mfaGate.mode === 'challenge' ? 'Verify your authenticator' : 'Set up an authenticator'}</h2>
+                                            <p className="mt-1 text-sm text-slate-600">This account must complete two-step verification before entering OneMed.</p>
+                                        </div>
+                                        {mfaGate.error && <p role="status" className="text-sm text-amber-800">{mfaGate.error}</p>}
+                                        {mfaGate.mode === 'enroll' && !mfaGate.qrCode ? (
+                                            <Button type="button" variant="primary" className="w-full justify-center" onClick={handleBeginMfaEnrollment} disabled={mfaBusy}>
+                                                {mfaBusy ? 'Preparing setup...' : 'Set up authenticator'}
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                {mfaGate.mode === 'enroll' && mfaGate.qrCode && <div className="space-y-2 rounded-lg border border-slate-200 p-4">
+                                                    <p className="text-sm text-slate-700">Scan this QR code with an authenticator app, then enter the current code below.</p>
+                                                    <img className="mx-auto h-48 w-48" src={mfaGate.qrCode} alt="One-time authenticator setup QR code" />
+                                                    {mfaGate.secret && <p className="break-all text-xs text-slate-600">Manual setup key: <code>{mfaGate.secret}</code></p>}
+                                                </div>}
+                                                <Input label="Authenticator code" type="text" inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} required />
+                                                <Button type="submit" variant="primary" size="lg" className="w-full justify-center" disabled={mfaBusy} aria-busy={mfaBusy}>
+                                                    {mfaBusy ? 'Verifying...' : 'Verify and continue'}
+                                                </Button>
+                                            </>
+                                        )}
+                                        <Button type="button" variant="ghost" className="w-full justify-center" onClick={handleCancelMfa} disabled={mfaBusy}>Sign out</Button>
+                                    </div>
+                                ) : <>
                                 <Input
                                     label="Email"
                                     placeholder="Enter your email"
@@ -663,6 +849,9 @@
                                         </span>
                                     ) : 'Sign In'}
                                 </Button>
+                                <div id="onemed-turnstile-widget" className="flex justify-center" aria-label="CAPTCHA verification" />
+                                {captchaError && <p role="status" className="text-center text-xs text-red-700">{captchaError}</p>}
+                                </>}
                             </form>
                         </Card>
                         <p className="mt-5 text-center text-sm"><a className="text-medical-700 underline" href="/refund-policy.html">Refund policy</a></p>

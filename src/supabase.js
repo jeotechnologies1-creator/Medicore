@@ -134,7 +134,13 @@
         };
 
         const { data, error } = await client.from('system_settings').upsert(payload, { onConflict: 'setting_key' }).select();
-        return { data: data?.[0] || null, error };
+        if (error) return { data: data?.[0] || null, error };
+        const { error: mfaError } = await client.from('system_settings').upsert({
+            setting_key: 'mfa_enforcement',
+            setting_value: { enabled: normalizedSettings.requireMfa !== false },
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'setting_key' });
+        return { data: data?.[0] || null, error: mfaError };
     };
 
     const loadSystemSettings = async () => {
@@ -143,13 +149,12 @@
             return {};
         }
 
-        const { data, error } = await client.from('system_settings').select('*').eq('setting_key', 'hospital_core_settings').maybeSingle();
-        if (error || !data) {
-            return {};
-        }
-
-        const value = data.setting_value || {};
-        return (value && typeof value === 'object') ? value : {};
+        const [{ data, error }, { data: mfaSetting, error: mfaError }] = await Promise.all([
+            client.from('system_settings').select('*').eq('setting_key', 'hospital_core_settings').maybeSingle(),
+            client.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle()
+        ]);
+        const value = !error && data?.setting_value && typeof data.setting_value === 'object' ? data.setting_value : {};
+        return { ...value, requireMfa: mfaError ? true : mfaSetting?.setting_value?.enabled !== false };
     };
 
     const saveDepartments = async (departments) => {
@@ -287,7 +292,7 @@
         return client.storage.from('patient-documents').createSignedUrl(objectPath, 60);
     };
 
-    const loginProfile = async (email, password) => {
+    const loginProfile = async (email, password, captchaToken = '') => {
         const normalizedEmail = String(email || '').trim();
         const normalizedPassword = String(password || '');
         try {
@@ -295,7 +300,11 @@
             if (!client) {
                 return null;
             }
-            const { data: authData, error: authError } = await client.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
+            const { data: authData, error: authError } = await client.auth.signInWithPassword({
+                email: normalizedEmail,
+                password: normalizedPassword,
+                options: captchaToken ? { captchaToken } : undefined
+            });
             if (authError || !authData.user) return null;
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
             if (!error && data?.status === 'active') {

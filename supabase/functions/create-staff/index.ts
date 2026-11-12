@@ -21,8 +21,15 @@ Deno.serve(async (request) => {
   const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: { user }, error: userError } = await requesterClient.auth.getUser();
   if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
-
   const adminClient = createClient(url, serviceKey);
+  const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
+  const enforceMfa = mfaSettingError || mfaSetting?.setting_value?.enabled !== false;
+  if (enforceMfa) {
+    const { data: assurance, error: assuranceError } = await requesterClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assuranceError || assurance?.currentLevel !== 'aal2') {
+      return Response.json({ error: 'Complete authenticator verification before creating staff accounts.' }, { status: 403, headers: corsHeaders });
+    }
+  }
   const { data: requesterProfile, error: requesterProfileError } = await adminClient
     .from('profiles')
     .select('role, status')
@@ -39,8 +46,8 @@ Deno.serve(async (request) => {
   } catch {
     return Response.json({ error: 'Request body must be valid JSON.' }, { status: 400, headers: corsHeaders });
   }
+  if ('password' in payload) return Response.json({ error: 'Admin-set passwords are not accepted. The account owner sets a password from the invitation email.' }, { status: 400, headers: corsHeaders });
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
-  const password = typeof payload.password === 'string' ? payload.password : '';
   const fullNameValue = payload.fullName ?? payload.full_name ?? payload.name;
   const fullName = typeof fullNameValue === 'string' ? fullNameValue.trim() : '';
   const roleValue = typeof payload.role === 'string' ? payload.role.trim().toLowerCase().replace(/[\s-]+/g, '_') : '';
@@ -55,15 +62,11 @@ Deno.serve(async (request) => {
   if (!fullName) invalidFields.push('full name');
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) invalidFields.push('valid email');
   if (!allowedRoles.includes(role)) invalidFields.push(`supported role (received “${role || 'empty'}”)`);
-  if (password.length < 8) invalidFields.push('password of at least 8 characters');
   if (invalidFields.length) return Response.json({ error: `Invalid staff details: ${invalidFields.join(', ')}.` }, { status: 400, headers: corsHeaders });
 
-  const { data: created, error: createError } = await adminClient.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { full_name: fullName },
-  });
+  const redirectTo = Deno.env.get('AUTH_INVITE_REDIRECT_URL');
+  const inviteOptions = { data: { full_name: fullName }, ...(redirectTo ? { redirectTo } : {}) };
+  const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
   if (createError || !created.user) return Response.json({ error: createError?.message || 'Unable to create account.' }, { status: 400, headers: corsHeaders });
 
   const { data: profile, error: profileError } = await adminClient

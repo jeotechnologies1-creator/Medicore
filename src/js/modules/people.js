@@ -22,7 +22,7 @@
         const HRStaffModule = () => {
             const { user } = useAuth();
             const [activeTab, setActiveTab] = useState('overview');
-            const [staffForm, setStaffForm] = useState({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
+            const [staffForm, setStaffForm] = useState({ fullName: '', email: '', role: 'doctor', department: '' });
             const [staffMessage, setStaffMessage] = useState('');
             const [creatingStaff, setCreatingStaff] = useState(false);
             const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'super_admin'].includes(person.role));
@@ -47,8 +47,8 @@
                     setStaffMessage(`This account's profile role is “${user?.role || 'unknown'}”. It must be “super_admin” to create staff accounts.`);
                     return;
                 }
-                if (!staffForm.fullName.trim() || !staffForm.email.trim() || staffForm.password.length < 8) {
-                    setStaffMessage('Enter a name, work email, and password of at least 8 characters.');
+                if (!staffForm.fullName.trim() || !staffForm.email.trim()) {
+                    setStaffMessage('Enter a name and work email.');
                     return;
                 }
                 setCreatingStaff(true);
@@ -62,8 +62,8 @@
                     if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'create-staff'));
                     if (!data?.staff) throw new Error(data?.error || 'The function returned no staff profile. Check the create-staff Edge Function logs.');
                     appData.users = [...(appData.users || []), normalizeUsers([data.staff])[0]];
-                    setStaffForm({ fullName: '', email: '', password: '', role: 'doctor', department: '' });
-                    setStaffMessage(`${data.staff.full_name || data.staff.email} can now sign in.`);
+                    setStaffForm({ fullName: '', email: '', role: 'doctor', department: '' });
+                    setStaffMessage(`Invitation sent to ${data.staff.email}. They can set their password using the email link.`);
                 } catch (error) {
                     console.error('create-staff failed:', error);
                     setStaffMessage(error.message || 'Unable to create the staff account.');
@@ -95,10 +95,9 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input label="Full name" value={staffForm.fullName} onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })} />
                             <Input label="Work email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} />
-                            <Input label="Temporary password (8+ characters)" type="password" value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} />
                             <Select label="Role" value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })} options={['doctor', 'nurse', 'receptionist', 'records_officer', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'surgeon', 'specialist', 'theatre_staff'].map(value => ({ value, label: value === 'records_officer' ? 'Health Information Management Officer' : value.replaceAll('_', ' ') }))} />
                             <Input label="Department" value={staffForm.department} onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })} />
-                            {staffMessage && <p role="status" className={'md:col-span-2 text-sm ' + (staffMessage.includes('can now sign in') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
+                            {staffMessage && <p role="status" className={'md:col-span-2 text-sm ' + (staffMessage.includes('Invitation sent') ? 'text-emerald-600' : 'text-red-600')}>{staffMessage}</p>}
                             <div className="md:col-span-2">
                                 <Button variant="primary" className="w-full justify-center" onClick={handleCreateStaff} disabled={creatingStaff} icon={creatingStaff ? Icons.RefreshCw : Icons.UserPlus}>
                                     {creatingStaff ? 'Creating account...' : 'Create Staff Account'}
@@ -258,7 +257,7 @@
             });
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
-            const [patientPortalForm, setPatientPortalForm] = useState({ patientId: '', email: '', password: '' });
+            const [patientPortalForm, setPatientPortalForm] = useState({ patientId: '', email: '' });
             const [patientPortalMessage, setPatientPortalMessage] = useState('');
             const [creatingPatientPortal, setCreatingPatientPortal] = useState(false);
 
@@ -335,7 +334,7 @@
 
             const handleCreatePatientPortal = async () => {
                 if (user?.role !== 'super_admin') return setPatientPortalMessage('Only a super admin can create patient portal accounts.');
-                if (!patientPortalForm.patientId || !patientPortalForm.email || patientPortalForm.password.length < 8) return setPatientPortalMessage('Choose a patient, enter their email, and set a password of at least 8 characters.');
+                if (!patientPortalForm.patientId || !patientPortalForm.email) return setPatientPortalMessage('Choose a patient and enter their email.');
                 setCreatingPatientPortal(true);
                 setPatientPortalMessage('');
                 try {
@@ -344,8 +343,8 @@
                     const { data, error } = await client.functions.invoke('create-patient-portal', { body: { ...patientPortalForm, email: patientPortalForm.email.trim() } });
                     if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'create-patient-portal'));
                     if (!data?.patient) throw new Error(data?.error || 'Unable to create the patient portal account.');
-                    setPatientPortalForm({ patientId: '', email: '', password: '' });
-                    setPatientPortalMessage('Patient portal account created. The patient can sign in with the email and password provided.');
+                    setPatientPortalForm({ patientId: '', email: '' });
+                    setPatientPortalMessage('Invitation sent. The patient can set their password using the email link.');
                 } catch (error) {
                     setPatientPortalMessage(error.message || 'Unable to create the patient portal account.');
                 } finally {
@@ -411,8 +410,7 @@
                             <div className="space-y-4">
                                 <Select label="Patient record" value={patientPortalForm.patientId} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(appData.patients || []).map(patient => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />
                                 <Input label="Patient email" type="email" value={patientPortalForm.email} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, email: e.target.value }))} />
-                                <Input label="Temporary password (8+ characters)" type="password" value={patientPortalForm.password} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, password: e.target.value }))} />
-                                {patientPortalMessage && <p className={'text-sm ' + (patientPortalMessage.includes('created') ? 'text-emerald-600' : 'text-red-600')}>{patientPortalMessage}</p>}
+                                {patientPortalMessage && <p role="status" className={'text-sm ' + (patientPortalMessage.includes('Invitation sent') ? 'text-emerald-600' : 'text-red-600')}>{patientPortalMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" onClick={handleCreatePatientPortal} disabled={creatingPatientPortal} icon={creatingPatientPortal ? Icons.RefreshCw : Icons.UserPlus}>{creatingPatientPortal ? 'Creating account...' : 'Create Patient Portal'}</Button>
                             </div>
                         </Card>}

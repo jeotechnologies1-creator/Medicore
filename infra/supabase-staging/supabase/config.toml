@@ -11,11 +11,29 @@ max_rows = 1000
 
 [auth]
 enable_signup = false
+minimum_password_length = 12
+password_requirements = "lower_upper_letters_digits_symbols"
 
 [auth.email]
 enable_signup = false
 enable_confirmations = true
 secure_password_change = true
+
+[auth.captcha]
+enabled = true
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
+
+[auth.sessions]
+timebox = "12h"
+inactivity_timeout = "2h"
+
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
 
 [db]
 port = 55422

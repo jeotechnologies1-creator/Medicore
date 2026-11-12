@@ -19,21 +19,29 @@ Deno.serve(async (request) => {
   const { data: { user }, error: userError } = await requesterClient.auth.getUser();
   if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
   const adminClient = createClient(url, serviceKey);
+  const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
+  const enforceMfa = mfaSettingError || mfaSetting?.setting_value?.enabled !== false;
+  if (enforceMfa) {
+    const { data: assurance, error: assuranceError } = await requesterClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assuranceError || assurance?.currentLevel !== 'aal2') return Response.json({ error: 'Complete authenticator verification before creating portal accounts.' }, { status: 403, headers: corsHeaders });
+  }
   const { data: requester } = await adminClient.from('profiles').select('role, status').eq('auth_user_id', user.id).maybeSingle();
   if (requester?.role !== 'super_admin' || requester?.status !== 'active') return Response.json({ error: 'Only an active super admin can create patient portal accounts.' }, { status: 403, headers: corsHeaders });
   let payload: Record<string, unknown>;
   try { payload = await request.json(); } catch { return Response.json({ error: 'Request body must be valid JSON.' }, { status: 400, headers: corsHeaders }); }
+  if ('password' in payload) return Response.json({ error: 'Admin-set passwords are not accepted. The account owner sets a password from the invitation email.' }, { status: 400, headers: corsHeaders });
   const patientId = typeof payload.patientId === 'string' ? payload.patientId : '';
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
-  const password = typeof payload.password === 'string' ? payload.password : '';
-  if (!patientId || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8) return Response.json({ error: 'Provide a patient, valid email, and password of at least 8 characters.' }, { status: 400, headers: corsHeaders });
+  if (!patientId || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: 'Provide a patient and valid email address.' }, { status: 400, headers: corsHeaders });
   const { data: patient, error: patientError } = await adminClient.from('patients').select('id, first_name, last_name, email').eq('id', patientId).maybeSingle();
   if (patientError || !patient) return Response.json({ error: 'Patient record not found.' }, { status: 404, headers: corsHeaders });
   const { data: linkedProfile, error: linkedProfileError } = await adminClient.from('profiles').select('id').eq('patient_id', patientId).maybeSingle();
   if (linkedProfileError) return Response.json({ error: 'Unable to verify whether the patient already has a portal account.' }, { status: 500, headers: corsHeaders });
   if (linkedProfile) return Response.json({ error: 'This patient already has a linked portal account.' }, { status: 409, headers: corsHeaders });
   const fullName = `${patient.first_name} ${patient.last_name}`.trim();
-  const { data: created, error: createError } = await adminClient.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: fullName } });
+  const redirectTo = Deno.env.get('AUTH_INVITE_REDIRECT_URL');
+  const inviteOptions = { data: { full_name: fullName }, ...(redirectTo ? { redirectTo } : {}) };
+  const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
   if (createError || !created.user) return Response.json({ error: createError?.message || 'Unable to create account.' }, { status: 400, headers: corsHeaders });
   const { data: profile, error: profileError } = await adminClient.from('profiles').update({ role: 'patient', patient_id: patientId, full_name: fullName, status: 'active' }).eq('auth_user_id', created.user.id).select('id, email, full_name, role, patient_id, status').single();
   if (profileError) {
