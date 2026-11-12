@@ -282,3 +282,5 @@
                 </div>
             );
         };
+
+export { ReportsModule };

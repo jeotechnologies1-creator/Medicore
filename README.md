@@ -4,7 +4,17 @@ OneMed is a browser-based EMR/Hospital Management System backed by Supabase.
 
 ## Front-end structure
 
-The app uses ordered browser scripts (no bundler is required). `src/app.js` is now the small application entry point; supporting code lives in `src/js/`:
+The front end is built with Vite, React 18, Tailwind CSS, and ES modules. `src/main.js` loads the existing feature modules in their current dependency order; the module exports keep the shared application API available while the screens are migrated to direct imports. React, Supabase, Tailwind, and Inter are bundled or self-hosted; the login CAPTCHA uses Cloudflare Turnstile as its dedicated verification origin.
+
+Install the pinned dependencies, configure `.env` from `.env.example`, and build the static site:
+
+```sh
+npm install
+npm run dev
+npm run build
+```
+
+Production response headers are in `public/_headers`; the static host must preserve that file and send the listed headers. `src/app.js` is the React application shell; supporting screens live in `src/js/`:
 
 - `core.js` — data normalizers, loading, and common utilities
 - `icons.js`, `ui.js`, `auth.js`, `layout.js` — reusable UI, authentication, and navigation

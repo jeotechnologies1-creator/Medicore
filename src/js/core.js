@@ -697,3 +697,5 @@
             };
             return colors[status] || 'bg-slate-100 text-slate-600 border-slate-200';
         };
+
+export { appData, normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, getLiveStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadAllTableRows, loadSupabaseTables, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };

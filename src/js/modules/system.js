@@ -701,30 +701,10 @@
                 status: ward.status || 'active'
             }));
 
-            const [settings, setSettings] = useState(() => {
-                try {
-                    const saved = JSON.parse(localStorage.getItem('onemed_settings') || '{}');
-                    const sanitizedSaved = { ...saved };
-                    if (sanitizedSaved.facilityName === 'OneMed Hospital') sanitizedSaved.facilityName = '';
-                    if (sanitizedSaved.facilityCode === 'MC-001') sanitizedSaved.facilityCode = '';
-                    if (sanitizedSaved.phone === '+1 (800) 555-0147') sanitizedSaved.phone = '';
-                    if (sanitizedSaved.serviceLine === 'General Hospital & Outpatient Clinics') sanitizedSaved.serviceLine = '';
-                    return { ...defaultSettings, ...sanitizedSaved };
-                } catch (e) {
-                    return defaultSettings;
-                }
-            });
+            const [settings, setSettings] = useState(defaultSettings);
             const [saveMessage, setSaveMessage] = useState('');
             const [bankAccountDraft, setBankAccountDraft] = useState({ bankName: '', accountName: '', accountNumber: '', department: '' });
-            const [roleMatrix, setRoleMatrix] = useState(() => {
-                try {
-                    const saved = JSON.parse(localStorage.getItem('onemed_role_matrix') || '[]');
-                    if (Array.isArray(saved) && saved.length) {
-                        return completeMatrixRows(saved);
-                    }
-                } catch (e) {}
-                return completeMatrixRows(initialRoleMatrix);
-            });
+            const [roleMatrix, setRoleMatrix] = useState(() => completeMatrixRows(initialRoleMatrix));
             const [departments, setDepartments] = useState(initialDepartments);
             const [exportHistory, setExportHistory] = useState([]);
             const [departmentDraft, setDepartmentDraft] = useState({
@@ -1319,8 +1299,7 @@
                                             <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
                                                 <div className="flex h-24 w-full items-end justify-center">
                                                     <div
-                                                        className="w-full rounded-t-xl bg-gradient-to-t from-medical-600 to-emerald-400 shadow-sm"
-                                                        style={{ height: `${item.value}%` }}
+                                                        className={'w-full rounded-t-xl bg-gradient-to-t from-medical-600 to-emerald-400 shadow-sm h-[' + Math.round(item.value) + '%]'}
                                                         title={`${item.label}: ${item.value}%`}
                                                     />
                                                 </div>
@@ -1511,3 +1490,5 @@
         };
 
         // ==========================================
+
+export { AuditModule, ComplianceVaultModule, SettingsModule, OrganizationModule };

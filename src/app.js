@@ -361,3 +361,5 @@
                 </AuthProvider>
             );
         }
+
+export { UnauthorizedModule, App, rootElement };

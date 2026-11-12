@@ -159,10 +159,9 @@
                         {menuItems.map((item) => (
                             <button
                                 key={item.id}
-                                style={!showCollapsed ? { display: 'grid', gridTemplateColumns: '20px minmax(0, 1fr)', columnGap: '0.75rem', alignItems: item.id === 'records' ? 'start' : 'center' } : undefined}
                                 onClick={() => onModuleChange(item.id)}
                                 aria-current={activeModule === item.id ? 'page' : undefined}
-                                className={'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (showCollapsed ? 'justify-center' : '')}
+                                className={'nav-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ' + (item.id === 'records' ? 'nav-menu-item-top' : '') + ' ' + (activeModule === item.id ? 'bg-medical-50 text-medical-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900') + ' ' + (showCollapsed ? 'justify-center' : '')}
                                 title={showCollapsed ? item.label : ''}
                             >
                                 <item.icon size={20} className={activeModule === item.id ? 'text-medical-600' : 'text-slate-400'} />
@@ -324,3 +323,5 @@
                 </header>
             );
         };
+
+export { Sidebar, Header };

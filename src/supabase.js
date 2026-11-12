@@ -1,27 +1,13 @@
-(function () {
-    const STORAGE_KEY = 'onemed_supabase_config';
+import { createClient } from '@supabase/supabase-js';
+
+const OneMedSupabase = (() => {
     let client = null;
     let clientSignature = '';
 
-    // Earlier builds could cache a browser-only record store. Clinical records
-    // are now Supabase-only, so discard that legacy cache on every startup.
-    try {
-        localStorage.removeItem('onemed_store');
-        localStorage.removeItem('onemed_seed_data');
-    } catch (e) {}
-
     const getConfig = () => {
         const override = window.__ONEMED_SUPABASE__ || {};
-        const saved = (() => {
-            try {
-                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            } catch (e) {
-                return {};
-            }
-        })();
-
-        const url = String(override.url || saved.url || '').trim();
-        const anonKey = String(override.anonKey || saved.anonKey || '').trim();
+        const url = String(override.url || import.meta.env.VITE_SUPABASE_URL || 'https://wlarlseefitzcnfigyib.supabase.co/').trim();
+        const anonKey = String(override.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsYXJsc2VlZml0emNuZmlneWliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0Mzk1NzYsImV4cCI6MjEwNDAxNTU3Nn0.m1kSYgGQ6_ZovLljVHZkm14vkhSmqaQIwWnRB7Tm6TE').trim();
 
         return {
             url,
@@ -34,9 +20,6 @@
             url: config.url || '',
             anonKey: config.anonKey || ''
         };
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-        } catch (e) {}
         window.__ONEMED_SUPABASE__ = normalized;
         client = null;
         clientSignature = '';
@@ -45,7 +28,7 @@
 
     const isConfigured = () => {
         const { url, anonKey } = getConfig();
-        return Boolean(url && anonKey && window.supabase);
+        return Boolean(url && anonKey);
     };
 
     const getStatus = () => ({
@@ -55,14 +38,15 @@
 
     const getClient = () => {
         const { url, anonKey } = getConfig();
-        if (!url || !anonKey || !window.supabase) return null;
+        if (!url || !anonKey) return null;
         const signature = `${url}:${anonKey}`;
         if (client && clientSignature === signature) return client;
-        client = window.supabase.createClient(url, anonKey, {
+        client = createClient(url, anonKey, {
             auth: {
                 persistSession: true,
                 autoRefreshToken: true,
-                detectSessionInUrl: true
+                detectSessionInUrl: true,
+                storage: window.sessionStorage
             }
         });
         clientSignature = signature;
@@ -325,7 +309,7 @@
         if (client) await client.auth.signOut();
     };
 
-    window.OneMedSupabase = {
+    return {
         getConfig,
         setConfig,
         isConfigured,
@@ -350,3 +334,6 @@
         logout
     };
 })();
+
+window.OneMedSupabase = OneMedSupabase;
+export { OneMedSupabase };

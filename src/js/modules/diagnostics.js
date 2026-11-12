@@ -751,3 +751,5 @@
                 </div>
             );
         };
+
+export { AppointmentsModule, LaboratoryModule, ClinicalDecisionSupportModule, RadiologyModule };

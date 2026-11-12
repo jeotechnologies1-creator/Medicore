@@ -507,3 +507,5 @@
                 </div>
             );
         };
+
+export { getEdgeFunctionErrorMessage, HRStaffModule, MedicalOfficesModule, DoctorsModule };

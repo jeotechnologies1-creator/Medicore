@@ -388,13 +388,12 @@
             useEffect(() => {
                 if (!user?.id || !sessionSecurity.autoLogoutIdle) return undefined;
                 const timeoutMs = sessionSecurity.timeoutMinutes * 60 * 1000;
-                const activityKey = `onemed_last_activity_${user.id}`;
                 let warningTimer;
                 let logoutTimer;
-                let lastStorageWriteAt = 0;
+                let lastBroadcastAt = 0;
                 let expired = false;
                 let lastActivityAt = Date.now();
-                try { localStorage.setItem(activityKey, String(lastActivityAt)); } catch (error) {}
+                const activityChannel = 'BroadcastChannel' in window ? new BroadcastChannel('onemed-session-activity') : null;
                 const clearTimers = () => {
                     window.clearTimeout(warningTimer);
                     window.clearTimeout(logoutTimer);
@@ -421,15 +420,15 @@
                 };
                 const recordActivity = () => {
                     lastActivityAt = Date.now();
-                    if (lastActivityAt - lastStorageWriteAt >= 5000) {
-                        try { localStorage.setItem(activityKey, String(lastActivityAt)); } catch (error) {}
-                        lastStorageWriteAt = lastActivityAt;
+                    if (lastActivityAt - lastBroadcastAt >= 5000) {
+                        activityChannel?.postMessage({ userId: user.id, activityAt: lastActivityAt });
+                        lastBroadcastAt = lastActivityAt;
                     }
                     schedule();
                 };
                 const syncOtherTabActivity = (event) => {
-                    if (event.key !== activityKey) return;
-                    const sharedActivityAt = Number(event.newValue);
+                    if (event.data?.userId !== user.id) return;
+                    const sharedActivityAt = Number(event.data.activityAt);
                     if (Number.isFinite(sharedActivityAt) && sharedActivityAt > lastActivityAt) {
                         lastActivityAt = sharedActivityAt;
                         schedule();
@@ -437,7 +436,6 @@
                 };
                 const checkOnReturn = () => {
                     if (document.visibilityState === 'visible') {
-                        try { lastActivityAt = Math.max(lastActivityAt, Number(localStorage.getItem(activityKey)) || 0); } catch (error) {}
                         if (Date.now() - lastActivityAt >= timeoutMs) expireSession();
                         else schedule();
                     }
@@ -445,14 +443,14 @@
                 const events = ['keydown', 'pointerdown', 'touchstart', 'scroll'];
                 events.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));
                 document.addEventListener('visibilitychange', checkOnReturn);
-                window.addEventListener('storage', syncOtherTabActivity);
+                activityChannel?.addEventListener('message', syncOtherTabActivity);
                 schedule();
                 return () => {
                     clearTimers();
                     events.forEach((eventName) => window.removeEventListener(eventName, recordActivity));
                     document.removeEventListener('visibilitychange', checkOnReturn);
-                    window.removeEventListener('storage', syncOtherTabActivity);
-                    try { localStorage.removeItem(activityKey); } catch (error) {}
+                    activityChannel?.removeEventListener('message', syncOtherTabActivity);
+                    activityChannel?.close();
                 };
             }, [user?.id, sessionSecurity]);
 
@@ -698,7 +696,7 @@
                 setCaptchaError('');
                 let widgetId = null;
                 let attempts = 0;
-                let timer = null;
+                let timer;
                 const renderWidget = () => {
                     if (widgetId) return;
                     const element = document.getElementById('onemed-turnstile-widget');
@@ -879,3 +877,5 @@
                 </main>
             );
         };
+
+export { AuthContext, aal2RequiredRoles, canonicalModuleKeys, legacyPermissionAliases, routeModulePermissions, normalizeRoleMatrix, defaultRoleMatrix, AuthProvider, useAuth, LoginPage };

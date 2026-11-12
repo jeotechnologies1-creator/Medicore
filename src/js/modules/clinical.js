@@ -654,3 +654,5 @@
                 </div>
             );
         };
+
+export { ConsultationsModule, VitalsModule, ClinicalSafetyModule, InventoryModule, ClinicalWorkflowsModule, DocumentsModule };

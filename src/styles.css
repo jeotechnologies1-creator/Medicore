@@ -547,3 +547,17 @@
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
         }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.refund-policy-page { color-scheme: light; font: 16px/1.6 system-ui, sans-serif; color: #172033; background: #f5f8fc; margin: 0; padding: 3rem 1rem; }
+.refund-policy-main { max-width: 760px; margin: auto; padding: 2rem; background: white; border: 1px solid #dce4ef; border-radius: 1rem; }
+.refund-policy-main h1, .refund-policy-main h2 { line-height: 1.2; color: #102c4c; }
+.refund-policy-main h1 { margin-top: 0; }
+.refund-policy-main li { margin: .55rem 0; }
+.refund-policy-main .note { padding: 1rem; background: #eff6ff; border-left: 4px solid #2563eb; }
+.refund-policy-main a { color: #1455a0; }
+.nav-menu-item { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: .75rem; align-items: center; }
+.nav-menu-item-top { align-items: start; }
+.data-table-actions-column { width: 8rem; }

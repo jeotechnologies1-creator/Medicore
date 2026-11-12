@@ -168,7 +168,7 @@
                                                         <span className="font-medium text-slate-900">{dept.value}%</span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 rounded-full h-2">
-                                                        <div className={dept.color + ' h-2 rounded-full transition-all'} style={{ width: dept.value + '%' }} />
+                                                        <div className={dept.color + ' h-2 rounded-full transition-all w-[' + Math.round(dept.value) + '%]'} />
                                                     </div>
                                                 </div>
                                             ))}
@@ -292,3 +292,5 @@
                 </div>
             );
         };
+
+export { DashboardModule };

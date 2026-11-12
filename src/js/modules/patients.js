@@ -1517,3 +1517,5 @@
 
         // ==========================================
         // APPOINTMENTS MODULE
+
+export { PatientsModule };

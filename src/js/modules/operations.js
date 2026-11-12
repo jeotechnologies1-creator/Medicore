@@ -1718,3 +1718,5 @@
                 </div>
             );
         };
+
+export { OperationsModule, ProcurementModule, CareCoordinationModule, WorkforceModule, PharmacyModule, BillingModule, AdmissionsModule, SurgeriesModule };

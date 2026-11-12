@@ -600,3 +600,5 @@ const RecordsModule = () => {
         </div>
     );
 };
+
+export { RecordsModule };

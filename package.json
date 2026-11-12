@@ -4,18 +4,28 @@
   "type": "module",
   "scripts": {
     "test": "node tests/static-checks.mjs",
-    "lint": "eslint src/js src/supabase.js scripts tests --max-warnings=0",
-    "build": "node scripts/build.mjs",
+    "lint": "eslint src scripts tests vite.config.js tailwind.config.js postcss.config.js --max-warnings=0",
+    "format": "prettier --write \"src/**/*.{js,css}\" \"*.{html,json,js,mjs}\" scripts/*.mjs",
+    "format:check": "prettier --check \"src/**/*.{js,css}\" \"*.{html,json,js,mjs}\" scripts/*.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:edge": "deno test supabase/functions/tests",
     "test:db": "supabase test db",
     "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
-    "@babel/core": "7.25.9",
-    "@babel/preset-react": "7.25.9",
     "@playwright/test": "1.56.1",
     "@supabase/supabase-js": "2.57.4",
-    "eslint": "9.36.0"
+    "@vitejs/plugin-react": "4.7.0",
+    "autoprefixer": "10.4.21",
+    "eslint": "9.36.0",
+    "@fontsource/inter": "5.3.0",
+    "prettier": "3.6.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tailwindcss": "3.4.17",
+    "vite": "6.4.6"
   }
 }

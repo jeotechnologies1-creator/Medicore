@@ -1,6 +1,6 @@
 export default [
   {
-    files: ['src/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs'],
+    files: ['src/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs', '*.config.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -10,7 +10,7 @@ export default [
         sessionStorage: 'readonly', fetch: 'readonly', URL: 'readonly', URLSearchParams: 'readonly',
         React: 'readonly', ReactDOM: 'readonly', supabase: 'readonly', crypto: 'readonly',
         setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly',
-        CustomEvent: 'readonly', Event: 'readonly', AbortController: 'readonly', FormData: 'readonly',
+        CustomEvent: 'readonly', Event: 'readonly', AbortController: 'readonly', FormData: 'readonly', BroadcastChannel: 'readonly',
         Intl: 'readonly', Date: 'readonly', Math: 'readonly', JSON: 'readonly', Object: 'readonly',
         Array: 'readonly', String: 'readonly', Number: 'readonly', Boolean: 'readonly', Map: 'readonly', Set: 'readonly'
       }

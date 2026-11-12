@@ -329,8 +329,8 @@
                 <div className={'overflow-x-auto data-table-scroll ' + className} role="region" aria-label={scrollLabel} tabIndex={0}>
                     <table className={'data-table w-full ' + tableClassName} aria-label={scrollLabel}>
                         <colgroup>
-                            {columns.map((col) => <col key={col.key} style={col.width ? { width: col.width } : undefined} />)}
-                            {actions && <col style={{ width: '8rem' }} />}
+                            {columns.map((col) => <col key={col.key} />)}
+                            {actions && <col className="data-table-actions-column" />}
                         </colgroup>
                         <thead>
                             <tr className="border-b border-slate-200">
@@ -414,7 +414,7 @@
                 <div>
                     {label && <div className="flex justify-between text-xs mb-1"><span className="text-slate-600">{label}</span><span className="text-slate-900 font-medium">{Math.round(percentage)}%</span></div>}
                     <div className={'w-full bg-slate-100 rounded-full ' + heights[size]}>
-                        <div className={colors[color] + ' rounded-full ' + heights[size] + ' transition-all duration-500'} style={{ width: percentage + '%' }} />
+                        <div className={colors[color] + ' rounded-full ' + heights[size] + ' transition-all duration-500 w-[' + Math.round(percentage) + '%]'} />
                     </div>
                 </div>
             );
@@ -537,7 +537,7 @@
                         return (
                             <g key={i}>
                                 <rect x={x} y={y} width={barWidth} height={barHeight} fill={color} rx="4" className="chart-bar" opacity="0.8" />
-                                <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="text-xs fill-slate-500" style={{ fontSize: '10px' }}>{d.label}</text>
+                                <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" className="text-[10px] fill-slate-500">{d.label}</text>
                             </g>
                         );
                     })}
@@ -566,3 +566,5 @@
                 </div>
             );
         };
+
+export { Button, Badge, Card, Input, CodedConceptInput, UncodedTerminologyReport, Select, TextArea, Modal, Tabs, DataTable, StatCard, ProgressBar, Avatar, SearchBar, Toast, LineChart, BarChart, DonutChart };
