@@ -279,13 +279,19 @@
                 const encounterNotes = (appData.consultations || []).filter(c => c.patientId === patient.id);
                 const [selectedLabResult, setSelectedLabResult] = useState(null);
                 const [medicationForm, setMedicationForm] = useState({
-                    medicationName: '',
+                    formularyItemId: '',
                     dose: '',
-                    doseUnit: 'mg',
-                    route: 'oral',
+                    doseUnit: '',
                     frequency: 'Daily',
                     indication: ''
                 });
+                const [formularyItems, setFormularyItems] = useState([]);
+                useEffect(() => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) return;
+                    client.from('formulary_items').select('id,generic_name,form,strength,unit,route').eq('active', true).order('generic_name')
+                        .then(({ data, error }) => { if (!error && data) setFormularyItems(data); });
+                }, []);
                 const [himReferralReason, setHimReferralReason] = useState('');
                 const [himReferralMessage, setHimReferralMessage] = useState('');
                 const [sendingHimReferral, setSendingHimReferral] = useState(false);
@@ -410,10 +416,11 @@
                     }
                 };
 
-                const allergyMatch = medicationForm.medicationName
+                const selectedFormularyItem = formularyItems.find((item) => item.id === medicationForm.formularyItemId);
+                const allergyMatch = selectedFormularyItem
                     ? patientAllergies.find((allergy) => {
                         const substance = (allergy.substance || '').toLowerCase();
-                        const medName = medicationForm.medicationName.toLowerCase();
+                        const medName = selectedFormularyItem.generic_name.toLowerCase();
                         return substance && (substance.includes(medName) || medName.includes(substance));
                     })
                     : null;
@@ -430,16 +437,16 @@
                 };
 
                 const handleSaveMedicationOrder = async () => {
-                    if (!medicationForm.medicationName.trim()) return;
+                    if (!selectedFormularyItem || !medicationForm.dose || Number(medicationForm.dose) <= 0) return;
                     const saved = await insertClinicalRecord('medication_orders', {
-                        patient_id: patient.id, medication_name: medicationForm.medicationName.trim(), dose: medicationForm.dose || '1',
-                        dose_unit: medicationForm.doseUnit, route: medicationForm.route, frequency: medicationForm.frequency,
+                        patient_id: patient.id, formulary_item_id: selectedFormularyItem.id, medication_name: selectedFormularyItem.generic_name,
+                        dose: medicationForm.dose, dose_unit: medicationForm.doseUnit || selectedFormularyItem.unit, route: selectedFormularyItem.route, frequency: medicationForm.frequency,
                         indication: medicationForm.indication || null, status: 'active'
                     });
                     if (!saved) return;
                     const next = [normalizeMedicationOrders([saved])[0], ...(appData.medicationOrders || [])];
                     appData.medicationOrders = next;
-                    setMedicationForm({ medicationName: '', dose: '', doseUnit: 'mg', route: 'oral', frequency: 'Daily', indication: '' });
+                    setMedicationForm({ formularyItemId: '', dose: '', doseUnit: '', frequency: 'Daily', indication: '' });
                 };
 
                 const handleSaveEncounterNote = async () => {
@@ -897,13 +904,12 @@
 
                                         <Card title="Medication safety" subtitle="Allergy-aware prescribing">
                                             <div className="space-y-4">
-                                                <Input label="Medication name" value={medicationForm.medicationName} onChange={(e) => setMedicationForm(prev => ({ ...prev, medicationName: e.target.value }))} />
+                                                <Select label="Formulary medication" value={medicationForm.formularyItemId} onChange={(e) => { const item = formularyItems.find((entry) => entry.id === e.target.value); setMedicationForm((prev) => ({ ...prev, formularyItemId: e.target.value, doseUnit: item?.unit || '' })); }} options={[{value:'',label:formularyItems.length ? 'Select medication...' : 'No active formulary items'},...formularyItems.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}`}))]} />
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <Input label="Dose" value={medicationForm.dose} onChange={(e) => setMedicationForm(prev => ({ ...prev, dose: e.target.value }))} />
-                                                    <Select label="Unit" value={medicationForm.doseUnit} onChange={(e) => setMedicationForm(prev => ({ ...prev, doseUnit: e.target.value }))} options={[{ value: 'mg', label: 'mg' }, { value: 'g', label: 'g' }, { value: 'ml', label: 'ml' }, { value: 'mcg', label: 'mcg' }]} />
+                                                    <Input label="Dose" type="number" min="0.0001" step="any" value={medicationForm.dose} onChange={(e) => setMedicationForm(prev => ({ ...prev, dose: e.target.value }))} />
+                                                    <Input label="Dose unit" value={medicationForm.doseUnit} disabled />
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <Select label="Route" value={medicationForm.route} onChange={(e) => setMedicationForm(prev => ({ ...prev, route: e.target.value }))} options={[{ value: 'oral', label: 'Oral' }, { value: 'iv', label: 'IV' }, { value: 'im', label: 'IM' }, { value: 'topical', label: 'Topical' }]} />
                                                     <Select label="Frequency" value={medicationForm.frequency} onChange={(e) => setMedicationForm(prev => ({ ...prev, frequency: e.target.value }))} options={[{ value: 'Daily', label: 'Daily' }, { value: 'BD', label: 'BD' }, { value: 'TDS', label: 'TDS' }, { value: 'PRN', label: 'PRN' }]} />
                                                 </div>
                                                 <Input label="Indication" value={medicationForm.indication} onChange={(e) => setMedicationForm(prev => ({ ...prev, indication: e.target.value }))} />

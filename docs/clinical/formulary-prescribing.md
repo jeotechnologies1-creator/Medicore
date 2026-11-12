@@ -1,0 +1,7 @@
+# Formulary and structured prescribing
+
+`formulary_items` contains medication products approved for prescribing. Populate it only from an official, licensed formulary release; the application does not bundle or invent ATC codes. An `atc_code` is accepted only when it exists in the loaded ATC concepts table. Formulary records without ATC coding can be used while coding is pending.
+
+Use the service role to import the approved formulary, then call `migrate_legacy_prescription_items()` to retry legacy JSON entries. The function requires a unique active generic-name match (and checks route and strength when supplied), plus complete structured dose, quantity and frequency. It keeps `prescriptions.medications` unchanged. Review `prescription_item_migration_issues` for unmapped entries; resolving them requires a reviewed formulary match or clinical correction.
+
+New prescriptions use `create_structured_prescription()`, which creates the prescription and its medication item atomically. Inventory rows represent lots and must carry `formulary_item_id`; dispensing selects an eligible lot for the exact item, using FEFO when no lot was explicitly selected. A controlled prescription first creates a pending verification request. A different authenticated pharmacist or Super Admin completes it with `approve_controlled_drug_dispense()`; that approval and stock dispense commit together. The controlled balance must cover the dispensed quantity. Record receipts with `record_controlled_drug_receipt()` so the append-only movement ledger and balance stay aligned.

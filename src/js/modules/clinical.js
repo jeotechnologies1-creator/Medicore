@@ -3,8 +3,16 @@
             const [consultations, setConsultations] = useState(getLiveStore().consultations || []);
             const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
             const [consultationMessage, setConsultationMessage] = useState('');
-            const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+            const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, formularyItemId: '', quantity: 1, dose: '', doseUnit: '', route: '', frequency: '', duration: '', instructions: '', priority: 'routine' });
             const [prescriptionMessage, setPrescriptionMessage] = useState('');
+            const [formulary, setFormulary] = useState([]);
+
+            useEffect(() => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('formulary_items').select('id,atc_code,generic_name,form,strength,unit,route,controlled').eq('active', true).order('generic_name')
+                    .then(({ data, error }) => { if (!error && data) setFormulary(data); });
+            }, []);
 
             const handleSaveConsultation = async () => {
                 if (!form.patientId || !form.chiefComplaint.trim() || !form.diagnosis.trim() || !form.assessment.trim() || !form.plan.trim()) return setConsultationMessage('Patient, presenting complaint, diagnosis, assessment, and plan are required before finalizing.');
@@ -25,14 +33,22 @@
             };
 
             const savePrescription = async () => {
-                if (!prescriptionForm.patientId || !prescriptionForm.diagnosis.trim() || !prescriptionForm.medication.trim() || !prescriptionForm.dose.trim() || !Number.isInteger(Number(prescriptionForm.quantity)) || Number(prescriptionForm.quantity) < 1) return setPrescriptionMessage('Patient, diagnosis, medicine, dose, and a positive whole-number quantity are required.');
+                if (!prescriptionForm.patientId || !prescriptionForm.diagnosis.trim() || !prescriptionForm.formularyItemId || !prescriptionForm.dose.trim() || !prescriptionForm.doseUnit.trim() || !prescriptionForm.frequency.trim() || !prescriptionForm.route.trim() || !Number.isInteger(Number(prescriptionForm.quantity)) || Number(prescriptionForm.quantity) < 1) return setPrescriptionMessage('Patient, diagnosis, formulary medicine, dose, dose unit, frequency, route, and whole-number quantity are required.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return setPrescriptionMessage('The clinical database is unavailable. No prescription was saved.');
                 const encounter = (appData.encounters || []).find((item) => item.patientId === prescriptionForm.patientId && !item.endedAt);
-                const { data, error } = await client.from('prescriptions').insert({ patient_id: prescriptionForm.patientId, encounter_id: encounter?.id || null, doctor_id: user?.id || null, diagnosis: prescriptionForm.diagnosis.trim(), code_system: prescriptionForm.diagnosisCodeSystem, code: prescriptionForm.diagnosisCode, display: prescriptionForm.diagnosisDisplay, medications: [{ name: prescriptionForm.medication.trim(), quantity: Number(prescriptionForm.quantity), dose: prescriptionForm.dose.trim(), route: prescriptionForm.route.trim() || null, frequency: prescriptionForm.frequency.trim() || null }], priority: prescriptionForm.priority, status: 'active' }).select().single();
-                if (error || !data) return setPrescriptionMessage(error?.message || 'Prescription was not saved.');
+                const { data: prescriptionId, error } = await client.rpc('create_structured_prescription', {
+                    p_patient_id: prescriptionForm.patientId, p_encounter_id: encounter?.id || null, p_diagnosis: prescriptionForm.diagnosis.trim(),
+                    p_code_system: prescriptionForm.diagnosisCodeSystem, p_code: prescriptionForm.diagnosisCode, p_display: prescriptionForm.diagnosisDisplay,
+                    p_formulary_item_id: prescriptionForm.formularyItemId, p_dose: Number(prescriptionForm.dose), p_dose_unit: prescriptionForm.doseUnit.trim(),
+                    p_frequency: prescriptionForm.frequency.trim(), p_route: prescriptionForm.route.trim(), p_duration: prescriptionForm.duration.trim() || null,
+                    p_quantity: Number(prescriptionForm.quantity), p_instructions: prescriptionForm.instructions.trim() || null, p_priority: prescriptionForm.priority
+                });
+                if (error || !prescriptionId) return setPrescriptionMessage(error?.message || 'Prescription was not saved.');
+                const { data, error: fetchError } = await client.from('prescriptions').select('*').eq('id', prescriptionId).single();
+                if (fetchError || !data) return setPrescriptionMessage('Prescription was saved, but the pharmacy queue could not refresh.');
                 appData.prescriptions = [normalizePrescriptions([data])[0], ...(appData.prescriptions || [])];
-                setPrescriptionForm({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+                setPrescriptionForm({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, formularyItemId: '', quantity: 1, dose: '', doseUnit: '', route: '', frequency: '', duration: '', instructions: '', priority: 'routine' });
                 setPrescriptionMessage('Prescription sent to the pharmacy queue.');
             };
 
@@ -71,7 +87,7 @@
                     </div>
 
                     {['doctor','specialist','super_admin'].includes(user?.role) && <Card title="New prescription" subtitle="Urgent orders are highlighted in the pharmacy queue. Dispensing is recorded atomically against available stock.">
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><CodedConceptInput label="Diagnosis" value={prescriptionForm.diagnosis} codeSystem={prescriptionForm.diagnosisCodeSystem} code={prescriptionForm.diagnosisCode} display={prescriptionForm.diagnosisDisplay} onChange={(term) => setPrescriptionForm((form) => ({...form,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} /><Input label="Medicine (must match pharmacy stock)" value={prescriptionForm.medication} onChange={(event) => setPrescriptionForm((form) => ({...form,medication:event.target.value}))} /><Input label="Dose" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><CodedConceptInput label="Diagnosis" value={prescriptionForm.diagnosis} codeSystem={prescriptionForm.diagnosisCodeSystem} code={prescriptionForm.diagnosisCode} display={prescriptionForm.diagnosisDisplay} onChange={(term) => setPrescriptionForm((form) => ({...form,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} /><Select label="Formulary medicine" value={prescriptionForm.formularyItemId} onChange={(event) => { const selected = formulary.find((item) => item.id === event.target.value); setPrescriptionForm((form) => ({...form,formularyItemId:event.target.value,route:selected?.route || ''})); }} options={[{value:'',label:formulary.length ? 'Select medicine...' : 'No formulary items loaded'},...formulary.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}${item.controlled ? ' · controlled' : ''}`}))]} /><Input label="Dose" type="number" min="0.0001" step="any" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Dose unit" value={prescriptionForm.doseUnit} onChange={(event) => setPrescriptionForm((form) => ({...form,doseUnit:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Input label="Duration" value={prescriptionForm.duration} onChange={(event) => setPrescriptionForm((form) => ({...form,duration:event.target.value}))} /><Input label="Instructions" value={prescriptionForm.instructions} onChange={(event) => setPrescriptionForm((form) => ({...form,instructions:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
                         {prescriptionMessage && <p className="mt-3 text-sm text-slate-700" role="status">{prescriptionMessage}</p>}<Button className="mt-4" variant="primary" onClick={savePrescription}>Send prescription to pharmacy</Button>
                     </Card>}
 
@@ -332,7 +348,14 @@
             const [showAddItem, setShowAddItem] = useState(false);
             const [saving, setSaving] = useState(false);
             const [message, setMessage] = useState('');
-            const [itemForm, setItemForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
+            const [formularyItems, setFormularyItems] = useState([]);
+            const [itemForm, setItemForm] = useState({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
+
+            useEffect(() => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (client) client.from('formulary_items').select('id,generic_name,form,strength,route').eq('active', true).order('generic_name')
+                    .then(({ data, error }) => { if (!error && data) setFormularyItems(data); });
+            }, []);
 
             const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
 
@@ -340,7 +363,8 @@
                 const quantity = Number(itemForm.stockQuantity);
                 const reorder = Number(itemForm.reorderLevel);
                 const price = Number(itemForm.unitPrice);
-                if (!itemForm.name.trim()) return setMessage('Enter the medication name.');
+                const selectedFormularyItem = formularyItems.find((item) => item.id === itemForm.formularyItemId);
+                if (!selectedFormularyItem) return setMessage('Select an active formulary item.');
                 if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) {
                     return setMessage('Stock and reorder quantities must be whole numbers, and the unit price cannot be negative.');
                 }
@@ -349,8 +373,9 @@
                 setSaving(true);
                 setMessage('');
                 const payload = {
-                    name: itemForm.name.trim(),
-                    generic_name: itemForm.genericName.trim() || null,
+                    formulary_item_id: selectedFormularyItem.id,
+                    name: selectedFormularyItem.generic_name,
+                    generic_name: selectedFormularyItem.generic_name,
                     category: itemForm.category.trim() || null,
                     stock_quantity: quantity,
                     reorder_level: reorder,
@@ -369,7 +394,7 @@
                 appData.pharmacyInventory = next;
                 persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
-                setItemForm({ name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
+                setItemForm({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
                 setMessage('');
                 setShowAddItem(false);
             };
@@ -415,8 +440,8 @@
                     </Card>
                     <Modal isOpen={showAddItem} onClose={() => { if (!saving) setShowAddItem(false); }} title="Add Medication to Inventory" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" disabled={saving} onClick={() => setShowAddItem(false)}>Cancel</Button><Button variant="primary" disabled={saving} icon={saving ? Icons.RefreshCw : Icons.Save} onClick={handleAddItem}>{saving ? 'Saving…' : 'Save Item'}</Button></div>}>
                         <div className="grid grid-cols-2 gap-4">
-                            <Input label="Medication name" required value={itemForm.name} onChange={(event) => setItemForm((form) => ({ ...form, name: event.target.value }))} className="col-span-2" />
-                            <Input label="Generic name" value={itemForm.genericName} onChange={(event) => setItemForm((form) => ({ ...form, genericName: event.target.value }))} className="col-span-2" />
+                            <Select label="Formulary item" required value={itemForm.formularyItemId} onChange={(event) => { const item = formularyItems.find((entry) => entry.id === event.target.value); setItemForm((form) => ({ ...form, formularyItemId: event.target.value, name: item?.generic_name || '', genericName: item?.generic_name || '' })); }} options={[{value:'',label:formularyItems.length ? 'Select formulary item...' : 'No active formulary items'},...formularyItems.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}`}))]} className="col-span-2" />
+                            <Input label="Generic name" value={itemForm.genericName} disabled className="col-span-2" />
                             <Input label="Category" value={itemForm.category} onChange={(event) => setItemForm((form) => ({ ...form, category: event.target.value }))} />
                             <Input label="Opening stock" type="number" min="0" step="1" value={itemForm.stockQuantity} onChange={(event) => setItemForm((form) => ({ ...form, stockQuantity: event.target.value }))} />
                             <Input label="Reorder level" type="number" min="0" step="1" value={itemForm.reorderLevel} onChange={(event) => setItemForm((form) => ({ ...form, reorderLevel: event.target.value }))} />
@@ -446,13 +471,29 @@
             const [bidForm, setBidForm] = useState({ status: 'under_assessment', notes: '', disposition: '' });
             const [encounterForm, setEncounterForm] = useState({ patientId: '', encounterType: 'outpatient', caseType: 'routine', location: '', reason: '', arrivalMode: '', referralSource: '', accompanyingPerson: '', presentingEmergency: '', triagePriority: 'routine' });
             const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: formatFacilityDate(), nextDueDate: '', notes: '' });
-            const [administrationForm, setAdministrationForm] = useState({ patientId: '', medicationName: '', dosage: '', notes: '' });
+            const [administrationForm, setAdministrationForm] = useState({ patientId: '', prescriptionItemId: '', dosage: '', notes: '' });
+            const [prescribedMedicationItems, setPrescribedMedicationItems] = useState([]);
             const patients = getLiveStore().patients || [];
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))];
             const patientName = (id) => {
                 const patient = patients.find((item) => item.id === id);
                 return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
             };
+
+            useEffect(() => {
+                if (!administrationForm.patientId) { setPrescribedMedicationItems([]); return; }
+                setPrescribedMedicationItems([]);
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('prescriptions').select('id').eq('patient_id', administrationForm.patientId).in('status', ['active', 'dispensed'])
+                    .then(async ({ data: prescriptions, error }) => {
+                        if (error || !prescriptions?.length) { setPrescribedMedicationItems([]); return; }
+                        const { data, error: itemError } = await client.from('prescription_items')
+                            .select('id,prescription_id,formulary_item_id,dose,dose_unit,route,formulary_items(generic_name,strength,form)')
+                            .in('prescription_id', prescriptions.map((row) => row.id));
+                        setPrescribedMedicationItems(itemError ? [] : data || []);
+                    });
+            }, [administrationForm.patientId]);
 
             const saveEncounter = async () => {
                 if ((!encounterForm.patientId && !unknownIdentity) || !encounterForm.reason.trim()) return setIntakeMessage('Select a patient or use unidentified emergency registration, and enter presenting circumstances.');
@@ -488,14 +529,15 @@
                 setImmunizationForm({ patientId: '', vaccine: '', administeredDate: formatFacilityDate(), nextDueDate: '', notes: '' });
             };
             const saveAdministration = async () => {
-                if (!administrationForm.patientId || !administrationForm.medicationName.trim()) return;
+                const prescribedItem = prescribedMedicationItems.find((item) => item.id === administrationForm.prescriptionItemId);
+                if (!administrationForm.patientId || !prescribedItem) return;
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record medication administration');
-                const { data, error } = await client.from('medication_administrations').insert({ patient_id: administrationForm.patientId, medication_name: administrationForm.medicationName.trim(), dosage: administrationForm.dosage || null, administered_by: user?.id || null, notes: administrationForm.notes || null }).select();
+                const { data, error } = await client.from('medication_administrations').insert({ patient_id: administrationForm.patientId, prescription_item_id: prescribedItem.id, formulary_item_id: prescribedItem.formulary_item_id, medication_name: prescribedItem.formulary_items?.generic_name || 'Prescribed medication', dosage: administrationForm.dosage || `${prescribedItem.dose} ${prescribedItem.dose_unit}`, administered_by: user?.id || null, notes: administrationForm.notes || null }).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('record medication administration', error);
                 const next = [normalizeMedicationAdministrations(data)[0], ...administrations];
                 persistStoreTable('medicationAdministrations', next); setAdministrations(next);
-                setAdministrationForm({ patientId: '', medicationName: '', dosage: '', notes: '' });
+                setAdministrationForm({ patientId: '', prescriptionItemId: '', dosage: '', notes: '' });
             };
             const completeEncounter = async (encounter) => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -526,7 +568,7 @@
                 {tab === 'encounters' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Register encounter"><div className="space-y-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unknownIdentity} onChange={(event) => {setUnknownIdentity(event.target.checked);setEncounterForm((form) => ({...form,caseType:event.target.checked ? 'emergency' : form.caseType}));}} /> Unidentified emergency patient</label><Select label="Patient" disabled={unknownIdentity} value={encounterForm.patientId} onChange={(event) => setEncounterForm({ ...encounterForm, patientId: event.target.value })} options={patientOptions} /><Select label="Encounter type" value={encounterForm.encounterType} onChange={(event) => setEncounterForm({ ...encounterForm, encounterType: event.target.value })} options={['outpatient','emergency','inpatient','telehealth','home_visit'].map((value) => ({ value, label: value.replace('_', ' ') }))} /><Select label="Registration pathway" value={encounterForm.caseType} onChange={(event) => setEncounterForm({ ...encounterForm, caseType: event.target.value })} options={[{value:'routine',label:'Routine'}, {value:'emergency',label:'Emergency'}, {value:'bid',label:'Brought In Dead (BID/BOD)'}]} />{(encounterForm.caseType === 'emergency' || encounterForm.encounterType === 'emergency') && <><Input label="Arrival mode" value={encounterForm.arrivalMode} onChange={(event) => setEncounterForm({ ...encounterForm, arrivalMode: event.target.value })} /><Select label="Triage priority" value={encounterForm.triagePriority} onChange={(event) => setEncounterForm({ ...encounterForm, triagePriority: event.target.value })} options={['routine','urgent','emergency','immediate'].map((value) => ({value,label:value}))} /><Input label="Presenting emergency" value={encounterForm.presentingEmergency} onChange={(event) => setEncounterForm({ ...encounterForm, presentingEmergency: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /></>}{encounterForm.caseType === 'bid' && <><Input label="Source of referral" value={encounterForm.referralSource} onChange={(event) => setEncounterForm({ ...encounterForm, referralSource: event.target.value })} /><Input label="Accompanying person" value={encounterForm.accompanyingPerson} onChange={(event) => setEncounterForm({ ...encounterForm, accompanyingPerson: event.target.value })} /><p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Registration records a reported case only. An authorized clinician must document the assessment and disposition.</p></>}<Input label="Location" value={encounterForm.location} onChange={(event) => setEncounterForm({ ...encounterForm, location: event.target.value })} /><TextArea label="Presenting complaint / circumstances" value={encounterForm.reason} onChange={(event) => setEncounterForm({ ...encounterForm, reason: event.target.value })} />{intakeMessage && <p className="text-sm text-slate-700" role="status">{intakeMessage}</p>}<Button variant="primary" className="w-full justify-center" onClick={saveEncounter}>Register encounter</Button></div></Card><Card title="Active and recent encounters" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'encounterType', title: 'Type' }, { key: 'reasonForVisit', title: 'Reason' }, { key: 'startedAt', title: 'Started', render: (row) => formatDateTime(row.startedAt) }, { key: 'status', title: 'Status', render:(row) => row.case_type === 'bid' || row.caseType === 'bid' ? `BID/BOD: ${row.death_assessment_status || row.deathAssessmentStatus || 'assessment required'}` : row.status }]} data={encounters} actions={(row) => (row.case_type === 'bid' || row.caseType === 'bid') && ['doctor','super_admin'].includes(user?.role) ? <Button size="sm" variant="danger" onClick={() => {setBidEncounter(row);setBidForm({status:row.death_assessment_status || 'under_assessment',notes:row.death_assessment_notes || '',disposition:row.disposition || ''});}}>Doctor assessment</Button> : row.status === 'in_progress' && !isRegistrationOnly ? <Button size="sm" onClick={() => completeEncounter(row)}>Complete</Button> : null} /></Card></div>}
                 <Modal isOpen={!!bidEncounter} onClose={() => setBidEncounter(null)} title="Authorized BID/BOD assessment" size="lg" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setBidEncounter(null)}>Cancel</Button><Button variant="danger" onClick={saveBidAssessment}>Save assessment</Button></div>}><div className="space-y-4"><p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Reported status on arrival is not a clinical determination. Record the examination and case disposition.</p><Select label="Clinical determination" value={bidForm.status} onChange={(event) => setBidForm((form) => ({...form,status:event.target.value}))} options={[{value:'under_assessment',label:'Under assessment'},{value:'death_confirmed',label:'Death confirmed by clinician'},{value:'not_confirmed',label:'Death not confirmed'},{value:'further_assessment',label:'Further assessment required'}]} /><TextArea label="Clinical examination and documentation" value={bidForm.notes} onChange={(event) => setBidForm((form) => ({...form,notes:event.target.value}))} rows={5} /><TextArea label="Disposition per facility policy" value={bidForm.disposition} onChange={(event) => setBidForm((form) => ({...form,disposition:event.target.value}))} rows={3}/>{intakeMessage && <p role="alert" className="text-sm text-red-700">{intakeMessage}</p>}</div></Modal>
                 {tab === 'immunizations' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record immunization"><div className="space-y-3"><Select label="Patient" value={immunizationForm.patientId} onChange={(event) => setImmunizationForm({ ...immunizationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Vaccine" value={immunizationForm.vaccine} onChange={(event) => setImmunizationForm({ ...immunizationForm, vaccine: event.target.value })} /><Input label="Administered date" type="date" value={immunizationForm.administeredDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, administeredDate: event.target.value })} /><Input label="Next due date" type="date" value={immunizationForm.nextDueDate} onChange={(event) => setImmunizationForm({ ...immunizationForm, nextDueDate: event.target.value })} /><TextArea label="Notes" value={immunizationForm.notes} onChange={(event) => setImmunizationForm({ ...immunizationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveImmunization}>Record immunization</Button></div></Card><Card title="Immunization history" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'vaccine', title: 'Vaccine' }, { key: 'administeredDate', title: 'Administered', render: (row) => formatDate(row.administeredDate) }, { key: 'nextDueDate', title: 'Next due', render: (row) => formatDate(row.nextDueDate) }, { key: 'status', title: 'Status' }]} data={immunizations} /></Card></div>}
-                {tab === 'mar' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record administration"><div className="space-y-3"><Select label="Patient" value={administrationForm.patientId} onChange={(event) => setAdministrationForm({ ...administrationForm, patientId: event.target.value })} options={patientOptions} /><Input label="Medication" value={administrationForm.medicationName} onChange={(event) => setAdministrationForm({ ...administrationForm, medicationName: event.target.value })} /><Input label="Dose administered" value={administrationForm.dosage} onChange={(event) => setAdministrationForm({ ...administrationForm, dosage: event.target.value })} /><TextArea label="Notes" value={administrationForm.notes} onChange={(event) => setAdministrationForm({ ...administrationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveAdministration}>Record administration</Button></div></Card><Card title="Medication administration record" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'medicationName', title: 'Medication' }, { key: 'dosage', title: 'Dose' }, { key: 'administeredAt', title: 'Administered', render: (row) => formatDateTime(row.administeredAt) }]} data={administrations} /></Card></div>}
+                {tab === 'mar' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6"><Card title="Record administration"><div className="space-y-3"><Select label="Patient" value={administrationForm.patientId} onChange={(event) => setAdministrationForm({ patientId: event.target.value, prescriptionItemId: '', dosage: '', notes: '' })} options={patientOptions} /><Select label="Prescribed medication" value={administrationForm.prescriptionItemId} onChange={(event) => { const item = prescribedMedicationItems.find((row) => row.id === event.target.value); setAdministrationForm((form) => ({...form,prescriptionItemId:event.target.value,dosage:item ? `${item.dose} ${item.dose_unit}` : ''})); }} options={[{value:'',label:prescribedMedicationItems.length ? 'Select prescription item...' : 'No active or dispensed prescription items'},...prescribedMedicationItems.map((item) => ({value:item.id,label:`${item.formulary_items?.generic_name || 'Medication'} · ${item.formulary_items?.strength || ''} · ${item.dose} ${item.dose_unit} ${item.route}`}))]} /><Input label="Dose administered" value={administrationForm.dosage} onChange={(event) => setAdministrationForm({ ...administrationForm, dosage: event.target.value })} /><TextArea label="Notes" value={administrationForm.notes} onChange={(event) => setAdministrationForm({ ...administrationForm, notes: event.target.value })} /><Button variant="primary" className="w-full justify-center" onClick={saveAdministration}>Record administration</Button></div></Card><Card title="Medication administration record" className="lg:col-span-2"><DataTable columns={[{ key: 'patientId', title: 'Patient', render: (row) => patientName(row.patientId) }, { key: 'medicationName', title: 'Medication' }, { key: 'dosage', title: 'Dose' }, { key: 'administeredAt', title: 'Administered', render: (row) => formatDateTime(row.administeredAt) }]} data={administrations} /></Card></div>}
             </div>;
         };
 

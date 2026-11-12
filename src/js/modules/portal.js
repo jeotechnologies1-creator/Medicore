@@ -13,7 +13,8 @@
                 reason: '',
                 visitType: ''
             });
-            const [refillDraft, setRefillDraft] = useState({ medication: '', quantity: '30', notes: '' });
+            const [refillDraft, setRefillDraft] = useState({ prescriptionItemId: '', quantity: '30', notes: '' });
+            const [refillItems, setRefillItems] = useState([]);
             const [refillMessage, setRefillMessage] = useState('');
             const [submittingRefill, setSubmittingRefill] = useState(false);
             const [portalMessages, setPortalMessages] = useState([]);
@@ -28,6 +29,20 @@
             const [checkoutMessage, setCheckoutMessage] = useState('');
             const [checkoutUrl, setCheckoutUrl] = useState('');
             const [messageError, setMessageError] = useState('');
+
+            useEffect(() => {
+                if (!patient?.id) { setRefillItems([]); return; }
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('prescriptions').select('id').eq('patient_id', patient.id).in('status', ['active', 'dispensed'])
+                    .then(async ({ data: prescriptions, error }) => {
+                        if (error || !prescriptions?.length) { setRefillItems([]); return; }
+                        const { data, error: itemError } = await client.from('prescription_items')
+                            .select('id,formulary_item_id,dose,dose_unit,route,formulary_items(generic_name,strength,form)')
+                            .in('prescription_id', prescriptions.map((row) => row.id));
+                        setRefillItems(itemError ? [] : data || []);
+                    });
+            }, [patient?.id]);
             const [selectedLabResult, setSelectedLabResult] = useState(null);
 
             useEffect(() => {
@@ -214,10 +229,10 @@
 
             const handleRequestRefill = async () => {
                 if (submittingRefill) return;
-                const medication = refillDraft.medication.trim();
+                const prescribedItem = refillItems.find((item) => item.id === refillDraft.prescriptionItemId);
                 const quantity = Number(refillDraft.quantity);
-                if (!medication || !Number.isFinite(quantity) || quantity <= 0) {
-                    setRefillMessage('Enter a medication name and a quantity greater than zero.');
+                if (!prescribedItem || !Number.isFinite(quantity) || quantity <= 0) {
+                    setRefillMessage('Select one of your prescribed medications and enter a quantity greater than zero.');
                     return;
                 }
                 const client = window.OneMedSupabase?.getClient?.();
@@ -230,12 +245,14 @@
                 try {
                     const { error } = await client.from('medication_refill_requests').insert({
                         patient_id: patient.id,
-                        medication_name: medication,
+                        prescription_item_id: prescribedItem.id,
+                        formulary_item_id: prescribedItem.formulary_item_id,
+                        medication_name: prescribedItem.formulary_items?.generic_name || 'Prescribed medication',
                         quantity,
                         notes: refillDraft.notes.trim() || null
                     });
                     if (error) throw error;
-                    setRefillDraft({ medication: '', quantity: '30', notes: '' });
+                    setRefillDraft({ prescriptionItemId: '', quantity: '30', notes: '' });
                     setRefillMessage('Refill request sent to your care team.');
                 } catch (error) {
                     console.error('Portal refill request failed:', error);
@@ -285,7 +302,7 @@
                                 </Card>
                                 <Card title="Medication refill request" className="lg:col-span-3">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <Input label="Medication" value={refillDraft.medication} onChange={(e) => { setRefillMessage(''); setRefillDraft(prev => ({ ...prev, medication: e.target.value })); }} />
+                                        <Select label="Prescribed medication" value={refillDraft.prescriptionItemId} onChange={(e) => { setRefillMessage(''); setRefillDraft((prev) => ({ ...prev, prescriptionItemId: e.target.value })); }} options={[{value:'',label:refillItems.length ? 'Select prescribed medication...' : 'No current prescriptions'},...refillItems.map((item) => ({value:item.id,label:`${item.formulary_items?.generic_name || 'Medication'} · ${item.formulary_items?.strength || ''} · ${item.dose} ${item.dose_unit} ${item.route}`}))]} />
                                         <Input label="Quantity" type="number" min="0.01" step="any" value={refillDraft.quantity} onChange={(e) => { setRefillMessage(''); setRefillDraft(prev => ({ ...prev, quantity: e.target.value })); }} />
                                         <Input label="Notes" value={refillDraft.notes} onChange={(e) => setRefillDraft(prev => ({ ...prev, notes: e.target.value }))} />
                                     </div>

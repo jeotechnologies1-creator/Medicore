@@ -62,11 +62,18 @@ select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000004'
 insert into public.staff_organization_memberships(profile_id,organization_unit_id,assigned_by,justification)
 select p.id,u.id,p.id,'Automated pharmacy RLS fixture' from public.profiles p cross join public.organization_units u
 where p.email='rls-pharmacist@example.test' and u.code='TEST-PHARMACY';
-insert into public.pharmacy_inventory(id,name,stock_quantity,reorder_level,expiry_date,status) values
- ('40000000-0000-4000-8000-000000000001','Test Med',5,1,current_date+30,'active');
+insert into public.formulary_items(id,generic_name,form,strength,unit,route,active) values
+ ('41000000-0000-4000-8000-000000000001','Test Med','tablet','1 mg','tablet','oral',true),
+ ('41000000-0000-4000-8000-000000000002','Unavailable Med','tablet','1 mg','tablet','oral',true);
+insert into public.pharmacy_inventory(id,name,stock_quantity,reorder_level,expiry_date,status,formulary_item_id) values
+ ('40000000-0000-4000-8000-000000000001','Test Med',5,1,current_date+30,'active','41000000-0000-4000-8000-000000000001');
 insert into public.prescriptions(id,patient_id,medications,status) values
  ('50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','[{"name":"Test Med","quantity":2}]','active'),
  ('50000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','[{"name":"Test Med","quantity":1},{"name":"Unavailable Med","quantity":1}]','active');
+insert into public.prescription_items(prescription_id,formulary_item_id,dose,dose_unit,frequency,route,quantity) values
+ ('50000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001',1,'tablet','once','oral',2),
+ ('50000000-0000-4000-8000-000000000002','41000000-0000-4000-8000-000000000001',1,'tablet','once','oral',1),
+ ('50000000-0000-4000-8000-000000000002','41000000-0000-4000-8000-000000000002',1,'tablet','once','oral',1);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
@@ -85,7 +92,7 @@ select ok(public.has_clinical_department_permission('20000000-0000-4000-8000-000
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000004',true);
 select is(public.dispense_prescription('50000000-0000-4000-8000-000000000001')->>'status','dispensed','pharmacy staff can dispense in their assigned facility');
 select is((select stock_quantity from public.pharmacy_inventory where id='40000000-0000-4000-8000-000000000001'),3,'successful dispense updates inventory atomically');
-select throws_ok($$select public.dispense_prescription('50000000-0000-4000-8000-000000000002')$$,'P0001','Insufficient non-expired stock for Unavailable Med','a failed multi-item dispense reports the missing stock');
+select throws_ok($$select public.dispense_prescription('50000000-0000-4000-8000-000000000002')$$,'P0001','No eligible selected lot has sufficient stock for Unavailable Med','a failed multi-item dispense reports the missing stock');
 select is((select stock_quantity from public.pharmacy_inventory where id='40000000-0000-4000-8000-000000000001'),3,'failed multi-item dispense rolls back earlier stock changes');
 select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
 select set_config('test.checkout_id',public.request_payment_checkout('30000000-0000-4000-8000-000000000002',(select id from public.integration_connections where provider_code='mock_gateway'),2,'checkout-test-key-001','NGN')::text,true);

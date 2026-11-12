@@ -378,13 +378,34 @@
             const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
             const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
+            const [prescriptionItems, setPrescriptionItems] = useState({});
+            const [controlledApprovals, setControlledApprovals] = useState([]);
+            const [formulary, setFormulary] = useState([]);
             const [showAddStock, setShowAddStock] = useState(false);
-            const [stockForm, setStockForm] = useState({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
+            const [stockForm, setStockForm] = useState({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
             const [stockMessage, setStockMessage] = useState('');
 
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
+
+            useEffect(() => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('formulary_items').select('id,generic_name,form,strength,unit,route,controlled').eq('active', true).order('generic_name')
+                    .then(({ data, error }) => { if (!error && data) setFormulary(data); });
+                client.from('prescription_items').select('id,prescription_id,formulary_item_id,dose,dose_unit,frequency,route,duration,quantity,formulary_items(generic_name,strength,form,controlled)')
+                    .then(({ data, error }) => {
+                        if (error || !data) return;
+                        setPrescriptionItems(data.reduce((map, item) => {
+                            map[item.prescription_id] ||= [];
+                            map[item.prescription_id].push(item);
+                            return map;
+                        }, {}));
+                    });
+                client.from('controlled_drug_dispense_approvals').select('id,prescription_id,requested_by,created_at,prescriptions(patient_id,diagnosis)').eq('status', 'pending').order('created_at')
+                    .then(({ data, error }) => { if (!error && data) setControlledApprovals(data); });
+            }, []);
 
             const filteredDrugs = (inventory || []).filter(d => 
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -412,9 +433,11 @@
             }).length;
 
             const handleAddStock = async () => {
+                const selectedFormularyItem = formulary.find((item) => item.id === stockForm.formularyItemId);
                 const quantity = Number(stockForm.stockQuantity || 0);
                 const reorder = Number(stockForm.reorderLevel || 0);
                 const price = Number(stockForm.unitPrice || 0);
+                if (!selectedFormularyItem) return setStockMessage('Select an active formulary item before adding a stock lot.');
                 if (!stockForm.name.trim()) return setStockMessage('Medication name is required.');
                 if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) return setStockMessage('Stock and reorder quantities must be whole numbers, and unit price cannot be negative.');
                 setStockMessage('');
@@ -436,6 +459,7 @@
                 if (!client) return notifyPersistenceFailure('add inventory');
                 const { data, error } = await client.from('pharmacy_inventory').insert([{
                     name: payload.name, generic_name: payload.genericName || null, category: payload.category || null,
+                    formulary_item_id: selectedFormularyItem.id,
                     stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel,
                     unit_price: payload.unitPrice, expiry_date: payload.expiryDate || null,
                     batch_number: payload.batchNumber.trim() || null, barcode: payload.barcode.trim() || null,
@@ -448,14 +472,20 @@
                 persistStoreTable('pharmacyInventory', next);
                 setInventory(next);
                 setShowAddStock(false);
-                setStockForm({ name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
+                setStockForm({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
             };
 
             const handleDispense = async (prescription) => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('dispense medication');
-                const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id });
-                if (error || !data?.items) return notifyPersistenceFailure('dispense medication', error || new Error('The dispensing transaction did not return a result.'));
+                const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id, p_lots: {} });
+                if (error) return notifyPersistenceFailure('dispense medication', error);
+                if (data?.status === 'awaiting_second_verification') {
+                    const { data: pending } = await client.from('controlled_drug_dispense_approvals').select('id,prescription_id,requested_by,created_at,prescriptions(patient_id,diagnosis)').eq('status', 'pending').order('created_at');
+                    setControlledApprovals(pending || []);
+                    return;
+                }
+                if (!data?.items) return notifyPersistenceFailure('dispense medication', new Error('The dispensing transaction did not return a result.'));
 
                 const dispensedByInventoryId = new Map(data.items.map((item) => [item.inventoryId, item]));
                 const nextInventory = inventory.map((item) => {
@@ -469,6 +499,24 @@
                 persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
                 const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
+                persistStoreTable('prescriptions', nextPrescriptions);
+            };
+
+            const handleVerifyControlledDispense = async (approval) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('verify controlled medicine dispense');
+                const { data, error } = await client.rpc('approve_controlled_drug_dispense', { p_approval_id: approval.id });
+                if (error || data?.status !== 'dispensed') return notifyPersistenceFailure('verify controlled medicine dispense', error || new Error('The verified dispense did not complete.'));
+                setControlledApprovals((rows) => rows.filter((row) => row.id !== approval.id));
+                const byLot = new Map((data.items || []).map((item) => [item.inventoryId, item]));
+                const nextInventory = inventory.map((item) => {
+                    const result = byLot.get(item.id);
+                    return result ? { ...item, stockQuantity: result.remainingStock, status: result.status } : item;
+                });
+                appData.pharmacyInventory = nextInventory;
+                persistStoreTable('pharmacyInventory', nextInventory);
+                setInventory(nextInventory);
+                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === approval.prescription_id ? { ...item, status: 'dispensed' } : item);
                 persistStoreTable('prescriptions', nextPrescriptions);
             };
 
@@ -505,14 +553,20 @@
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'diagnosis', title: 'Diagnosis' },
-                                        { key: 'medications', title: 'Items', render: (row) => row.medications.length },
+                                        { key: 'medications', title: 'Structured items', render: (row) => (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''} · ${item.quantity} · lot selected FEFO`).join('; ') || 'No structured items' },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
                                     data={appData.prescriptions.filter(p => p.status === 'active')}
-                                    actions={(row) => (
+                                actions={(row) => (
                                         <Button variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
                                     )}
                                 />
+                                {controlledApprovals.length > 0 && <div className="mt-6"><h3 className="mb-3 font-semibold text-slate-800">Controlled medicine verification</h3><DataTable columns={[
+                                    { key: 'prescription_id', title: 'Prescription', className: 'font-mono text-xs' },
+                                    { key: 'patient', title: 'Patient', render: (row) => { const patient = appData.patients.find((item) => item.id === row.prescriptions?.patient_id); return patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record'; } },
+                                    { key: 'requested_by', title: 'Requested by', render: (row) => appData.users.find((member) => member.id === row.requested_by)?.name || 'Pharmacy staff' },
+                                    { key: 'created_at', title: 'Requested' }
+                                ]} data={controlledApprovals} actions={(row) => <Button variant="primary" size="sm" onClick={() => handleVerifyControlledDispense(row)}>Verify & dispense</Button>} /></div>}
                             </Card>
                             <Card title="Quick Dispense">
                                 <div className="space-y-4">
@@ -625,8 +679,9 @@
                         }
                     >
                         <div className="grid grid-cols-2 gap-4">
-                            <Input label="Drug Name" value={stockForm.name} onChange={(e) => setStockForm(prev => ({ ...prev, name: e.target.value }))} className="col-span-2" />
-                            <Input label="Generic Name" value={stockForm.genericName} onChange={(e) => setStockForm(prev => ({ ...prev, genericName: e.target.value }))} className="col-span-2" />
+                            <Select label="Formulary item" value={stockForm.formularyItemId} onChange={(e) => { const selected = formulary.find((item) => item.id === e.target.value); setStockForm((prev) => ({ ...prev, formularyItemId: e.target.value, name: selected?.generic_name || '', genericName: selected?.generic_name || '' })); }} options={[{value:'',label:formulary.length ? 'Select formulary item...' : 'No formulary items loaded'},...formulary.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}${item.controlled ? ' · controlled' : ''}`}))]} className="col-span-2" />
+                            <Input label="Stock display name" value={stockForm.name} onChange={(e) => setStockForm(prev => ({ ...prev, name: e.target.value }))} className="col-span-2" />
+                            <Input label="Generic Name" value={stockForm.genericName} disabled className="col-span-2" />
                             <Input label="Category" value={stockForm.category} onChange={(e) => setStockForm(prev => ({ ...prev, category: e.target.value }))} />
                             <Input label="Stock Qty" type="number" value={stockForm.stockQuantity} onChange={(e) => setStockForm(prev => ({ ...prev, stockQuantity: e.target.value }))} />
                             <Input label="Reorder Level" type="number" value={stockForm.reorderLevel} onChange={(e) => setStockForm(prev => ({ ...prev, reorderLevel: e.target.value }))} />
