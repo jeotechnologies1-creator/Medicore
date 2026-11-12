@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { checkRateLimit, corsHeadersFor, recordAccountAudit } from '../_shared/security.ts';
+import { checkRateLimit, corsHeadersFor, recordAccountAudit, reportSafeEdgeError } from '../_shared/security.ts';
 
 Deno.serve(async (request) => {
   const corsHeaders = corsHeadersFor(request);
@@ -22,7 +22,7 @@ Deno.serve(async (request) => {
   try {
     if (!await checkRateLimit(adminClient, request, 'create-staff', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
   } catch (error) {
-    console.error('create-staff rate limit failed:', error);
+    await reportSafeEdgeError('staff');
     return Response.json({ error: 'Rate limiting is temporarily unavailable.' }, { status: 503, headers: corsHeaders });
   }
   const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
@@ -89,7 +89,7 @@ Deno.serve(async (request) => {
   await recordAccountAudit(adminClient, user.id, created.user.id, email, role, 'success');
   return Response.json({ staff: profile }, { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
-    console.error('create-staff Edge Function failed:', error);
+    await reportSafeEdgeError('staff');
     return Response.json({ error: 'Unexpected server error in create-staff. Check the Edge Function logs.' }, { status: 500, headers: corsHeaders });
   }
 });

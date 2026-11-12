@@ -291,14 +291,16 @@ const OneMedSupabase = (() => {
                 password: normalizedPassword,
                 options: captchaToken ? { captchaToken } : undefined
             });
-            if (authError || !authData.user) return null;
+            if (authError || !authData.user) { globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.(); return null; }
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
             if (!error && data?.status === 'active') {
                 return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null };
             }
             await client.auth.signOut();
+            globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
             return null;
         } catch (error) {
+            globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
             console.warn('Supabase profile login unavailable:', error);
             return null;
         }

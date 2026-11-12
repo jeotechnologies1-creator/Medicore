@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { checkRateLimit, corsHeadersFor, recordAccountAudit } from '../_shared/security.ts';
+import { checkRateLimit, corsHeadersFor, recordAccountAudit, reportSafeEdgeError } from '../_shared/security.ts';
 
 Deno.serve(async (request) => {
   const corsHeaders = corsHeadersFor(request);
@@ -19,7 +19,7 @@ Deno.serve(async (request) => {
   try {
     if (!await checkRateLimit(adminClient, request, 'create-patient-portal', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
   } catch (error) {
-    console.error('create-patient-portal rate limit failed:', error);
+    await reportSafeEdgeError('portal');
     return Response.json({ error: 'Rate limiting is temporarily unavailable.' }, { status: 503, headers: corsHeaders });
   }
   const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
@@ -52,7 +52,7 @@ Deno.serve(async (request) => {
   const { data: profile, error: profileError } = await adminClient.from('profiles').update({ role: 'patient', patient_id: patientId, full_name: fullName, status: 'active' }).eq('auth_user_id', created.user.id).select('id, email, full_name, role, patient_id, status').single();
   if (profileError) {
     const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
-    if (cleanupError) console.error('Failed to clean up unlinked portal auth user:', cleanupError);
+    if (cleanupError) await reportSafeEdgeError('portal');
     await recordAccountAudit(adminClient, user.id, created.user.id, email, 'patient', 'failure', { stage: 'profile', error: profileError.message });
     return Response.json({ error: cleanupError
       ? 'Portal profile setup failed and automatic account cleanup did not complete. Check Edge Function logs before retrying.'
@@ -62,7 +62,7 @@ Deno.serve(async (request) => {
     const { data: updatedPatient, error: patientUpdateError } = await adminClient.from('patients').update({ email }).eq('id', patientId).select('id').maybeSingle();
     if (patientUpdateError || !updatedPatient) {
       const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
-      if (cleanupError) console.error('Failed to clean up portal auth user after patient email update failed:', cleanupError);
+      if (cleanupError) await reportSafeEdgeError('portal');
       await recordAccountAudit(adminClient, user.id, created.user.id, email, 'patient', 'failure', { stage: 'patient_email_sync' });
       return Response.json({ error: cleanupError
         ? 'Patient email synchronization failed and automatic account cleanup did not complete. Check Edge Function logs before retrying.'

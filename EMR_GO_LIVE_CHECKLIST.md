@@ -27,4 +27,19 @@ This application is a clinical-record system. Do not describe it as certified, c
 - Exercise each role end-to-end in a staging project: registration, appointment, encounter, vital signs, orders/results, prescription/dispense, admission/discharge, billing/payment/claim, documents, portal requests, and audit review.
 - Establish clinical governance: named medical director, safety lead, privacy officer, change-control process, user training, support escalation, and release rollback plan.
 
+## Phase 5: Operations readiness evidence
+
+The repository now contains a daily logical database/Storage backup runner (`npm run backup:daily`), restore row-count/hash-chain SQL, a PITR and restore-drill procedure, a monitoring/uptime Edge Function, allowlisted client error telemetry, operations alert counters, a downtime read-only database guard/banner, and a 60-day dormant-staff report/suspension function. These are implementation artifacts, not evidence that hosted services are configured or tested.
+
+- [ ] Apply migration `20261112000049_operations_readiness.sql` in staging and production; test downtime read-only guards on every covered workflow/table.
+- [ ] Enable Supabase PITR, record recovery retention and recovery points. Confirm daily logical export continues because PITR replaces Supabase's daily backup schedule.
+- [ ] Configure `DATABASE_URL`, `BACKUP_DIR`, `SUPABASE_URL`, and server-only service key in the secured runner; schedule daily backups to encrypted off-site storage and alert on failure/staleness.
+- [ ] Configure and test monitoring URL, `ALLOWED_ORIGINS`, service-only alert polling, delivery route, thresholds, and on-call ownership. Confirm telemetry contains only allowlisted fields.
+- [ ] Approve RTO/RPO values; complete a restore drill including table counts, hash-chain verification, Storage object checks, and sample role logins.
+- [ ] Complete a quarterly access review and review the 60-day dormant staff list before optional suspensions.
+- [ ] Complete a downtime tabletop exercise, paper-form inventory, identifier reconciliation, and required sign-offs.
+- [ ] Record clinical, security/privacy, and technical approvals. Do not mark this checklist complete based on source changes alone.
+
+Current repository checks during this phase: lint passed. Existing static checks fail on a laboratory wording assertion, and the production build fails because the configured browser target rejects the application's existing top-level `await`. Hosted migrations, Playwright axe scans, Edge Function deployment, PITR, backups, and recovery were not exercised in this workspace.
+
 FHIR is intended for structured, electronic health-information exchange and uses resources as the common exchange building blocks. See the [FHIR overview](https://hl7.org/fhir/overview.html). The HHS guidance is a useful security baseline, but it does not replace advice for the jurisdiction in which OneMed is deployed.

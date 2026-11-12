@@ -29,6 +29,7 @@
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
             const [dataLoad, setDataLoad] = useState({ loading: false, failures: [] });
+            const [downtimeReadOnly, setDowntimeReadOnly] = useState(false);
             const [theme, setTheme] = useState(() => {
                 try {
                     return localStorage.getItem('onemed_theme') || 'dark';
@@ -111,6 +112,24 @@
                     setSidebarOpen(false);
                 }
             }, [user]);
+
+            useEffect(() => {
+                if (!isAuthenticated || !user?.id) { setDowntimeReadOnly(false); return undefined; }
+                let current = true;
+                const refreshMode = async () => {
+                    const { data, error } = await window.OneMedSupabase.getClient().rpc('get_downtime_read_only_mode');
+                    if (current && !error) setDowntimeReadOnly(data === true);
+                };
+                refreshMode();
+                const timer = window.setInterval(refreshMode, 30_000);
+                return () => { current = false; window.clearInterval(timer); };
+            }, [isAuthenticated, user?.id]);
+
+            const changeDowntimeMode = async () => {
+                const { error } = await window.OneMedSupabase.getClient().rpc('set_downtime_read_only_mode', { p_enabled: !downtimeReadOnly });
+                if (error) return addToast('Downtime mode could not be changed.', 'error');
+                setDowntimeReadOnly(!downtimeReadOnly);
+            };
 
             useEffect(() => {
                 if (!isAuthenticated) return undefined;
@@ -313,6 +332,8 @@
                             />
                             <a className="skip-link" href="#main-content">Skip to main content</a>
                             <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto app-main" aria-label="Main content">
+                                {!downtimeReadOnly && user?.role === 'super_admin' && <div className="flex justify-end border-b border-slate-200 bg-white px-5 py-2"><Button size="sm" variant="outline" onClick={changeDowntimeMode}>Enable downtime read-only mode</Button></div>}
+                                {downtimeReadOnly && <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b-2 border-amber-700 bg-amber-100 px-5 py-3 text-amber-950" role="alert"><span><strong>Downtime read-only mode.</strong> Clinical and operational changes are blocked; use the approved paper forms.</span>{user?.role === 'super_admin' && <Button size="sm" variant="secondary" onClick={changeDowntimeMode}>End downtime mode</Button>}</div>}
                                 {dataLoad.loading && (
                                     <div className="mx-6 mt-4 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-sm text-medical-800" role="status">
                                         Loading your authorized records…

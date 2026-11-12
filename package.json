@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "test:edge": "deno test supabase/functions/tests",
     "test:db": "supabase test db",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "backup:daily": "node scripts/backup-daily.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

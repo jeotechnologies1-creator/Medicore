@@ -34,6 +34,7 @@ globalThis.OneMedSupabase = OneMedSupabase;
 await loadLegacyModule('./js/core.js');
 await loadLegacyModule('./js/icons.js');
 await loadLegacyModule('./js/ui.js');
+await loadLegacyModule('./js/monitoring.js');
 await loadLegacyModule('./js/print-documents.js');
 await loadLegacyModule('./js/auth.js');
 await loadLegacyModule('./js/layout.js');

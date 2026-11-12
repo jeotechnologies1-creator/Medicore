@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { checkRateLimit, constantTimeEqual, mapBounded } from '../_shared/security.ts';
+import { checkRateLimit, constantTimeEqual, mapBounded, reportSafeEdgeError } from '../_shared/security.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -68,6 +68,7 @@ Deno.serve(async (request) => {
       return { id: event.id, delivered: true };
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Connector request failed';
+      await reportSafeEdgeError('integration');
       await serviceClient.rpc('complete_integration_outbox', {
         p_id: event.id, p_attempt: event.attempts, p_ok: false, p_response: {}, p_external_reference: null, p_error: message.slice(0, 500),
       });

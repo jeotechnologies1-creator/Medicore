@@ -76,6 +76,20 @@ export const constantTimeEqual = async (left: string, right: string): Promise<bo
   return mismatch === 0;
 };
 
+export const reportSafeEdgeError = async (moduleName: string): Promise<void> => {
+  const base = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!base || !serviceKey) return;
+  const allowed = new Set(['integration','notification','portal','staff','monitoring','other']);
+  try {
+    await fetch(`${base.replace(/\/$/, '')}/functions/v1/monitoring`, {
+      method: 'POST', headers: { authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ event_type: 'edge_error', error_class: 'UnknownError', module: allowed.has(moduleName) ? moduleName : 'other', environment: 'production' }),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch { /* Monitoring failure must not expose request data or block clinical delivery. */ }
+};
+
 export const verifySignedTimestamp = (value: string | null, nowMs = Date.now()): number | null => {
   if (!value || !/^\d{10}$/.test(value)) return null;
   const timestamp = Number(value);

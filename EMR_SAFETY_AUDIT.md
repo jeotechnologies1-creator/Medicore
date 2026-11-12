@@ -26,6 +26,18 @@ This is the appropriate financial KPI for stock on hand. It is distinct from ite
 | Appointment booking | Concurrent requests could assign one doctor or patient to the same exact date/time slot. | Added migration `20261103000028` with transaction advisory locks and a database trigger that rejects exact-slot conflicts. |
 | Patient privacy and facility scope | Patient registry reads and several patient-linked workflows relied on broad role policies, and registration did not set `home_facility_id`. | Added migration `20261103000029` to enforce facility/department scope on patient-linked reads and writes, constrain appointment RPC writes and doctor facility assignment, prevent hard deletes on retained patient workflows, and require registration to select a permitted facility. Legacy patients without a verified facility remain quarantined to the linked patient and Super Admin until explicitly mapped. |
 
+## Phase 5 operations readiness update (2026-11-12)
+
+Implemented in repository, pending deployment and operational evidence:
+
+- Added `scripts/backup-daily.mjs` for custom-format logical database dumps and Storage bucket object downloads, plus `scripts/restore-verify.sql` for selected core table counts, audit hash-chain verification, and Storage object counts.
+- Added backup/recovery, monitoring, downtime, and quarterly access-review procedures with RTO/RPO placeholders and explicit hosted configuration steps.
+- Added migration `20261112000049_operations_readiness.sql`: an audited Super Admin downtime flag, write-blocking triggers on listed clinical/operational tables, bounded operational alert counters, and a Super Admin dormant-staff report with optional suspension after 60 days.
+- Added the `monitoring` Edge Function uptime endpoint and allowlisted telemetry ingestion. Browser telemetry sends only event type, approved error class, module, and environment; it omits exception text, stack, request data, and patient/user identifiers. Notification-dispatch failures use the safe Edge telemetry helper.
+- Updated go-live checklist and module inventory to label controls as implemented but not operationally verified.
+
+Validation performed for this change set: `npm run lint`, `npm run check:migrations` (49 timestamp-ordered migrations), `node --check scripts/backup-daily.mjs`, and `git diff --check` passed. The operations database test was authored but could not be executed because the local Supabase/Postgres service is unavailable; Deno is also unavailable for Edge Function type checks. This change set has not been deployed or exercised against a hosted Supabase project. Restore, PITR, backup scheduling/off-site encryption, Storage recovery, alert delivery, Edge Function telemetry, read-only write-block coverage, dormant-account actions, and role-based login checks remain unverified. Do not represent this work as certification, compliance, or production readiness.
+
 ## Priority improvements before clinical production use
 
 1. **Apply and verify server-side authorization in Supabase.** Apply migrations 28 and 29 in staging first. For migration 29, map every existing patient to the verified facility before promotion; validate patient, receptionist, records officer, clinician, finance, and super-admin reads and writes. Client-side checks are not a security boundary.
