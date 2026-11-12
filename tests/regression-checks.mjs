@@ -67,7 +67,13 @@ assert.match(app, /if \(!user\) \{\s*setNotifications\(\[\]\)/, 'User-scoped not
 assert.doesNotMatch(auth, /roleBasedAccess === false\) return true/, 'Browser settings must not disable module access checks.');
 assert.doesNotMatch(auth, /savedLocal\.length/, 'Browser-local role matrices must not override the server-saved access policy.');
 assert.match(supabaseClient, /data\?\.status === 'active'/, 'Password login must reject inactive profiles.');
-assert.match(portal, /sender_profile_id: user\.id/, 'Patient messages must carry the authenticated sender profile.');
+assert.match(portal, /sender_profile_id: user\?\.id/, 'Patient messages must carry the authenticated sender profile.');
+assert.match(portal, /setPortalDataError\('Payment status could not be loaded/, 'Portal payment data failures must be visible instead of appearing as an empty balance history.');
+assert.match(portal, /submittingAppointment[\s\S]*?Request sent and visible in the appointment queue/, 'Appointment requests must prevent repeat submissions and preserve success if the secondary chat notification fails.');
+assert.match(portal, /setMessageError\('Messages could not be loaded/, 'Patient messaging read failures must be visible.');
+assert.match(portal, /setCheckoutMessage\('Secure checkout could not be started/, 'Patient checkout failures must be handled and shown without exposing backend errors.');
+assert.match(operations, /const refreshRefundQueue = async[\s\S]*?queue could not be refreshed/, 'Refund actions must preserve their saved result when the follow-up queue read fails.');
+assert.match(operations, /const refreshDisputes = async[\s\S]*?dispute queue could not be refreshed/, 'Dispute updates must report queue refresh failures instead of showing stale state as current.');
 assert.match(authorization, /can_manage_patient_table/, 'Clinical write permissions must be table and role specific.');
 assert.match(authorization, /when 'prescriptions' then public\.has_any_role\(array\['super_admin','doctor','specialist'\]\)/, 'Specialists must receive the scoped prescribing write permission already granted to their role.');
 assert.match(authorization, /when 'encounters' then public\.has_any_role\(array\['super_admin','doctor','nurse','specialist'\]\)/, 'Specialist encounter authoring must be enabled at the base role gate and still pass department RLS.');
@@ -94,6 +100,9 @@ assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match t
 assert.match(system, /recordComplianceExport/, 'FHIR exports must be audited before download.');
 assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about likely duplicate patient records.');
 assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
+assert.match(patients, /randomUUID\(\)\.replaceAll\('-', ''\)\.slice\(0, 16\)/, 'Generated patient numbers must have enough entropy to avoid routine unique-key collisions.');
+assert.match(patients, /Patient registration failed:[\s\S]*?finally\s*\{\s*setSaving\(false\)/, 'Network failures during registration must report failure and release the saving state.');
+assert.match(patients, /Patient demographics update failed:[\s\S]*?finally\s*\{\s*setSaving\(false\)/, 'Network failures during demographic updates must report failure and release the saving state.');
 assert.match(patients, /from\('patient_access_logs'\)\.insert/, 'Opening a patient chart must write an access log before displaying it.');
 assert.match(patients, /\['PGRST202', 'PGRST205'\]/, 'Missing access-log API objects must not block charts already authorized by row-level security.');
 assert.match(patients, /the read was not logged/, 'Access-log API failures must remain visible to the user.');
@@ -251,5 +260,10 @@ assert.doesNotMatch(labVisibilityRollback, /delete from|truncate|drop table/i, '
 assert.match(stagingGuide, /through `20261111000031_lab_result_patient_visibility\.sql`/, 'Staging instructions must include the latest lab visibility migration.');
 assert.match(deploymentDocs, /31\. `migrations\/20261111000031_lab_result_patient_visibility\.sql`/, 'Deployment order must include the latest lab visibility migration.');
 assert.match(deploymentDocs, /20261111000031_lab_result_patient_visibility\.sql`\./, 'Deployment instructions must document lab visibility rollout.');
+
+const patientPortalFunction = await read('supabase/functions/create-patient-portal/index.ts');
+assert.match(patientPortalFunction, /if \(!url \|\| !anonKey \|\| !serviceKey\)/, 'Patient portal provisioning must fail clearly when required server secrets are absent.');
+assert.match(patientPortalFunction, /linkedProfile, error: linkedProfileError/, 'Patient portal provisioning must not ignore profile lookup failures.');
+assert.match(patientPortalFunction, /patientUpdateError[\s\S]*?deleteUser\(created\.user\.id\)/, 'Patient portal provisioning must clean up the newly created Auth account if email synchronization fails.');
 
 console.log('Regression checks passed.');

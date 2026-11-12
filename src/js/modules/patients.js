@@ -101,7 +101,9 @@
                 }
 
                 const payload = {
-                    patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+                    // Patient numbers are unique in Postgres; use 64 random bits
+                    // so routine growth does not create avoidable registration collisions.
+                    patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase()}`,
                     first_name: form.firstName,
                     last_name: form.lastName,
                     date_of_birth: form.dateOfBirth,
@@ -122,9 +124,13 @@
                 const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function' ? window.OneMedSupabase.getClient() : null;
                 if (!client) return notifyPersistenceFailure('register patient');
                 setSaving(true);
-                const { data, error } = await client.from('patients').insert([payload]).select();
-                const created = data?.[0];
-                if (!error && created) {
+                try {
+                    const { data, error } = await client.from('patients').insert([payload]).select();
+                    const created = data?.[0];
+                    if (error || !created) {
+                        notifyPersistenceFailure('register patient', error);
+                        return;
+                    }
                     const mapped = {
                         ...created,
                         id: created.id,
@@ -145,10 +151,12 @@
                     setPossibleDuplicates([]);
                     setDuplicateAcknowledged(false);
                     setShowRegistration(false);
-                } else {
+                } catch (error) {
+                    console.error('Patient registration failed:', error);
                     notifyPersistenceFailure('register patient', error);
+                } finally {
+                    setSaving(false);
                 }
-                setSaving(false);
             };
 
             const openPatientEditor = (patient) => {
@@ -184,42 +192,47 @@
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('update patient');
                 setSaving(true);
-                const patch = {
-                    first_name: form.firstName.trim(),
-                    last_name: form.lastName.trim(),
-                    date_of_birth: form.dateOfBirth,
-                    gender: form.gender,
-                    phone: form.phone.trim(),
-                    email: form.email.trim() || null,
-                    address: form.address.trim(),
-                    blood_group: form.bloodGroup || null,
-                    emergency_contact_name: form.emergencyContactName.trim(),
-                    emergency_contact_phone: form.emergencyContactPhone.trim()
-                };
-                const { data, error } = await client.from('patients').update(patch).eq('id', editingPatient.id).select().single();
-                if (error || !data) {
+                try {
+                    const patch = {
+                        first_name: form.firstName.trim(),
+                        last_name: form.lastName.trim(),
+                        date_of_birth: form.dateOfBirth,
+                        gender: form.gender,
+                        phone: form.phone.trim(),
+                        email: form.email.trim() || null,
+                        address: form.address.trim(),
+                        blood_group: form.bloodGroup || null,
+                        emergency_contact_name: form.emergencyContactName.trim(),
+                        emergency_contact_phone: form.emergencyContactPhone.trim()
+                    };
+                    const { data, error } = await client.from('patients').update(patch).eq('id', editingPatient.id).select().single();
+                    if (error || !data) {
+                        notifyPersistenceFailure('update patient', error);
+                        return;
+                    }
+                    const mapped = {
+                        ...editingPatient,
+                        ...data,
+                        patientNumber: data.patient_number || editingPatient.patientNumber,
+                        firstName: data.first_name,
+                        lastName: data.last_name,
+                        dateOfBirth: data.date_of_birth,
+                        bloodGroup: data.blood_group || '',
+                        emergencyContact: { name: data.emergency_contact_name || '', phone: data.emergency_contact_phone || '' }
+                    };
+                    const nextPatients = patients.map((patient) => patient.id === mapped.id ? mapped : patient);
+                    appData.patients = nextPatients;
+                    setPatients(nextPatients);
+                    setSelectedPatient((current) => current?.id === mapped.id ? mapped : current);
+                    setShowRegistration(false);
+                    setEditingPatient(null);
+                    setFormErrors({});
+                } catch (error) {
+                    console.error('Patient demographics update failed:', error);
                     notifyPersistenceFailure('update patient', error);
+                } finally {
                     setSaving(false);
-                    return;
                 }
-                const mapped = {
-                    ...editingPatient,
-                    ...data,
-                    patientNumber: data.patient_number || editingPatient.patientNumber,
-                    firstName: data.first_name,
-                    lastName: data.last_name,
-                    dateOfBirth: data.date_of_birth,
-                    bloodGroup: data.blood_group || '',
-                    emergencyContact: { name: data.emergency_contact_name || '', phone: data.emergency_contact_phone || '' }
-                };
-                const nextPatients = patients.map((patient) => patient.id === mapped.id ? mapped : patient);
-                appData.patients = nextPatients;
-                setPatients(nextPatients);
-                setSelectedPatient((current) => current?.id === mapped.id ? mapped : current);
-                setShowRegistration(false);
-                setEditingPatient(null);
-                setFormErrors({});
-                setSaving(false);
             };
 
             const handlePatientClick = (patient) => {

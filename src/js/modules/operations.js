@@ -761,6 +761,18 @@
                 });
             }, [activeTab]);
 
+            const refreshDisputes = async (successMessage = '') => {
+                try {
+                    const { data, error } = await window.OneMedSupabase.getClient().from('payment_disputes').select('id,connection_id,transaction_id,external_dispute_id,amount,currency,reason,response_due_at,status,response_notes,created_at').order('response_due_at', { ascending: true, nullsFirst: false });
+                    if (error) throw error;
+                    setDisputeCases(data || []);
+                    if (successMessage) setDisputeMessage(successMessage);
+                } catch (error) {
+                    console.error('Dispute queue refresh failed:', error);
+                    setDisputeMessage(successMessage ? `${successMessage} The dispute queue could not be refreshed; use Refresh or reopen this tab.` : 'The dispute queue could not be refreshed.');
+                }
+            };
+
             const saveDisputeThreshold = async () => {
                 if (!disputeThreshold.connectionId) return setDisputeMessage('Select an active payment provider connection.');
                 const { error } = await window.OneMedSupabase.getClient().rpc('configure_payment_dispute_thresholds', {
@@ -780,9 +792,7 @@
                     p_dispute_id: item.id, p_status: status, p_response_notes: notes, p_evidence_checklist: []
                 });
                 if (error) return setDisputeMessage(error.message);
-                setDisputeMessage(`Dispute ${item.external_dispute_id} moved to ${status}.`);
-                const { data } = await window.OneMedSupabase.getClient().from('payment_disputes').select('id,connection_id,transaction_id,external_dispute_id,amount,currency,reason,response_due_at,status,response_notes,created_at').order('response_due_at', { ascending: true, nullsFirst: false });
-                setDisputeCases(data || []);
+                await refreshDisputes(`Dispute ${item.external_dispute_id} moved to ${status}.`);
             };
 
             const acknowledgeDisputeAlert = async (alert) => {
@@ -796,8 +806,20 @@
                 if (!refundDraft.postingId || amount <= 0 || !refundDraft.reason.trim()) return setRefundMessage('Select a payment, enter a positive amount, and document the reason.');
                 const { error } = await window.OneMedSupabase.getClient().rpc('request_billing_refund', { p_payment_posting_id: refundDraft.postingId, p_amount: amount, p_reason: refundDraft.reason.trim() });
                 if (error) return setRefundMessage(error.message);
-                setShowRefundModal(false); setRefundDraft({ postingId: '', amount: '', reason: '' }); setRefundMessage('Refund request submitted for independent Accounts review.');
-                const { data } = await window.OneMedSupabase.getClient().from('refund_requests').select('*').order('created_at', { ascending: false }); setRefundRequests(data || []);
+                setShowRefundModal(false); setRefundDraft({ postingId: '', amount: '', reason: '' });
+                await refreshRefundQueue('Refund request submitted for independent Accounts review.');
+            };
+
+            const refreshRefundQueue = async (successMessage = '') => {
+                try {
+                    const { data, error } = await window.OneMedSupabase.getClient().from('refund_requests').select('*').order('created_at', { ascending: false });
+                    if (error) throw error;
+                    setRefundRequests(data || []);
+                    if (successMessage) setRefundMessage(successMessage);
+                } catch (error) {
+                    console.error('Refund queue refresh failed:', error);
+                    setRefundMessage(successMessage ? `${successMessage} The queue could not be refreshed; use Refresh or reopen this tab.` : 'The refund queue could not be refreshed.');
+                }
             };
 
             const reviewRefund = async (request, decision) => {
@@ -805,17 +827,22 @@
                 if (decision === 'rejected' && !String(rejectionReason || '').trim()) return;
                 const { error } = await window.OneMedSupabase.getClient().rpc('review_billing_refund', { p_refund_request_id: request.id, p_decision: decision, p_rejection_reason: rejectionReason });
                 if (error) return setRefundMessage(error.message);
-                const { data } = await window.OneMedSupabase.getClient().from('refund_requests').select('*').order('created_at', { ascending: false }); setRefundRequests(data || []);
-                setRefundMessage(`Refund request ${decision}.`);
+                await refreshRefundQueue(`Refund request ${decision}.`);
             };
 
             const reviewPayerRemittance = async (remittance, decision) => {
                 const client = window.OneMedSupabase.getClient();
                 const { error } = await client.rpc('review_payer_remittance', { p_remittance_id: remittance.id, p_decision: decision });
                 if (error) return setIntegrationMessage(error.message);
-                const { data } = await client.from('payer_remittances').select('*').order('received_at', { ascending: false });
-                setPayerRemittances(data || []);
-                setIntegrationMessage(`Payer remittance ${decision}.`);
+                try {
+                    const { data, error: refreshError } = await client.from('payer_remittances').select('*').order('received_at', { ascending: false });
+                    if (refreshError) throw refreshError;
+                    setPayerRemittances(data || []);
+                    setIntegrationMessage(`Payer remittance ${decision}.`);
+                } catch (refreshError) {
+                    console.error('Payer remittance queue refresh failed:', refreshError);
+                    setIntegrationMessage(`Payer remittance ${decision}. The queue could not be refreshed; reopen the tab to reload it.`);
+                }
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 

@@ -17,11 +17,14 @@
             const [refillMessage, setRefillMessage] = useState('');
             const [submittingRefill, setSubmittingRefill] = useState(false);
             const [portalMessages, setPortalMessages] = useState([]);
+            const [sendingMessage, setSendingMessage] = useState(false);
             const [bankAccounts, setBankAccounts] = useState([]);
             const [appointmentRequests, setAppointmentRequests] = useState([]);
             const [appointmentMessage, setAppointmentMessage] = useState('');
+            const [submittingAppointment, setSubmittingAppointment] = useState(false);
             const [paymentGateways, setPaymentGateways] = useState([]);
             const [providerPayments, setProviderPayments] = useState([]);
+            const [portalDataError, setPortalDataError] = useState('');
             const [checkoutMessage, setCheckoutMessage] = useState('');
             const [checkoutUrl, setCheckoutUrl] = useState('');
             const [messageError, setMessageError] = useState('');
@@ -30,19 +33,40 @@
             useEffect(() => {
                 let active = true;
                 const client = window.OneMedSupabase?.getClient?.();
+                setPortalDataError('');
+                if (!client) {
+                    setPortalDataError('The patient portal could not connect to the hospital service. Try again later.');
+                    return () => { active = false; };
+                }
                 if (client && patient?.id) {
                     client.from('appointments').select('*').eq('patient_id', patient.id).order('appointment_date', { ascending: true }).then(({ data, error }) => {
-                        if (active && !error) setAppointmentRequests(normalizeAppointments(data || []));
+                        if (!active) return;
+                        if (error) setAppointmentMessage('Appointment status could not be loaded. Please refresh or contact your care team.');
+                        else setAppointmentRequests(normalizeAppointments(data || []));
+                    }).catch(() => {
+                        if (active) setAppointmentMessage('Appointment status could not be loaded. Please refresh or contact your care team.');
                     });
                 }
                 client?.rpc('get_portal_payment_accounts').then(({ data, error }) => {
-                    if (active && !error) setBankAccounts(Array.isArray(data) ? data : []);
-                }).catch(() => {});
-                client?.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active').then(({ data }) => {
-                    if (active) setPaymentGateways(data || []);
+                    if (!active) return;
+                    if (error) setPortalDataError('Payment instructions could not be loaded. Contact Accounts for assistance.');
+                    else setBankAccounts(Array.isArray(data) ? data : []);
+                }).catch(() => {
+                    if (active) setPortalDataError('Payment instructions could not be loaded. Contact Accounts for assistance.');
                 });
-                client?.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false }).then(({ data }) => {
-                    if (active) setProviderPayments(data || []);
+                client.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active').then(({ data, error }) => {
+                    if (!active) return;
+                    if (error) setPortalDataError('Online payment availability could not be checked.');
+                    else setPaymentGateways(data || []);
+                }).catch(() => {
+                    if (active) setPortalDataError('Online payment availability could not be checked.');
+                });
+                client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false }).then(({ data, error }) => {
+                    if (!active) return;
+                    if (error) setPortalDataError('Payment status could not be loaded. Use Refresh payment status or contact Accounts.');
+                    else setProviderPayments(data || []);
+                }).catch(() => {
+                    if (active) setPortalDataError('Payment status could not be loaded. Use Refresh payment status or contact Accounts.');
                 });
                 return () => { active = false; };
             }, [patient?.id]);
@@ -71,11 +95,17 @@
             }, [initialTab]);
 
             useEffect(() => {
+                let active = true;
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !patient?.id) return;
+                if (!client || !patient?.id) return () => { active = false; };
                 client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at').then(({ data, error }) => {
-                    if (!error) setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at })));
+                    if (!active) return;
+                    if (error) setMessageError('Messages could not be loaded. Please refresh or try again later.');
+                    else setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at })));
+                }).catch(() => {
+                    if (active) setMessageError('Messages could not be loaded. Please refresh or try again later.');
                 });
+                return () => { active = false; };
             }, [patient?.id]);
 
             const handleSendMessage = async () => {
@@ -87,22 +117,38 @@
                     return;
                 }
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client || !patient?.id) return;
+                if (!client || !patient?.id) { setMessageError('The messaging service is unavailable. Please try again later.'); return; }
+                if (sendingMessage) return;
                 setMessageError('');
-                const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
-                if (error || !data?.[0]) { setMessageError(error?.message || 'Your message could not be sent.'); return; }
-                setPortalMessages((current) => [...current, { id: data[0].id, sender: data[0].sender_name, direction: data[0].direction, text: data[0].message, sentAt: data[0].sent_at }]);
-                setMessageDraft('');
+                setSendingMessage(true);
+                try {
+                    const { data, error } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user?.id, sender_name: 'You', direction: 'outgoing', message: messageDraft.trim() }).select();
+                    if (error || !data?.[0]) throw error || new Error('No message returned.');
+                    setPortalMessages((current) => [...current, { id: data[0].id, sender: data[0].sender_name, direction: data[0].direction, text: data[0].message, sentAt: data[0].sent_at }]);
+                    setMessageDraft('');
+                } catch (error) {
+                    console.error('Portal message submission failed:', error);
+                    setMessageError('Your message could not be sent. Please try again.');
+                } finally {
+                    setSendingMessage(false);
+                }
             };
 
             const refreshPayments = async () => {
                 const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return;
-                const [{ data: gateways }, { data: transactions }] = await Promise.all([
-                    client.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active'),
-                    client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false })
-                ]);
-                setPaymentGateways(gateways || []); setProviderPayments(transactions || []);
+                if (!client) { setCheckoutMessage('Payment status is unavailable because the service is not connected.'); return; }
+                try {
+                    const [gatewayResult, transactionResult] = await Promise.all([
+                        client.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active'),
+                        client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false })
+                    ]);
+                    if (gatewayResult.error || transactionResult.error) throw gatewayResult.error || transactionResult.error;
+                    setPaymentGateways(gatewayResult.data || []); setProviderPayments(transactionResult.data || []);
+                    setCheckoutMessage('Payment status refreshed.');
+                } catch (error) {
+                    console.error('Portal payment refresh failed:', error);
+                    setCheckoutMessage('Payment status could not be refreshed. Please try again later.');
+                }
             };
 
             const startCheckout = async (invoice) => {
@@ -112,14 +158,20 @@
                 setCheckoutUrl('');
                 setCheckoutMessage('Creating secure checkout…');
                 const key = globalThis.crypto?.randomUUID?.() || `portal-${invoice.id}-${Date.now()}`;
-                const { data: transactionId, error } = await client.rpc('request_patient_payment_checkout', {
-                    p_billing_id: invoice.id, p_connection_id: gateway.id, p_amount: Number(invoice.balance), p_idempotency_key: key, p_currency: 'NGN'
-                });
-                if (error || !transactionId) { setCheckoutMessage(error?.message || 'Checkout could not be started.'); return; }
-                await refreshPayments();
-                const { data: transaction } = await client.from('payment_provider_transactions').select('checkout_url,status').eq('id', transactionId).maybeSingle();
-                setCheckoutUrl(transaction?.checkout_url?.startsWith('https://') ? transaction.checkout_url : '');
-                setCheckoutMessage(transaction?.checkout_url ? 'Provider checkout is ready. Payment will show as confirmed after provider notification and Accounts review.' : 'Checkout request queued. Refresh this page shortly for the provider checkout link.');
+                try {
+                    const { data: transactionId, error } = await client.rpc('request_patient_payment_checkout', {
+                        p_billing_id: invoice.id, p_connection_id: gateway.id, p_amount: Number(invoice.balance), p_idempotency_key: key, p_currency: 'NGN'
+                    });
+                    if (error || !transactionId) throw error || new Error('Checkout request returned no transaction.');
+                    await refreshPayments();
+                    const { data: transaction, error: transactionError } = await client.from('payment_provider_transactions').select('checkout_url,status').eq('id', transactionId).maybeSingle();
+                    if (transactionError) throw transactionError;
+                    setCheckoutUrl(transaction?.checkout_url?.startsWith('https://') ? transaction.checkout_url : '');
+                    setCheckoutMessage(transaction?.checkout_url ? 'Provider checkout is ready. Payment will show as confirmed after provider notification and Accounts review.' : 'Checkout request queued. Refresh this page shortly for the provider checkout link.');
+                } catch (error) {
+                    console.error('Portal checkout request failed:', error);
+                    setCheckoutMessage('Secure checkout could not be started. Please try again or use the listed bank transfer instructions.');
+                }
             };
 
             const handleBookAppointment = async () => {
@@ -128,27 +180,40 @@
                     setAppointmentMessage('Choose a department and preferred date to send your appointment request.');
                     return;
                 }
-                const { data, error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time || null, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null }).select().single();
-                if (error || !data) {
-                    setAppointmentMessage(error?.message || 'Your appointment request could not be sent.');
-                    return;
+                if (submittingAppointment) return;
+                setSubmittingAppointment(true);
+                setAppointmentMessage('');
+                try {
+                    const { data, error } = await client.from('appointments').insert({ patient_id: patient.id, doctor_id: null, appointment_date: appointmentDraft.date, appointment_time: appointmentDraft.time || null, appointment_type: appointmentDraft.visitType || 'portal_request', department: appointmentDraft.department, status: 'requested', notes: appointmentDraft.reason || null }).select().single();
+                    if (error || !data) throw error || new Error('No appointment request returned.');
+                    setAppointmentRequests((current) => [...current, ...normalizeAppointments([data])]);
+                    setAppointmentMessage('Request sent. The Health Information Management (HIM) team will confirm the date and time after checking with the doctor.');
+                    setAppointmentDraft({
+                        department: '',
+                        date: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
+                        time: '',
+                        reason: '',
+                        visitType: ''
+                    });
+                    setActiveTab('appointments');
+                    try {
+                        const { data: routedMessage, error: routingError } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user?.id, sender_name: 'You', direction: 'outgoing', message: `Appointment request ${data.id}: ${appointmentDraft.department}, preferred ${appointmentDraft.date}${appointmentDraft.time ? ` at ${appointmentDraft.time}` : ''}. Visit: ${appointmentDraft.visitType || 'appointment'}.${appointmentDraft.reason ? ` Reason: ${appointmentDraft.reason}` : ''}` }).select().single();
+                        if (routingError) throw routingError;
+                        if (routedMessage) setPortalMessages((current) => [...current, { id: routedMessage.id, sender: routedMessage.sender_name, direction: routedMessage.direction, text: routedMessage.message, sentAt: routedMessage.sent_at }]);
+                    } catch (routingError) {
+                        console.error('Appointment chat notification failed:', routingError);
+                        setAppointmentMessage('Request sent and visible in the appointment queue. Its chat notification could not be added; HIM can still manage it.');
+                    }
+                } catch (error) {
+                    console.error('Portal appointment request failed:', error);
+                    setAppointmentMessage('Your appointment request could not be sent. Please check the details and try again.');
+                } finally {
+                    setSubmittingAppointment(false);
                 }
-                setAppointmentRequests((current) => [...current, ...normalizeAppointments([data])]);
-                const { data: routedMessage, error: routingError } = await client.from('patient_messages').insert({ patient_id: patient.id, sender_profile_id: user.id, sender_name: 'You', direction: 'outgoing', message: `Appointment request ${data.id}: ${appointmentDraft.department}, preferred ${appointmentDraft.date}${appointmentDraft.time ? ` at ${appointmentDraft.time}` : ''}. Visit: ${appointmentDraft.visitType || 'appointment'}.${appointmentDraft.reason ? ` Reason: ${appointmentDraft.reason}` : ''}` }).select().single();
-                if (routedMessage) setPortalMessages((current) => [...current, { id: routedMessage.id, sender: routedMessage.sender_name, direction: routedMessage.direction, text: routedMessage.message, sentAt: routedMessage.sent_at }]);
-                setAppointmentMessage('Request sent. The Health Information Management (HIM) team will confirm the date and time after checking with the doctor.');
-                if (routingError) setAppointmentMessage('Request sent and visible in the appointment queue. The chat notification could not be added; HIM can still manage the appointment request.');
-                setAppointmentDraft({
-                    department: '',
-                    date: formatFacilityDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
-                    time: '',
-                    reason: '',
-                    visitType: ''
-                });
-                setActiveTab('appointments');
             };
 
             const handleRequestRefill = async () => {
+                if (submittingRefill) return;
                 const medication = refillDraft.medication.trim();
                 const quantity = Number(refillDraft.quantity);
                 if (!medication || !Number.isFinite(quantity) || quantity <= 0) {
@@ -173,7 +238,8 @@
                     setRefillDraft({ medication: '', quantity: '30', notes: '' });
                     setRefillMessage('Refill request sent to your care team.');
                 } catch (error) {
-                    setRefillMessage(error?.message || 'Your refill request could not be sent. Please try again.');
+                    console.error('Portal refill request failed:', error);
+                    setRefillMessage('Your refill request could not be sent. Please try again or contact your care team.');
                 } finally {
                     setSubmittingRefill(false);
                 }
@@ -194,6 +260,7 @@
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                    {portalDataError && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{portalDataError}</p>}
 
                     <div className="mt-6">
                         {activeTab === 'overview' && (
@@ -256,9 +323,16 @@
                                     <div className="mb-3 flex justify-end">
                                         <Button variant="ghost" size="sm" onClick={async () => {
                                             const client = window.OneMedSupabase?.getClient?.();
-                                            if (!client || !patient?.id) return;
-                                            const { data, error } = await client.from('appointments').select('*').eq('patient_id', patient.id).order('appointment_date', { ascending: true });
-                                            if (!error) setAppointmentRequests(normalizeAppointments(data || []));
+                                            if (!client || !patient?.id) { setAppointmentMessage('Appointment status is unavailable. Please try again later.'); return; }
+                                            try {
+                                                const { data, error } = await client.from('appointments').select('*').eq('patient_id', patient.id).order('appointment_date', { ascending: true });
+                                                if (error) throw error;
+                                                setAppointmentRequests(normalizeAppointments(data || []));
+                                                setAppointmentMessage('Appointment status refreshed.');
+                                            } catch (error) {
+                                                console.error('Portal appointment refresh failed:', error);
+                                                setAppointmentMessage('Appointment status could not be refreshed. Please try again later.');
+                                            }
                                         }}>Refresh appointment status</Button>
                                     </div>
                                     <DataTable
@@ -279,9 +353,9 @@
                                         <Input label="Preferred time" type="time" value={appointmentDraft.time} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, time: e.target.value }))} />
                                         <Select label="Visit type" value={appointmentDraft.visitType} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, visitType: e.target.value }))} options={[{ value: '', label: 'Select visit type' }, { value: 'follow_up', label: 'Follow-up' }, { value: 'consultation', label: 'Consultation' }, { value: 'review', label: 'Review' }, { value: 'procedure', label: 'Procedure' }]} />
                                         <Input label="Reason" value={appointmentDraft.reason} onChange={(e) => setAppointmentDraft(prev => ({ ...prev, reason: e.target.value }))} />
-                                        {appointmentMessage && <p className={'text-sm ' + (appointmentMessage.startsWith('Request sent') ? 'text-emerald-700' : 'text-red-600')}>{appointmentMessage}</p>}
+                                        {appointmentMessage && <p className={'text-sm ' + (appointmentMessage.startsWith('Request sent') || appointmentMessage.includes('refreshed') ? 'text-emerald-700' : 'text-red-600')}>{appointmentMessage}</p>}
                                         <p className="text-xs text-slate-500">Your preferred date is a request. The Health Information Management (HIM) team will check the doctor’s availability and confirm the date and time here.</p>
-                                        <Button variant="primary" icon={Icons.Calendar} onClick={handleBookAppointment}>Send appointment request</Button>
+                                        <Button variant="primary" icon={Icons.Calendar} disabled={submittingAppointment} onClick={handleBookAppointment}>{submittingAppointment ? 'Sending…' : 'Send appointment request'}</Button>
                                     </div>
                                 </Card>
                             </div>
@@ -347,7 +421,7 @@
                         {activeTab === 'messages' && (
                             <Card title="Patient chat" subtitle="The portal assistant can guide appointment requests. Messages are routed to the Health Information Management (HIM) team for follow up.">
                                 <div className="space-y-4">
-                                    <div className="flex justify-end"><Button size="sm" variant="ghost" onClick={async () => { const client = window.OneMedSupabase?.getClient?.(); if (!client) return; const { data, error } = await client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at'); if (!error) setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at }))); }}>Refresh messages</Button></div>
+                                    <div className="flex justify-end"><Button size="sm" variant="ghost" onClick={async () => { const client = window.OneMedSupabase?.getClient?.(); if (!client) { setMessageError('The messaging service is unavailable.'); return; } try { const { data, error } = await client.from('patient_messages').select('*').eq('patient_id', patient.id).order('sent_at'); if (error) throw error; setPortalMessages((data || []).map((row) => ({ id: row.id, sender: row.sender_name, direction: row.direction, text: row.message, sentAt: row.sent_at }))); setMessageError(''); } catch (error) { console.error('Portal message refresh failed:', error); setMessageError('Messages could not be refreshed. Please try again later.'); } }}>Refresh messages</Button></div>
                                     <div className="rounded-lg border border-medical-100 bg-medical-50 p-3 text-sm text-medical-900">
                                         <p className="font-medium">OneMed assistant</p>
                                         <p className="mt-1">Hi {patient.firstName}. I can help you request an appointment or send a message to the HIM team. Appointment requests are reviewed by HIM; your appointment is confirmed only after they check with the doctor.</p>
@@ -374,7 +448,7 @@
                                             className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm resize-none"
                                             rows={3}
                                         />
-                                        <Button variant="primary" icon={Icons.Send} className="self-end" onClick={handleSendMessage}>Send</Button>
+                                        <Button variant="primary" icon={Icons.Send} className="self-end" disabled={sendingMessage} onClick={handleSendMessage}>{sendingMessage ? 'Sending…' : 'Send'}</Button>
                                     </div>
                                 </div>
                             </Card>
