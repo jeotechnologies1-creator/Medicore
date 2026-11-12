@@ -157,6 +157,13 @@ drop policy if exists "department finance read insurance claims" on public.insur
 create policy "department finance read insurance claims" on public.insurance_claims as restrictive for select to authenticated using (
   public.can_access_financial_record(facility_id,patient_id,'insurance.submit',true)
 );
+-- The previous blanket restrictive delete policy also denied Super Admin.
+-- Keep deletion restricted to Super Admin while allowing that role through
+-- every restrictive policy applied to insurance claims.
+drop policy if exists "department finance delete insurance claims" on public.insurance_claims;
+create policy "department finance delete insurance claims" on public.insurance_claims as restrictive for delete to authenticated using (
+  public.has_any_role(array['super_admin'])
+);
 drop policy if exists "patient reads own provider transactions" on public.payment_provider_transactions;
 create policy "patient reads own provider transactions" on public.payment_provider_transactions for select to authenticated using (
   public.can_access_financial_record(facility_id,patient_id,'payment.record',true)
