@@ -9,6 +9,14 @@ schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
+[auth]
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = true
+secure_password_change = true
+
 [db]
 port = 55422
 shadow_port = 55420

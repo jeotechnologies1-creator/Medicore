@@ -1,5 +1,9 @@
 # OneMed database activation
 
+## Hosted Auth settings required before launch
+
+Local and staging `config.toml` files disable self-registration, require email confirmation, and require secure password changes. These files do not change an already hosted Supabase project's settings. In each hosted Supabase Dashboard, open **Authentication → Settings** and disable new user signups, enable email confirmations, and enable secure password changes. Apply these settings to every hosted environment before allowing users to sign in. Staff and patient portal accounts must be provisioned through the approved Edge Functions; new Auth identities remain pending with the `unassigned` role until that workflow activates them.
+
 Apply these files in the Supabase SQL Editor, in this exact order, to a new project. Each script is additive/idempotent where practical; always test upgrades against a staging copy first.
 
 1. `schema.sql`

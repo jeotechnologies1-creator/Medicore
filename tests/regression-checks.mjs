@@ -11,6 +11,9 @@ const himMigration = await read('supabase/migrations/20261103000030_him_records.
 const himRollback = await read('supabase/rollback/20261103000030_him_records.sql');
 const stagingGuide = await read('infra/supabase-staging/README.md');
 const stagingConfig = await read('infra/supabase-staging/supabase/config.toml');
+const pendingAuthMigration = await read('supabase/migrations/20261112000033_pending_auth_access_gate.sql');
+const localAuthConfig = await read('supabase/config.toml');
+const pendingAuthTest = await read('supabase/tests/pending_auth_access_gate.test.sql');
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, legacyRoles, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
@@ -136,7 +139,11 @@ assert.match(staffFunction, /requesterProfile\?\.status !== 'active'/, 'Staff cr
 assert.match(staffFunction, /'records_officer'/, 'The staff provisioning endpoint must accept the Records Officer role.');
 assert.match(staffFunction, /status: 'active'/, 'New Records Officer accounts must be activated during provisioning.');
 assert.match(authorization, /role::text in \([^\n]*'records_officer'/, 'The profile role constraint must accept Records Officers.');
-assert.match(legacyRoles, /'accountant','records_officer','patient'/, 'Legacy role enums must be upgraded before Records Officers are created.');
+assert.match(legacyRoles, /'accountant','records_officer','surgeon',[\s\S]*?'patient','unassigned'/, 'Legacy role enums must include supported staff roles and the quarantined unassigned role.');
+assert.match(pendingAuthMigration, /'unassigned','pending'/, 'New Auth identities must be quarantined until trusted provisioning activates them.');
+assert.match(pendingAuthMigration, /as restrictive for all to authenticated/, 'Pending profiles must be denied by restrictive table policies.');
+assert.match(localAuthConfig, /enable_signup = false[\s\S]*?\[auth\.email\][\s\S]*?enable_signup = false[\s\S]*?enable_confirmations = true[\s\S]*?secure_password_change = true/, 'Local Auth must disable signup and require confirmation and secure password changes.');
+assert.match(pendingAuthTest, /cannot read patient rows[\s\S]*?cannot write patient rows[\s\S]*?cannot read storage objects[\s\S]*?cannot use a privileged RPC/, 'Database regression coverage must deny pending users table, storage, and RPC access.');
 assert.match(authorization, /or public\.has_any_role\(array\['records_officer'\]\)/, 'Records Officers must have read-only clinical chart access.');
 assert.match(hospitalWorkflows, /HIM register encounters/, 'HIM staff must be able to open an encounter in its initial state.');
 assert.match(hospitalWorkflows, /drop policy if exists "authorized clinical read encounters" on public\.encounters/, 'Encounter authorization policies must be replaceable when the workflow migration is rerun.');
