@@ -21,10 +21,12 @@
                 const date = toDate(value);
                 return date && !Number.isNaN(date.valueOf()) && date >= threshold;
             };
-            const patientAges = appData.patients.map(patient => calculateAge(patient.dateOfBirth)).filter(age => Number.isFinite(age) && age >= 0);
+            const patientAges = appData.patients.map(patient => calculateAge(patient.dateOfBirth))
+                .filter(Boolean)
+                .map(age => age.years + age.months / 12 + age.days / 365.2425);
             const patientAgeGroups = [
-                { label: '0-18', min: 0, max: 18 }, { label: '19-35', min: 19, max: 35 }, { label: '36-50', min: 36, max: 50 },
-                { label: '51-65', min: 51, max: 65 }, { label: '65+', min: 66, max: Infinity }
+                { label: '0-18', min: 0, max: 19 }, { label: '19-35', min: 19, max: 36 }, { label: '36-50', min: 36, max: 51 },
+                { label: '51-65', min: 51, max: 66 }, { label: '66+', min: 66, max: Infinity }
             ].map(group => ({ ...group, value: patientAges.filter(age => age >= group.min && age <= group.max).length }));
             const totalRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
             const outstandingRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
@@ -71,7 +73,8 @@
                 return { label, admissions, discharges };
             });
             const caseMix = Object.entries(appData.patients.reduce((counts, patient) => {
-                const bucket = calculateAge(patient.dateOfBirth) >= 65 ? 'Older adults' : calculateAge(patient.dateOfBirth) >= 18 ? 'Adults' : 'Children';
+                const age = calculateAge(patient.dateOfBirth);
+                const bucket = age?.years >= 65 ? 'Older adults' : age?.years >= 18 ? 'Adults' : 'Children';
                 counts[bucket] = (counts[bucket] || 0) + 1;
                 return counts;
             }, {})).map(([label, value]) => ({ label, value }));

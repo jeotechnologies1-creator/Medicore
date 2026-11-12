@@ -280,7 +280,15 @@
             weight: row.weight,
             height: row.height,
             bmi: row.bmi,
-            consciousness: row.consciousness || 'Alert'
+            consciousness: row.consciousness || 'A',
+            supplementalOxygen: row.supplemental_oxygen ?? row.supplementalOxygen ?? false,
+            spo2Scale: row.spo2_scale || row.spo2Scale || 'scale_1',
+            ageAtReadingDays: row.age_at_reading_days ?? row.ageAtReadingDays,
+            ageBand: row.age_band || row.ageBand,
+            news2Score: row.news2_score ?? row.news2Score,
+            pewsScore: row.pews_score ?? row.pewsScore,
+            scoreSystem: row.score_system || row.scoreSystem,
+            scoreStatus: row.score_status || row.scoreStatus
         }));
 
         const normalizeMedicationAdministrations = (rows = []) => rows.map((row) => ({
@@ -623,12 +631,43 @@
         };
 
         const calculateAge = (dob) => {
-            const birthDate = new Date(dob);
+            if (!dob) return null;
+            const parts = typeof dob === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
+            const birthDate = parts
+                ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))
+                : new Date(dob);
+            if (Number.isNaN(birthDate.valueOf())) return null;
             const today = new Date();
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const monthDiff = today.getMonth() - birthDate.getMonth();
-            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
-            return age;
+            today.setHours(0, 0, 0, 0);
+            birthDate.setHours(0, 0, 0, 0);
+            if (birthDate > today) return null;
+            const addMonths = (date, count) => {
+                const result = new Date(date.getFullYear(), date.getMonth() + count, 1);
+                const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+                result.setDate(Math.min(date.getDate(), lastDay));
+                return result;
+            };
+            let years = today.getFullYear() - birthDate.getFullYear();
+            if (addMonths(birthDate, years * 12) > today) years--;
+            let months = 0;
+            while (months < 11 && addMonths(birthDate, years * 12 + months + 1) <= today) months++;
+            const monthAnniversary = addMonths(birthDate, years * 12 + months);
+            const days = Math.floor((today - monthAnniversary) / 86400000);
+            return { years, months, days };
+        };
+
+        const formatAge = (age) => {
+            if (!age) return 'Age unavailable';
+            if (age.years === 0 && age.months === 0 && age.days < 28) {
+                if (age.days < 7) return `${age.days} ${age.days === 1 ? 'day' : 'days'}`;
+                const weeks = Math.floor(age.days / 7);
+                return `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
+            }
+            if (age.years < 2) {
+                const months = Math.max(1, age.years * 12 + age.months);
+                return `${months} ${months === 1 ? 'month' : 'months'}`;
+            }
+            return `${age.years} ${age.years === 1 ? 'year' : 'years'}`;
         };
 
         const getStatusColor = (status) => {

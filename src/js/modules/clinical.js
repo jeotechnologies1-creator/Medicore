@@ -113,7 +113,7 @@
         const VitalsModule = () => {
             const { user } = useAuth();
             const [vitals, setVitals] = useState(getLiveStore().vitals || []);
-            const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0' });
+            const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0', consciousness: 'A', supplementalOxygen: false, spo2Scale: 'scale_1' });
             const [vitalsMessage, setVitalsMessage] = useState('');
 
             const handleSaveVitals = async () => {
@@ -131,14 +131,18 @@
                     oxygen_saturation: numericOrNull(form.oxygenSaturation), respiratory_rate: numericOrNull(form.respiratoryRate),
                     weight: numericOrNull(form.weight), height: numericOrNull(form.height),
                     bmi: Number(form.weight) > 0 && Number(form.height) > 0 ? Number((Number(form.weight) / ((Number(form.height) / 100) ** 2)).toFixed(1)) : null,
-                    pain_score: numericOrNull(form.painScore), consciousness: 'Alert'
+                    pain_score: numericOrNull(form.painScore), consciousness: form.consciousness, supplemental_oxygen: form.supplementalOxygen, spo2_scale: form.spo2Scale
                 }).select();
                 if (error || !data?.[0]) return setVitalsMessage(error?.message || 'Observations were not saved.');
                 const next = [normalizeVitals(data)[0], ...vitals];
                 appData.vitals = next;
                 setVitals(next);
-                setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0' });
-                setVitalsMessage('Observations saved. Corrections should be entered as a new audited observation.');
+                setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0', consciousness: 'A', supplementalOxygen: false, spo2Scale: 'scale_1' });
+                const savedVital = data[0];
+                const scoreName = savedVital.score_system === 'news2' ? 'NEWS2' : savedVital.score_system === 'pews' ? 'PEWS' : null;
+                const scoreValue = savedVital.news2_score ?? savedVital.pews_score;
+                const scoreSummary = scoreName ? `${scoreName}: ${savedVital.score_status === 'pending_clinical_approval' && scoreValue == null ? 'pending clinical approval' : scoreValue ?? 'incomplete'}${scoreValue != null && savedVital.score_status === 'pending_clinical_approval' ? ' (pending clinical approval)' : ''}.` : 'Age unavailable; early warning score not calculated.';
+                setVitalsMessage(`Observations saved. ${scoreSummary} Corrections should be entered as a new audited observation.`);
             };
 
             return (
@@ -161,6 +165,9 @@
                                     <Input label="BP Diastolic" value={form.bloodPressureDiastolic} onChange={(e) => setForm(prev => ({ ...prev, bloodPressureDiastolic: e.target.value }))} />
                                     <Input label="SpO2 (%)" value={form.oxygenSaturation} onChange={(e) => setForm(prev => ({ ...prev, oxygenSaturation: e.target.value }))} />
                                     <Input label="Resp Rate" value={form.respiratoryRate} onChange={(e) => setForm(prev => ({ ...prev, respiratoryRate: e.target.value }))} />
+                                    <Select label="Consciousness (AVPU/ACVPU)" value={form.consciousness} onChange={(e) => setForm(prev => ({ ...prev, consciousness: e.target.value }))} options={[{value:'A',label:'A — Alert'},{value:'C',label:'C — New confusion'},{value:'V',label:'V — Responds to voice'},{value:'P',label:'P — Responds to pain'},{value:'U',label:'U — Unresponsive'}]} />
+                                    <Select label="Supplemental oxygen" value={form.supplementalOxygen ? 'yes' : 'no'} onChange={(e) => setForm(prev => ({ ...prev, supplementalOxygen: e.target.value === 'yes' }))} options={[{value:'no',label:'No'},{value:'yes',label:'Yes'}]} />
+                                    <Select label="NEWS2 SpO₂ scale (scale 2 only when prescribed)" value={form.spo2Scale} onChange={(e) => setForm(prev => ({ ...prev, spo2Scale: e.target.value }))} options={[{value:'scale_1',label:'Scale 1 — standard'},{value:'scale_2',label:'Scale 2 — prescribed target 88–92%'}]} />
                                     <Input label="Weight (kg)" type="number" min="0" step="0.1" value={form.weight} onChange={(e) => setForm(prev => ({ ...prev, weight: e.target.value }))} />
                                     <Input label="Height (cm)" type="number" min="0" step="0.1" value={form.height} onChange={(e) => setForm(prev => ({ ...prev, height: e.target.value }))} />
                                 </div>

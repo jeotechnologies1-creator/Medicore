@@ -738,7 +738,7 @@
                                     <div className="flex items-center gap-3 mt-1">
                                         <span className="text-sm text-slate-500">{patient.patientNumber}</span>
                                         <Badge variant={patient.status === 'active' ? 'success' : 'default'}>{patient.status}</Badge>
-                            {!isReceptionist && <span className="text-sm text-slate-500">{calculateAge(patient.dateOfBirth)} years - {patient.gender}</span>}
+                            {!isReceptionist && <span className="text-sm text-slate-500">{formatAge(calculateAge(patient.dateOfBirth))} - {patient.gender}</span>}
                                     </div>
                                 </div>
                             </div>
@@ -1398,7 +1398,7 @@
                                                 <Avatar name={row.firstName + ' ' + row.lastName} size="sm" />
                                                 <div>
                                                     <p className="font-medium text-slate-900">{row.firstName} {row.lastName}</p>
-                                                    <p className="text-xs text-slate-500">{row.gender} - {calculateAge(row.dateOfBirth)}y</p>
+                                                    <p className="text-xs text-slate-500">{row.gender} - {formatAge(calculateAge(row.dateOfBirth))}</p>
                                                 </div>
                                             </div>
                                         )},
