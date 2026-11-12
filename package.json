@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/regression-checks.mjs",
+    "test": "node tests/static-checks.mjs",
     "test:edge": "deno test supabase/functions/tests",
     "test:db": "supabase test db",
     "check:migrations": "node scripts/check-migrations.mjs"

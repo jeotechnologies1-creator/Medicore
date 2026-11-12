@@ -2,7 +2,9 @@
 
 ## Current automated coverage
 
-`npm test` runs `tests/regression-checks.mjs`. It is a repository-level static assertion suite covering selected security policies, migrations, route/module wiring, workflow guards, and UI contracts. In the current audit run it **passed**. `git diff --check` **passed**.
+`npm test` runs `tests/static-checks.mjs`. It is a repository-level static assertion suite covering source contracts that do not have a practical database-level equivalent. It is not behavioral coverage.
+
+`npm run test:db` runs the pgTAP suite against the local Supabase database. The suite includes role and facility behavior, MFA enforcement, Edge hardening RPCs, portal payment account access, and pending-user access gates. Run it after applying the migrations to a disposable local database. Static checks supplement these database tests and must not be reported as behavioral coverage.
 
 `package.json` has no build, lint, typecheck, browser, SQL, or integration-test scripts. No database URL/credentials or running local Supabase database were available, so no SQL migration execution, RLS session test, or end-to-end browser test was run. The Supabase CLI schema-lint help invocation was blocked when the CLI attempted to write telemetry outside the workspace.
 
