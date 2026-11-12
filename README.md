@@ -46,10 +46,13 @@ Run the SQL files in this order in the Supabase SQL editor:
 28. `supabase/migrations/20261103000027_payment_dispute_workflow.sql`
 29. `supabase/appointment_slot_integrity.sql`
 30. `supabase/patient_facility_scope.sql`
+31. `supabase/migrations/20261111000031_lab_result_patient_visibility.sql`
 
 For the isolated local migration stage and the pre-migration rollback plan, see [`infra/supabase-staging/README.md`](infra/supabase-staging/README.md) and [`docs/deployment/rollback-clinical-record-retention.md`](docs/deployment/rollback-clinical-record-retention.md).
 
 Before applying migration `20261103000029`, inventory existing patients with a null `home_facility_id` and assign each to its verified facility. Unassigned records remain visible only to the linked patient and Super Admin; staff cannot access them until mapped. The migration never guesses a facility. Apply its rollback only using the staging-first procedure in `supabase/rollback/20261103000029_patient_facility_scope.sql`.
+
+Apply migration `20261111000031` after HIM migration `20261103000030`. It limits patient Data API reads of laboratory orders to results with `result_status` `final` or `corrected`; verify patient, clinician, and laboratory access in staging before promotion. Its rollback drops only the additional restrictive policy.
 
 Do not load synthetic patient or staff records into a live project. Use the real registration, staff provisioning, and clinical workflows instead.
 
@@ -67,7 +70,7 @@ OneMed has no seed script and never persists clinical records in browser storage
 
 `document_storage_scope.sql` restricts private patient document objects to the patient's authorized facility/department scope and configures the bucket to accept PDF/JPEG/PNG files up to 10 MiB.
 
-For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
+For a disposable local Supabase environment, run `supabase start`, `supabase db reset`, then `npm run test:db`. The `supabase/migrations/` entries point to the ordered SQL files above through migration 31, and database tests use synthetic fixtures that roll back. Do not run `supabase db reset` against a linked/hosted project.
 
 ## Required production setup
 

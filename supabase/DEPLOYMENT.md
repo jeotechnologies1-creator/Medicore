@@ -32,6 +32,7 @@ Apply these files in the Supabase SQL Editor, in this exact order, to a new proj
 28. `appointment_slot_integrity.sql` (or `migrations/20261103000028_appointment_slot_integrity.sql`)
 29. `patient_facility_scope.sql` (or `migrations/20261103000029_patient_facility_scope.sql`)
 30. `him_records.sql` (or `migrations/20261103000030_him_records.sql`)
+31. `migrations/20261111000031_lab_result_patient_visibility.sql`
 
 The front-end calls the following database contracts:
 
@@ -60,11 +61,12 @@ The front-end calls the following database contracts:
 | Payment disputes and chargeback alerting | `migrations/20261103000027_payment_dispute_workflow.sql` adds provider dispute intake, an auditable response queue, and configurable provider-specific count/rate alerts |
 | Patient registry privacy and scheduling | `patient_facility_scope.sql` scopes patient-linked reads and writes, prevents authenticated hard deletes of retained patient/clinical rows, and validates appointment RPC writes and provider facility membership; `appointment_slot_integrity.sql` prevents same-time patient/doctor double bookings |
 | HIM physical file circulation | `him_records.sql` adds facility-bound file indexing, request/release/return/missing/investigation transitions, append-only movement events, and `records.file.read/manage` permissions. Apply after #29 and test with active HIM facility membership in staging first. |
+| Patient laboratory-result visibility | `migrations/20261111000031_lab_result_patient_visibility.sql` limits patient reads to finalized or corrected results while retaining staff visibility under existing RLS. Apply after #30 and verify patient, clinician, and laboratory roles in staging. |
 | HIM access administration | Organization Structure → “Health Information Management (HIM) access” edits facility scoped `records_officer` grants; staff also need an active facility membership. Patient checkout still requires an active payment gateway connection and uses the existing provider webhook and Accounts review path. |
 
 Before applying migration 29, run `select count(*) from public.patients where home_facility_id is null;` in staging and reconcile every result against the verified source facility. The migration does not guess or bulk-assign facilities: unassigned patients remain available to their linked patient and Super Admin, but hidden from facility/department staff until explicitly mapped. Super Admin can assign `home_facility_id` after verifying the patient's actual facility. Validate existing staff facility/department memberships and the active registration roles in staging as part of promotion.
 
-Rollbacks are prepared at `supabase/rollback/20261103000027_payment_dispute_workflow.sql`, `supabase/rollback/20261103000028_appointment_slot_integrity.sql`, `supabase/rollback/20261103000029_patient_facility_scope.sql`, and `supabase/rollback/20261103000030_him_records.sql`. For migration 29, stop writes during rollback and use its staging-first instructions; it removes the scope policies and restores the prior broader role policies. Migration 30 rollback requires pausing file movements and exporting all three HIM tables before removing them. The published operational refund notice is available at `/refund-policy.html`; it does not invent refund timing or eligibility terms absent from facility configuration.
+Rollbacks are prepared at `supabase/rollback/20261103000027_payment_dispute_workflow.sql`, `supabase/rollback/20261103000028_appointment_slot_integrity.sql`, `supabase/rollback/20261103000029_patient_facility_scope.sql`, `supabase/rollback/20261103000030_him_records.sql`, and `supabase/rollback/20261111000031_lab_result_patient_visibility.sql`. For migration 29, stop writes during rollback and use its staging-first instructions; it removes the scope policies and restores the prior broader role policies. Migration 30 rollback requires pausing file movements and exporting all three HIM tables before removing them. Migration 31 rollback removes only the additional restrictive read policy; the older role authorization also applies the same patient result-status condition. The published operational refund notice is available at `/refund-policy.html`; it does not invent refund timing or eligibility terms absent from facility configuration.
 
 ## Required non-SQL deployment
 

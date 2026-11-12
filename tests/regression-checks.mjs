@@ -241,4 +241,15 @@ assert.match(documentStorageScope, /has_clinical_department_permission\(patient\
 assert.match(documentStorageScope, /has_clinical_department_permission\(patient\.id, null, 'document\.manage', false\)/, 'Storage writes must require scoped document permissions.');
 assert.match(documentStorageScope, /file_size_limit, allowed_mime_types/, 'Patient documents must enforce bucket-level MIME and size limits.');
 
+const labVisibility = await read('supabase/lab_result_patient_visibility.sql');
+const labVisibilityMigration = await read('supabase/migrations/20261111000031_lab_result_patient_visibility.sql');
+const labVisibilityRollback = await read('supabase/rollback/20261111000031_lab_result_patient_visibility.sql');
+assert.equal(labVisibilityMigration, labVisibility, 'The ordered lab visibility migration must stay synchronized with its source SQL.');
+assert.match(labVisibilityMigration, /as restrictive for select to authenticated using[\s\S]*?result_status in \('final', 'corrected'\)/, 'Patients must not read unfinalized laboratory results through the Data API.');
+assert.match(labVisibilityRollback, /drop policy if exists "patients read finalized lab results"/, 'The lab visibility migration must have a matching rollback.');
+assert.doesNotMatch(labVisibilityRollback, /delete from|truncate|drop table/i, 'Lab visibility rollback must preserve clinical result data.');
+assert.match(stagingGuide, /through `20261111000031_lab_result_patient_visibility\.sql`/, 'Staging instructions must include the latest lab visibility migration.');
+assert.match(deploymentDocs, /31\. `migrations\/20261111000031_lab_result_patient_visibility\.sql`/, 'Deployment order must include the latest lab visibility migration.');
+assert.match(deploymentDocs, /20261111000031_lab_result_patient_visibility\.sql`\./, 'Deployment instructions must document lab visibility rollout.');
+
 console.log('Regression checks passed.');

@@ -1,5 +1,6 @@
--- Patients may read their own finalized lab results, but must not see
--- preliminary, pending, or cancelled results through the Data API.
+-- Apply after 20261103000030_him_records.sql.
+-- Rollback before migration: the matching rollback drops only this restrictive
+-- read policy. It does not modify lab orders or result data.
 begin;
 set local lock_timeout = '2s';
 set local statement_timeout = '30s';
