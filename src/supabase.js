@@ -289,6 +289,8 @@
     const createDocumentUrl = async (objectPath) => {
         const client = getClient();
         if (!client || !objectPath) return { data: null, error: new Error('Document is unavailable.') };
+        const { error: authorizationError } = await client.rpc('authorize_patient_document_read', { p_object_path: objectPath });
+        if (authorizationError) return { data: null, error: authorizationError };
         return client.storage.from('patient-documents').createSignedUrl(objectPath, 60);
     };
 

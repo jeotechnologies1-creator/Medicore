@@ -50,14 +50,9 @@ const RecordsModule = () => {
             setPatientDirectoryError('');
             try {
                 const rows = [];
-                const pageSize = 1000;
+                const pageSize = 250;
                 for (let offset = 0; ; offset += pageSize) {
-                    const { data, error } = await client.from('patients')
-                        .select('id,patient_number,medical_record_number,first_name,last_name,date_of_birth,gender,phone,email,address,status,registration_date,home_facility_id')
-                        .order('last_name', { ascending: true })
-                        .order('first_name', { ascending: true })
-                        .order('id', { ascending: true })
-                        .range(offset, offset + pageSize - 1);
+                    const { data, error } = await client.rpc('search_patient_directory', { p_query: '', p_offset: offset, p_limit: pageSize });
                     if (error) throw error;
                     const page = data || [];
                     rows.push(...page);
@@ -201,23 +196,14 @@ const RecordsModule = () => {
             return;
         }
         try {
-            const { error } = await client.schema('public').from('patient_access_logs').insert({
-                patient_id: patient.id,
-                purpose: 'records_module'
-            });
+            const { data, error } = await client.rpc('read_patient_chart', { p_patient_id: patient.id, p_purpose: 'records_module' });
             if (error) throw error;
+            setPatientJourney(data?.encounter_workflow_events || []);
         } catch (error) {
             const diagnostic = [error?.code, error?.message].filter(Boolean).join(' — ');
-            if (['PGRST202', 'PGRST205'].includes(error?.code)) {
-                setAccessMessage(`The chart was opened, but this access was not logged (${error.code}).`);
-            } else {
-                setAccessError(`The chart was not opened because access could not be logged. ${diagnostic}`.trim());
-                return;
-            }
+            setAccessError(`The chart was not opened because the server could not authorize and log the read. ${diagnostic}`.trim());
+            return;
         }
-        const { data: journey, error: journeyError } = await client.from('encounter_workflow_events').select('id,encounter_id,event_type,from_status,to_status,department,notes,created_at').eq('patient_id', patient.id).order('created_at', { ascending: false }).limit(200);
-        setPatientJourney(journey || []);
-        if (journeyError) setAccessMessage('The patient chart opened, but the encounter journey could not be loaded.');
         setSelectedPatient(patient);
     };
 
@@ -340,20 +326,6 @@ const RecordsModule = () => {
         if (!client) {
             setAccessError('The document link could not be created because the database is unavailable.');
             return;
-        }
-        try {
-            const { error } = await client.schema('public').from('patient_access_logs').insert({
-                patient_id: document.patientId,
-                purpose: 'records_document'
-            });
-            if (error) throw error;
-        } catch (error) {
-            if (['PGRST202', 'PGRST205'].includes(error?.code)) {
-                setAccessMessage(`The document link may open, but this access was not logged (${error.code}).`);
-            } else {
-                setAccessError(`The document link was not created because access could not be logged. ${error?.message || ''}`.trim());
-                return;
-            }
         }
         try {
             const { data, error } = await window.OneMedSupabase.createDocumentUrl(document.fileUrl);

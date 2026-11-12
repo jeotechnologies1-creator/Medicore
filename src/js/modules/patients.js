@@ -8,6 +8,7 @@
             const isAdministrativeViewer = isReceptionist || isRecordsOfficer;
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
+            const [patientChart, setPatientChart] = useState(null);
             const [showRegistration, setShowRegistration] = useState(false);
             const [editingPatient, setEditingPatient] = useState(null);
             const [activeTab, setActiveTab] = useState('overview');
@@ -245,19 +246,13 @@
                         return;
                     }
                     try {
-                        const { error } = await client.schema('public').from('patient_access_logs').insert({
-                            patient_id: patient.id,
-                            purpose: 'patient_chart'
-                        });
+                        const { data, error } = await client.rpc('read_patient_chart', { p_patient_id: patient.id, p_purpose: 'patient_chart' });
                         if (error) throw error;
+                        setPatientChart({ patientId: patient.id, data });
                     } catch (error) {
                         const diagnostic = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(' — ');
-                        if (['PGRST202', 'PGRST205'].includes(error?.code)) {
-                            setPatientAccessWarning(`Chart opened under the existing Supabase row-level permissions, but the read was not logged because the access-log endpoint is unavailable (${error.code}). Apply the updated safe_core_multibranch.sql and refresh the PostgREST schema cache.`);
-                        } else {
-                            setPatientAccessError(`Patient chart access was not opened because the access event could not be recorded. ${diagnostic}`.trim());
-                            return;
-                        }
+                        setPatientAccessError(`Patient chart access was denied because the server could not authorize and log the read. ${diagnostic}`.trim());
+                        return;
                     }
                     setSelectedPatient(patient);
                     setActiveTab('overview');
@@ -266,17 +261,18 @@
             };
 
             const PatientDetailView = ({ patient }) => {
-                const patientAppointments = appData.appointments.filter(a => a.patientId === patient.id);
-                const patientLabs = appData.labOrders.filter(l => l.patientId === patient.id);
-                const patientPrescriptions = appData.prescriptions.filter(p => p.patientId === patient.id);
-                const patientVitals = appData.vitals.filter(v => v.patientId === patient.id).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                const patientBilling = appData.billing.filter(b => b.patientId === patient.id);
-                const patientAdmissions = appData.admissions.filter(a => a.patientId === patient.id);
-                const patientAllergies = (appData.allergies || []).filter(a => a.patientId === patient.id);
-                const patientConditions = (appData.conditions || []).filter(c => c.patientId === patient.id);
-                const patientMedicationOrders = (appData.medicationOrders || []).filter(m => m.patientId === patient.id);
-                const patientCarePlans = (appData.carePlans || []).filter(c => c.patientId === patient.id);
-                const encounterNotes = (appData.consultations || []).filter(c => c.patientId === patient.id);
+                const chart = patientChart?.patientId === patient.id ? patientChart.data : null;
+                const patientAppointments = chart ? normalizeAppointments(chart.appointments || []) : appData.appointments.filter(a => a.patientId === patient.id);
+                const patientLabs = chart ? normalizeLabOrders(chart.lab_orders || []) : appData.labOrders.filter(l => l.patientId === patient.id);
+                const patientPrescriptions = chart ? normalizePrescriptions(chart.prescriptions || []) : appData.prescriptions.filter(p => p.patientId === patient.id);
+                const patientVitals = (chart ? normalizeVitals(chart.vital_signs || []) : appData.vitals.filter(v => v.patientId === patient.id)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                const patientBilling = chart ? normalizeBilling(chart.billing || []) : appData.billing.filter(b => b.patientId === patient.id);
+                const patientAdmissions = chart ? normalizeAdmissions(chart.admissions || []) : appData.admissions.filter(a => a.patientId === patient.id);
+                const patientAllergies = chart ? normalizeAllergies(chart.patient_allergies || []) : (appData.allergies || []).filter(a => a.patientId === patient.id);
+                const patientConditions = chart ? normalizeConditions(chart.patient_conditions || []) : (appData.conditions || []).filter(c => c.patientId === patient.id);
+                const patientMedicationOrders = chart ? normalizeMedicationOrders(chart.medication_orders || []) : (appData.medicationOrders || []).filter(m => m.patientId === patient.id);
+                const patientCarePlans = chart ? normalizeCarePlans(chart.care_plans || []) : (appData.carePlans || []).filter(c => c.patientId === patient.id);
+                const encounterNotes = chart ? normalizeConsultations(chart.consultations || []) : (appData.consultations || []).filter(c => c.patientId === patient.id);
                 const [selectedLabResult, setSelectedLabResult] = useState(null);
                 const [medicationSafetyFindings, setMedicationSafetyFindings] = useState([]);
                 const [medicationSafetyMessage, setMedicationSafetyMessage] = useState('');
@@ -382,7 +378,7 @@
                 const [documentBusy, setDocumentBusy] = useState(false);
                 const [documentMessage, setDocumentMessage] = useState('');
                 const [documentLink, setDocumentLink] = useState(null);
-                const patientDocuments = (appData.documents || []).filter((document) => document.patientId === patient.id);
+                const patientDocuments = chart ? normalizeDocuments(chart.patient_documents || []) : (appData.documents || []).filter((document) => document.patientId === patient.id);
                 const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse'].includes(user?.role);
 
                 const uploadDocument = async () => {
