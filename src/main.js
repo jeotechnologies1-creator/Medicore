@@ -24,28 +24,32 @@ for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
     };
 }
 
+const legacyModules = import.meta.glob('./js/**/*.{js,jsx}');
+
 const loadLegacyModule = async (path) => {
-  const module = await import(path);
+  const loadModule = legacyModules[path];
+  if (!loadModule) throw new Error(`Application module was not included in the build: ${path}`);
+  const module = await loadModule();
   Object.assign(globalThis, module);
 };
 
 const { OneMedSupabase } = await import('./supabase.js');
 globalThis.OneMedSupabase = OneMedSupabase;
 await loadLegacyModule('./js/core.js');
-await loadLegacyModule('./js/icons.js');
-await loadLegacyModule('./js/ui.js');
+await loadLegacyModule('./js/icons.jsx');
+await loadLegacyModule('./js/ui.jsx');
 await loadLegacyModule('./js/monitoring.js');
-await loadLegacyModule('./js/print-documents.js');
-await loadLegacyModule('./js/auth.js');
-await loadLegacyModule('./js/layout.js');
-await loadLegacyModule('./js/modules/dashboard.js');
-await loadLegacyModule('./js/modules/patients.js');
-await loadLegacyModule('./js/modules/records.js');
-await loadLegacyModule('./js/modules/diagnostics.js');
-await loadLegacyModule('./js/modules/operations.js');
-await loadLegacyModule('./js/modules/admin.js');
-await loadLegacyModule('./js/modules/system.js');
-await loadLegacyModule('./js/modules/portal.js');
-await loadLegacyModule('./js/modules/people.js');
-await loadLegacyModule('./js/modules/clinical.js');
+await loadLegacyModule('./js/print-documents.jsx');
+await loadLegacyModule('./js/auth.jsx');
+await loadLegacyModule('./js/layout.jsx');
+await loadLegacyModule('./js/modules/dashboard.jsx');
+await loadLegacyModule('./js/modules/patients.jsx');
+await loadLegacyModule('./js/modules/records.jsx');
+await loadLegacyModule('./js/modules/diagnostics.jsx');
+await loadLegacyModule('./js/modules/operations.jsx');
+await loadLegacyModule('./js/modules/admin.jsx');
+await loadLegacyModule('./js/modules/system.jsx');
+await loadLegacyModule('./js/modules/portal.jsx');
+await loadLegacyModule('./js/modules/people.jsx');
+await loadLegacyModule('./js/modules/clinical.jsx');
 await loadLegacyModule('./app.js');

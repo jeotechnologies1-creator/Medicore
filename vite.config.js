@@ -11,7 +11,7 @@ const securityHeaders = {
 
 export default defineConfig({
   plugins: [react({ include: /\.[jt]sx?$/ })],
-  esbuild: { loader: 'jsx', include: /src\/.*\.js$/ },
+  esbuild: { loader: 'jsx', include: /src\/.*\.(js|jsx)$/, exclude: [] },
   optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
   server: { headers: securityHeaders },
   preview: { headers: securityHeaders },
