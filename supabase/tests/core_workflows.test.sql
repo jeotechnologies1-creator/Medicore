@@ -1,5 +1,5 @@
 begin;
-select plan(46);
+select plan(54);
 
 select has_table('public','organization_units','organization hierarchy table exists');
 select has_table('public','job_positions','reporting position table exists');
@@ -152,6 +152,29 @@ select is((select balance from public.billing where id='30000000-0000-4000-8000-
 set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000001',true);
 select throws_ok($$select public.request_billing_refund((select id from public.payment_postings where payment_submission_id=current_setting('test.payment_id')::uuid),7,'Exceeds remaining amount')$$,'P0001','Refund request exceeds the remaining posted payment.','refund request cannot exceed remaining payment value');
 reset role;
+
+insert into auth.users(id,aud,role,email,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+values ('10000000-0000-4000-8000-000000000005','authenticated','authenticated','rls-admin@example.test',now(),'{"provider":"email","providers":["email"]}','{}',now(),now());
+update public.profiles set role='super_admin',facility_id=(select id from public.facilities where code='TEST-A') where email='rls-admin@example.test';
+insert into public.lab_orders(id,patient_id,doctor_id,responsible_clinician_id,test_type,status,result_status,results)
+values ('80000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001',
+  (select id from public.profiles where email='rls-doctor@example.test'),
+  (select id from public.profiles where email='rls-doctor@example.test'),
+  'Synthetic critical test','critical','final','{"values":[{"parameter":"potassium","value":"6.8","flag":"critical"}]}'::jsonb);
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),1,'finalized critical result sends one in-app alert to its responsible clinician');
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-admin@example.test') and type='critical_lab_result'),0,'assigned critical result does not alert unrelated Super Admins');
+select is((select status from public.result_acknowledgements where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001'),'unacknowledged','finalized critical result opens a clinician acknowledgement task');
+update public.result_acknowledgements set status='acknowledged',acknowledged_at=now(),acknowledged_by=(select id from public.profiles where email='rls-doctor@example.test') where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001';
+update public.lab_orders set result_status='corrected',results='{"values":[{"parameter":"potassium","value":"6.5","flag":"critical"}]}'::jsonb where id='80000000-0000-4000-8000-000000000001';
+select is((select status from public.result_acknowledgements where result_type='laboratory' and result_id='80000000-0000-4000-8000-000000000001'),'unacknowledged','correcting a finalized result reopens its acknowledgement task');
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'corrected critical result sends a renewed in-app alert');
+update public.lab_orders set category='Hematology follow-up' where id='80000000-0000-4000-8000-000000000001';
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'unrelated order edits do not resend critical alerts');
+insert into public.lab_orders(id,patient_id,test_type,status,result_status,results)
+values ('80000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001',
+  'Unassigned critical test','critical','final','{"values":[{"parameter":"sodium","value":"118","flag":"critical"}]}'::jsonb);
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-admin@example.test') and type='critical_lab_result'),1,'unassigned legacy critical result alerts active Super Admin for assignment');
+select is((select count(*)::integer from public.notifications where user_id=(select id from public.profiles where email='rls-doctor@example.test') and type='critical_lab_result'),2,'unassigned result is not misrouted to an unrelated clinician');
 
 select * from finish();
 rollback;

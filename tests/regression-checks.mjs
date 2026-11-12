@@ -105,6 +105,10 @@ assert.match(criticalLabMigration, /new\.result_status not in \('final', 'correc
 assert.match(criticalLabMigration, /status = 'unacknowledged', due_at = excluded\.due_at/, 'Corrected results must reopen acknowledgement tracking.');
 assert.match(criticalLabMigration, /p\.role::text = 'super_admin' and p\.status::text = 'active'/, 'Unassigned legacy critical results must alert active Super Admins for assignment.');
 assert.match(criticalLabMigration, /after insert or update on public\.lab_orders/, 'Result changes must trigger alerts and acknowledgement updates.');
+assert.match(criticalLabMigration, /meaningful_change := new\.status is distinct from old\.status[\s\S]*?new\.results is distinct from old\.results/, 'The acknowledgement queue must reopen only when clinically relevant result fields change.');
+assert.match(organizationTest, /select plan\(54\)/, 'The database suite must include the critical-result assertions in its expected plan.');
+assert.match(organizationTest, /correcting a finalized result reopens its acknowledgement task/, 'The database suite must cover acknowledgement reset on result correction.');
+assert.match(organizationTest, /unassigned legacy critical result alerts active Super Admin/, 'The database suite must cover the unassigned critical-result fallback.');
 assert.match(system, /resourceType: 'Bundle', type: 'collection'/, 'Patient export must use a FHIR collection bundle.');
 assert.match(system, /fhir_version: '4\.0\.1'/, 'FHIR exports must record the FHIR R4 version.');
 assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match the database export-audit authorization.');
