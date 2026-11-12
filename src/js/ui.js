@@ -92,6 +92,108 @@
             );
         };
 
+        const CodedConceptInput = ({ label, value = '', codeSystem = null, code = null, display = null, onChange, className = '', required = false }) => {
+            const [query, setQuery] = React.useState(value || '');
+            const [matches, setMatches] = React.useState([]);
+            const [open, setOpen] = React.useState(false);
+            const [lookupError, setLookupError] = React.useState('');
+            const generatedId = React.useId();
+            const inputId = `concept-${generatedId.replaceAll(':', '')}`;
+
+            React.useEffect(() => { setQuery(value || ''); }, [value]);
+            React.useEffect(() => {
+                const needle = query.trim();
+                const client = window.OneMedSupabase?.getClient?.();
+                if (needle.length < 2 || !client) { setMatches([]); setLookupError(''); return undefined; }
+                let current = true;
+                const timer = setTimeout(async () => {
+                    const [byDisplay, byCode] = await Promise.all([
+                        client.from('concepts').select('system,code,display').eq('active', true).textSearch('display', needle, { type: 'websearch', config: 'simple' }).limit(12),
+                        client.from('concepts').select('system,code,display').eq('active', true).ilike('code', `${needle}%`).limit(12)
+                    ]);
+                    if (!current) return;
+                    const error = byDisplay.error || byCode.error;
+                    setLookupError(error ? 'Terminology lookup is unavailable. You can still enter uncoded free text.' : '');
+                    const unique = new Map();
+                    for (const concept of [...(byDisplay.data || []), ...(byCode.data || [])]) unique.set(`${concept.system}\u0000${concept.code}`, concept);
+                    setMatches([...unique.values()].slice(0, 16));
+                }, 250);
+                return () => { current = false; clearTimeout(timer); };
+            }, [query]);
+
+            const choose = (concept) => {
+                setQuery(concept.display);
+                setMatches([]);
+                setOpen(false);
+                onChange({ value: concept.display, codeSystem: concept.system, code: concept.code, display: concept.display });
+            };
+            return <div className={className}>
+                <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>
+                <div className="relative">
+                    <input id={inputId} value={query} required={required} autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded={open && matches.length > 0}
+                        aria-controls={`${inputId}-options`} onFocus={() => setOpen(true)}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            setQuery(next); setOpen(true);
+                            onChange({ value: next, codeSystem: null, code: null, display: null });
+                        }}
+                        placeholder="Search coded concepts or enter free text"
+                        className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 outline-none" />
+                    {open && matches.length > 0 && <ul id={`${inputId}-options`} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {matches.map((concept) => <li key={`${concept.system}:${concept.code}`} role="option" aria-selected="false">
+                            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(concept)} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
+                                <span className="block text-sm font-medium text-slate-900">{concept.display}</span>
+                                <span className="block text-xs text-slate-500">{concept.system} · {concept.code}</span>
+                            </button>
+                        </li>)}
+                    </ul>}
+                </div>
+                {codeSystem && code ? <p className="mt-1 text-xs text-emerald-700">Coded: {display || value} · {codeSystem} {code}</p>
+                    : value ? <p className="mt-1 text-xs text-amber-700">Uncoded free text</p>
+                        : <p className="mt-1 text-xs text-slate-500">Select a search result to attach a code; typed text remains uncoded.</p>}
+                {lookupError && <p role="status" className="mt-1 text-xs text-amber-700">{lookupError}</p>}
+            </div>;
+        };
+
+        const UncodedTerminologyReport = () => {
+            const [entries, setEntries] = React.useState([]);
+            const [total, setTotal] = React.useState(0);
+            const [error, setError] = React.useState('');
+            const [loading, setLoading] = React.useState(true);
+            const [loadingMore, setLoadingMore] = React.useState(false);
+            React.useEffect(() => {
+                let current = true;
+                const load = async () => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) { if (current) { setError('Database connection is unavailable.'); setLoading(false); } return; }
+                    const { data, count, error: queryError } = await client.from('uncoded_terminology_entries').select('source_table,source_id,patient_id,field_name,free_text,created_at', { count: 'exact' }).order('created_at', { ascending: false }).order('source_table').order('source_id').limit(250);
+                    if (!current) return;
+                    if (queryError) setError('Uncoded entry report could not be loaded.');
+                    else { setEntries(data || []); setTotal(count || 0); }
+                    setLoading(false);
+                };
+                load();
+                return () => { current = false; };
+            }, []);
+            const loadMore = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || loadingMore) return;
+                setLoadingMore(true);
+                const { data, error: queryError } = await client.from('uncoded_terminology_entries').select('source_table,source_id,patient_id,field_name,free_text,created_at').order('created_at', { ascending: false }).order('source_table').order('source_id').range(entries.length, entries.length + 249);
+                if (queryError) setError('More uncoded entries could not be loaded.');
+                else setEntries((current) => [...current, ...(data || [])]);
+                setLoadingMore(false);
+            };
+            return <Card title="Uncoded clinical entries" subtitle="Free-text diagnoses and clinical terms without a selected terminology concept." className="mt-6">
+                {loading ? <p className="text-sm text-slate-500">Loading uncoded entries…</p>
+                    : error ? <p role="alert" className="text-sm text-red-700">{error}</p>
+                        : entries.length ? <><p className="mb-3 text-xs text-slate-500">Showing {entries.length} of {total} accessible uncoded entries.</p><DataTable columns={[
+                            { key: 'field_name', title: 'Field' }, { key: 'free_text', title: 'Entry' },
+                            { key: 'source_table', title: 'Record type' }, { key: 'created_at', title: 'Recorded', render: (row) => row.created_at ? new Date(row.created_at).toLocaleString() : '—' }
+                        ]} data={entries} />{entries.length < total && <Button className="mt-3" variant="secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : 'Load more'}</Button>}</> : <p className="text-sm text-slate-500">No uncoded clinical entries were found in the records you can access.</p>}
+            </Card>;
+        };
+
         const Select = ({ label, value, onChange, options, className = '', required, error, disabled = false, ...props }) => {
             const generatedId = React.useId();
             const selectId = props.id || `field-${generatedId.replaceAll(':', '')}`;

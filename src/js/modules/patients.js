@@ -292,6 +292,9 @@
                 const [encounterForm, setEncounterForm] = useState({
                     chiefComplaint: '',
                     diagnosis: '',
+                    diagnosisCodeSystem: null,
+                    diagnosisCode: null,
+                    diagnosisDisplay: null,
                     assessment: '',
                     plan: '',
                     followUpDate: ''
@@ -305,6 +308,9 @@
                     ward: '',
                     bedNumber: '',
                     diagnosis: '',
+                    diagnosisCodeSystem: null,
+                    diagnosisCode: null,
+                    diagnosisDisplay: null,
                     admissionDate: formatFacilityDate(),
                     acuity: 'stable'
                 });
@@ -353,6 +359,9 @@
                 });
                 const [problemForm, setProblemForm] = useState({
                     conditionName: '',
+                    codeSystem: null,
+                    code: null,
+                    display: null,
                     status: 'active',
                     onsetDate: ''
                 });
@@ -437,13 +446,14 @@
                     if (!encounterForm.chiefComplaint.trim()) return;
                     const saved = await insertClinicalRecord('consultations', {
                         patient_id: patient.id, chief_complaint: encounterForm.chiefComplaint.trim(), diagnosis: encounterForm.diagnosis.trim() || null,
+                        code_system: encounterForm.diagnosisCodeSystem, code: encounterForm.diagnosisCode, display: encounterForm.diagnosisDisplay,
                         assessment: encounterForm.assessment.trim() || null, plan: encounterForm.plan.trim() || null,
                         follow_up_date: encounterForm.followUpDate || null, status: 'completed'
                     });
                     if (!saved) return;
                     const next = [normalizeConsultations([saved])[0], ...(appData.consultations || [])];
                     appData.consultations = next;
-                    setEncounterForm({ chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+                    setEncounterForm({ chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
                 };
 
                 const handleSaveCarePlan = async () => {
@@ -461,20 +471,20 @@
                 const handleAddProblem = async () => {
                     if (!problemForm.conditionName.trim()) return;
                     const saved = await insertClinicalRecord('patient_conditions', {
-                        patient_id: patient.id, condition_name: problemForm.conditionName.trim(), clinical_status: problemForm.status,
+                        patient_id: patient.id, condition_name: problemForm.conditionName.trim(), code_system: problemForm.codeSystem, code: problemForm.code, display: problemForm.display, clinical_status: problemForm.status,
                         verification_status: 'provisional', onset_date: problemForm.onsetDate || null
                     });
                     if (!saved) return;
                     const next = [normalizeConditions([saved])[0], ...(appData.conditions || [])];
                     appData.conditions = next;
-                    setProblemForm({ conditionName: '', status: 'active', onsetDate: '' });
+                    setProblemForm({ conditionName: '', codeSystem: null, code: null, display: null, status: 'active', onsetDate: '' });
                 };
 
                 const handleSaveAdmissionNote = async () => {
                     const saved = await insertClinicalRecord('admissions', {
                         patient_id: patient.id, ward: admissionForm.ward || null, bed_number: admissionForm.bedNumber || null,
                         admission_date: admissionForm.admissionDate || formatFacilityDate(),
-                        diagnosis: admissionForm.diagnosis || null, status: 'active', acuity: admissionForm.acuity || 'stable'
+                        diagnosis: admissionForm.diagnosis || null, code_system: admissionForm.diagnosisCodeSystem, code: admissionForm.diagnosisCode, display: admissionForm.diagnosisDisplay, status: 'active', acuity: admissionForm.acuity || 'stable'
                     });
                     if (!saved) return;
                     appData.admissions = [normalizeAdmissions([saved])[0], ...(appData.admissions || [])];
@@ -482,6 +492,9 @@
                         ward: '',
                         bedNumber: '',
                         diagnosis: '',
+                        diagnosisCodeSystem: null,
+                        diagnosisCode: null,
+                        diagnosisDisplay: null,
                         admissionDate: formatFacilityDate(),
                         acuity: 'stable'
                     });
@@ -874,7 +887,7 @@
                                         <Card title="Encounter documentation" subtitle="Clinical note and diagnosis capture">
                                             <div className="space-y-4">
                                                 <Input label="Chief complaint" value={encounterForm.chiefComplaint} onChange={(e) => setEncounterForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
-                                                <Input label="Diagnosis" value={encounterForm.diagnosis} onChange={(e) => setEncounterForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                                <CodedConceptInput label="Diagnosis" value={encounterForm.diagnosis} codeSystem={encounterForm.diagnosisCodeSystem} code={encounterForm.diagnosisCode} display={encounterForm.diagnosisDisplay} onChange={(term) => setEncounterForm(prev => ({...prev,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} />
                                                 <TextArea label="Assessment" rows={3} value={encounterForm.assessment} onChange={(e) => setEncounterForm(prev => ({ ...prev, assessment: e.target.value }))} />
                                                 <TextArea label="Plan / treatment" rows={3} value={encounterForm.plan} onChange={(e) => setEncounterForm(prev => ({ ...prev, plan: e.target.value }))} />
                                                 <Input label="Follow-up date" type="date" value={encounterForm.followUpDate} onChange={(e) => setEncounterForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
@@ -925,7 +938,7 @@
                                                 <div>
                                                     <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Add diagnosis/problem</p>
                                                     <div className="space-y-3">
-                                                        <Input label="Diagnosis/problem name" value={problemForm.conditionName} onChange={(e) => setProblemForm(prev => ({ ...prev, conditionName: e.target.value }))} />
+                                                        <CodedConceptInput label="Diagnosis/problem name" value={problemForm.conditionName} codeSystem={problemForm.codeSystem} code={problemForm.code} display={problemForm.display} onChange={(term) => setProblemForm(prev => ({...prev,conditionName:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <Select label="Status" value={problemForm.status} onChange={(e) => setProblemForm(prev => ({ ...prev, status: e.target.value }))} options={[{ value: 'active', label: 'Active' }, { value: 'resolved', label: 'Resolved' }, { value: 'monitoring', label: 'Monitoring' }]} />
                                                             <Input label="Onset date" type="date" value={problemForm.onsetDate} onChange={(e) => setProblemForm(prev => ({ ...prev, onsetDate: e.target.value }))} />
@@ -981,7 +994,7 @@
                                                 </div>
                                                 <Input label="Admit date" type="date" value={admissionForm.admissionDate} onChange={(e) => setAdmissionForm(prev => ({ ...prev, admissionDate: e.target.value }))} />
                                                 <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'urgent', label: 'Urgent' }, { value: 'critical', label: 'Critical' }]} />
-                                                <TextArea label="Admission diagnosis / reason" rows={3} value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                                <CodedConceptInput label="Admission diagnosis / reason" value={admissionForm.diagnosis} codeSystem={admissionForm.diagnosisCodeSystem} code={admissionForm.diagnosisCode} display={admissionForm.diagnosisDisplay} onChange={(term) => setAdmissionForm(prev => ({...prev,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} />
                                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Bed} onClick={handleSaveAdmissionNote}>Record Admission</Button>
 
                                                 <div className="border-t border-slate-200 pt-4 mt-2">

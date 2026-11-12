@@ -207,7 +207,7 @@
             const [showResultDetails, setShowResultDetails] = useState(false);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
-            const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
+            const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
             const [resultForm, setResultForm] = useState({ comments: '', severity: 'normal', values: {} });
             const hasRecordedLabResults = (results) => {
                 if (typeof results === 'string') return results.trim().length > 0;
@@ -246,6 +246,9 @@
                     patientId: newOrderForm.patientId,
                     doctorId: newOrderForm.responsibleClinicianId,
                     testType: newOrderForm.testType,
+                    codeSystem: newOrderForm.testCodeSystem,
+                    code: newOrderForm.testCode,
+                    display: newOrderForm.testDisplay,
                     category: newOrderForm.category,
                     status: 'pending',
                     priority: newOrderForm.priority,
@@ -259,7 +262,7 @@
                 const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('lab_orders').insert([{
                     patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId,
-                    responsible_clinician_id: payload.doctorId, test_type: payload.testType,
+                    responsible_clinician_id: payload.doctorId, test_type: payload.testType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
                     ordered_date: payload.orderedDate, technician_id: payload.technicianId,
                     category: payload.category, priority: payload.priority, status: payload.status
                 }]).select();
@@ -268,7 +271,7 @@
                 const next = [...labOrders, mapped];
                 persistStoreTable('labOrders', next);
                 setLabOrders(next);
-                setNewOrderForm({ patientId: '', responsibleClinicianId: '', testType: 'CBC', category: 'Hematology', priority: 'routine' });
+                setNewOrderForm({ patientId: '', responsibleClinicianId: '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
                 setShowNewOrder(false);
             };
 
@@ -480,7 +483,7 @@
                         <div className="space-y-4">
                             <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Responsible clinician" value={newOrderForm.responsibleClinicianId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, responsibleClinicianId: e.target.value }))} options={[{ value: '', label: 'Select clinician...' }, ...(appData.users || []).filter((person) => ['doctor', 'specialist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
-                            <Input label="Test Type" value={newOrderForm.testType} onChange={(e) => setNewOrderForm(prev => ({ ...prev, testType: e.target.value }))} />
+                            <CodedConceptInput label="Test Type" value={newOrderForm.testType} codeSystem={newOrderForm.testCodeSystem} code={newOrderForm.testCode} display={newOrderForm.testDisplay} onChange={(term) => setNewOrderForm(prev => ({...prev,testType:term.value,testCodeSystem:term.codeSystem,testCode:term.code,testDisplay:term.display}))} />
                             <Input label="Category" value={newOrderForm.category} onChange={(e) => setNewOrderForm(prev => ({ ...prev, category: e.target.value }))} />
                             <Select label="Priority" value={newOrderForm.priority} onChange={(e) => setNewOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
                         </div>
@@ -552,6 +555,7 @@
                             </div>
                         </Card>
                     </div>
+                    <UncodedTerminologyReport />
                 </div>
             );
         };
@@ -565,7 +569,7 @@
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [showReportEntry, setShowReportEntry] = useState(false);
             const [studies, setStudies] = useState(getLiveStore().radiologyOrders || []);
-            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
+            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             const [reportDraft, setReportDraft] = useState('');
 
             const handleCreateStudy = async () => {
@@ -576,6 +580,9 @@
                     patientId: orderForm.patientId,
                     doctorId: null,
                     studyType: orderForm.studyType,
+                    codeSystem: orderForm.studyCodeSystem,
+                    code: orderForm.studyCode,
+                    display: orderForm.studyDisplay,
                     modality: orderForm.modality,
                     priority: orderForm.priority,
                     status: 'requested',
@@ -588,7 +595,7 @@
                 if (!client) return notifyPersistenceFailure('create radiology order');
                 const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('radiology_orders').insert([{
-                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, study_type: payload.studyType,
+                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, study_type: payload.studyType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
                     modality: payload.modality, priority: payload.priority, status: payload.status,
                     scheduled_date: payload.scheduledDate || null, report: payload.report || null,
                     ordered_date: payload.orderedDate
@@ -599,7 +606,7 @@
                 persistStoreTable('radiologyOrders', next);
                 setStudies(next);
                 setShowNewOrder(false);
-                setOrderForm({ patientId: '', studyType: '', modality: '', priority: 'routine', scheduledDate: '', report: '' });
+                setOrderForm({ patientId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             };
 
             const handleReportStudy = async (row) => {
@@ -682,7 +689,7 @@
                     >
                         <div className="space-y-4">
                             <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Input label="Study Type" value={orderForm.studyType} onChange={(e) => setOrderForm(prev => ({ ...prev, studyType: e.target.value }))} />
+                            <CodedConceptInput label="Study Type" value={orderForm.studyType} codeSystem={orderForm.studyCodeSystem} code={orderForm.studyCode} display={orderForm.studyDisplay} onChange={(term) => setOrderForm(prev => ({...prev,studyType:term.value,studyCodeSystem:term.codeSystem,studyCode:term.code,studyDisplay:term.display}))} />
                             <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
                             <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
                             <Input label="Scheduled Date" type="date" value={orderForm.scheduledDate} onChange={(e) => setOrderForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />

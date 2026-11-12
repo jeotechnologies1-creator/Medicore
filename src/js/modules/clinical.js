@@ -1,9 +1,9 @@
         const ConsultationsModule = () => {
             const { user } = useAuth();
             const [consultations, setConsultations] = useState(getLiveStore().consultations || []);
-            const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+            const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
             const [consultationMessage, setConsultationMessage] = useState('');
-            const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+            const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
             const [prescriptionMessage, setPrescriptionMessage] = useState('');
 
             const handleSaveConsultation = async () => {
@@ -13,14 +13,14 @@
                 const encounter = (appData.encounters || []).find((item) => item.patientId === form.patientId && !item.endedAt);
                 const { data, error } = await client.from('consultations').insert({
                     patient_id: form.patientId, encounter_id: encounter?.id || null, doctor_id: form.doctorId || user?.id || null, chief_complaint: form.chiefComplaint,
-                    diagnosis: form.diagnosis || null, assessment: form.assessment || null, plan: form.plan || null,
+                    diagnosis: form.diagnosis || null, code_system: form.diagnosisCodeSystem, code: form.diagnosisCode, display: form.diagnosisDisplay, assessment: form.assessment || null, plan: form.plan || null,
                     follow_up_date: form.followUpDate || null, status: 'completed'
                 }).select();
                 if (error || !data?.[0]) return setConsultationMessage(error?.message || 'Consultation was not saved.');
                 const next = [normalizeConsultations(data)[0], ...consultations];
                 appData.consultations = next;
                 setConsultations(next);
-                setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', assessment: '', plan: '', followUpDate: '' });
+                setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
                 setConsultationMessage('Consultation finalized and saved to the patient record.');
             };
 
@@ -29,10 +29,10 @@
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return setPrescriptionMessage('The clinical database is unavailable. No prescription was saved.');
                 const encounter = (appData.encounters || []).find((item) => item.patientId === prescriptionForm.patientId && !item.endedAt);
-                const { data, error } = await client.from('prescriptions').insert({ patient_id: prescriptionForm.patientId, encounter_id: encounter?.id || null, doctor_id: user?.id || null, diagnosis: prescriptionForm.diagnosis.trim(), medications: [{ name: prescriptionForm.medication.trim(), quantity: Number(prescriptionForm.quantity), dose: prescriptionForm.dose.trim(), route: prescriptionForm.route.trim() || null, frequency: prescriptionForm.frequency.trim() || null }], priority: prescriptionForm.priority, status: 'active' }).select().single();
+                const { data, error } = await client.from('prescriptions').insert({ patient_id: prescriptionForm.patientId, encounter_id: encounter?.id || null, doctor_id: user?.id || null, diagnosis: prescriptionForm.diagnosis.trim(), code_system: prescriptionForm.diagnosisCodeSystem, code: prescriptionForm.diagnosisCode, display: prescriptionForm.diagnosisDisplay, medications: [{ name: prescriptionForm.medication.trim(), quantity: Number(prescriptionForm.quantity), dose: prescriptionForm.dose.trim(), route: prescriptionForm.route.trim() || null, frequency: prescriptionForm.frequency.trim() || null }], priority: prescriptionForm.priority, status: 'active' }).select().single();
                 if (error || !data) return setPrescriptionMessage(error?.message || 'Prescription was not saved.');
                 appData.prescriptions = [normalizePrescriptions([data])[0], ...(appData.prescriptions || [])];
-                setPrescriptionForm({ patientId: '', diagnosis: '', medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
+                setPrescriptionForm({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, medication: '', quantity: 1, dose: '', route: '', frequency: '', priority: 'routine' });
                 setPrescriptionMessage('Prescription sent to the pharmacy queue.');
             };
 
@@ -52,7 +52,7 @@
                                 <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                                 <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getLiveStore().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
-                                <Input label="Diagnosis" value={form.diagnosis} onChange={(e) => setForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                                <CodedConceptInput label="Diagnosis" value={form.diagnosis} codeSystem={form.diagnosisCodeSystem} code={form.diagnosisCode} display={form.diagnosisDisplay} onChange={(term) => setForm(prev => ({ ...prev, diagnosis: term.value, diagnosisCodeSystem: term.codeSystem, diagnosisCode: term.code, diagnosisDisplay: term.display }))} />
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
                                 <TextArea label="Plan / Treatment" value={form.plan} onChange={(e) => setForm(prev => ({ ...prev, plan: e.target.value }))} rows={3} />
                                 <Input label="Follow-up Date" type="date" value={form.followUpDate} onChange={(e) => setForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
@@ -71,7 +71,7 @@
                     </div>
 
                     {['doctor','specialist','super_admin'].includes(user?.role) && <Card title="New prescription" subtitle="Urgent orders are highlighted in the pharmacy queue. Dispensing is recorded atomically against available stock.">
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><Input label="Diagnosis" value={prescriptionForm.diagnosis} onChange={(event) => setPrescriptionForm((form) => ({...form,diagnosis:event.target.value}))} /><Input label="Medicine (must match pharmacy stock)" value={prescriptionForm.medication} onChange={(event) => setPrescriptionForm((form) => ({...form,medication:event.target.value}))} /><Input label="Dose" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><CodedConceptInput label="Diagnosis" value={prescriptionForm.diagnosis} codeSystem={prescriptionForm.diagnosisCodeSystem} code={prescriptionForm.diagnosisCode} display={prescriptionForm.diagnosisDisplay} onChange={(term) => setPrescriptionForm((form) => ({...form,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} /><Input label="Medicine (must match pharmacy stock)" value={prescriptionForm.medication} onChange={(event) => setPrescriptionForm((form) => ({...form,medication:event.target.value}))} /><Input label="Dose" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
                         {prescriptionMessage && <p className="mt-3 text-sm text-slate-700" role="status">{prescriptionMessage}</p>}<Button className="mt-4" variant="primary" onClick={savePrescription}>Send prescription to pharmacy</Button>
                     </Card>}
 
@@ -189,8 +189,8 @@
             const [carePlans, setCarePlans] = useState(getLiveStore().carePlans || []);
             const [alerts, setAlerts] = useState(getLiveStore().clinicalAlerts || []);
             const [resultAcknowledgements, setResultAcknowledgements] = useState(getLiveStore().resultAcknowledgements || []);
-            const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
-            const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', onsetDate: '' });
+            const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', codeSystem: null, code: null, display: null, reaction: '', severity: 'moderate', criticality: 'low' });
+            const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', codeSystem: null, code: null, display: null, onsetDate: '' });
             const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
             const patients = getLiveStore().patients || [];
 
@@ -218,18 +218,18 @@
             const addAllergy = async () => {
                 if (!allergyForm.patientId || !allergyForm.substance) return;
                 const saved = await save('patient_allergies', {
-                    patient_id: allergyForm.patientId, substance: allergyForm.substance, reaction: allergyForm.reaction,
+                    patient_id: allergyForm.patientId, substance: allergyForm.substance, code_system: allergyForm.codeSystem, code: allergyForm.code, display: allergyForm.display, reaction: allergyForm.reaction,
                     severity: allergyForm.severity, criticality: allergyForm.criticality, category: 'medication', clinical_status: 'active'
                 }, setAllergies, 'allergies', normalizeAllergies);
-                if (saved) setAllergyForm({ patientId: '', substance: '', reaction: '', severity: 'moderate', criticality: 'low' });
+                if (saved) setAllergyForm({ patientId: '', substance: '', codeSystem: null, code: null, display: null, reaction: '', severity: 'moderate', criticality: 'low' });
             };
             const addCondition = async () => {
                 if (!conditionForm.patientId || !conditionForm.conditionName) return;
                 const saved = await save('patient_conditions', {
-                    patient_id: conditionForm.patientId, condition_name: conditionForm.conditionName,
+                    patient_id: conditionForm.patientId, condition_name: conditionForm.conditionName, code_system: conditionForm.codeSystem, code: conditionForm.code, display: conditionForm.display,
                     onset_date: conditionForm.onsetDate || null, clinical_status: 'active', verification_status: 'provisional'
                 }, setConditions, 'conditions', normalizeConditions);
-                if (saved) setConditionForm({ patientId: '', conditionName: '', onsetDate: '' });
+                if (saved) setConditionForm({ patientId: '', conditionName: '', codeSystem: null, code: null, display: null, onsetDate: '' });
             };
             const addCarePlan = async () => {
                 if (!carePlanForm.patientId || !carePlanForm.title) return;
@@ -284,7 +284,7 @@
                         <Card title="Record allergy / intolerance">
                             <div className="space-y-3">
                                 <Select label="Patient" value={allergyForm.patientId} onChange={(e) => setAllergyForm({ ...allergyForm, patientId: e.target.value })} options={patientOptions} />
-                                <Input label="Allergen or substance" value={allergyForm.substance} onChange={(e) => setAllergyForm({ ...allergyForm, substance: e.target.value })} />
+                                <CodedConceptInput label="Allergen or substance" value={allergyForm.substance} codeSystem={allergyForm.codeSystem} code={allergyForm.code} display={allergyForm.display} onChange={(term) => setAllergyForm((form) => ({...form,substance:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                                 <Input label="Reaction" value={allergyForm.reaction} onChange={(e) => setAllergyForm({ ...allergyForm, reaction: e.target.value })} />
                                 <Select label="Severity" value={allergyForm.severity} onChange={(e) => setAllergyForm({ ...allergyForm, severity: e.target.value })} options={['mild','moderate','severe'].map(value => ({ value, label: value }))} />
                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={addAllergy}>Save Allergy</Button>
@@ -293,7 +293,7 @@
                         <Card title="Add problem to list">
                             <div className="space-y-3">
                                 <Select label="Patient" value={conditionForm.patientId} onChange={(e) => setConditionForm({ ...conditionForm, patientId: e.target.value })} options={patientOptions} />
-                                <Input label="Condition" value={conditionForm.conditionName} onChange={(e) => setConditionForm({ ...conditionForm, conditionName: e.target.value })} />
+                                <CodedConceptInput label="Condition" value={conditionForm.conditionName} codeSystem={conditionForm.codeSystem} code={conditionForm.code} display={conditionForm.display} onChange={(term) => setConditionForm((form) => ({...form,conditionName:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                                 <Input label="Onset date" type="date" value={conditionForm.onsetDate} onChange={(e) => setConditionForm({ ...conditionForm, onsetDate: e.target.value })} />
                                 <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={addCondition}>Add Problem</Button>
                             </div>

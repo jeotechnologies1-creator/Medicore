@@ -1349,7 +1349,7 @@
             const [selectedWard, setSelectedWard] = useState(null);
             const [showNewAdmission, setShowNewAdmission] = useState(false);
             const [admissions, setAdmissions] = useState(getLiveStore().admissions || []);
-            const [admissionForm, setAdmissionForm] = useState({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', acuity: 'stable', priority: 'routine' });
+            const [admissionForm, setAdmissionForm] = useState({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', codeSystem: null, code: null, display: null, acuity: 'stable', priority: 'routine' });
             const [dispositionAdmission, setDispositionAdmission] = useState(null);
             const [allocationAdmission, setAllocationAdmission] = useState(null);
             const [allocationBedId, setAllocationBedId] = useState('');
@@ -1360,12 +1360,12 @@
                 if (!admissionForm.patientId || !admissionForm.diagnosis.trim()) return setWorkflowError('Select a patient and enter the clinical admission indication.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('admit patient');
-                const { error } = await client.rpc('request_inpatient_admission', { p_patient_id: admissionForm.patientId, p_encounter_id: admissionForm.encounterId || null, p_doctor_id: admissionForm.doctorId || user?.id || null, p_ward_id: admissionForm.wardId || null, p_diagnosis: admissionForm.diagnosis.trim(), p_acuity: admissionForm.acuity, p_priority: admissionForm.priority });
+                const { error } = await client.rpc('request_inpatient_admission_coded', { p_patient_id: admissionForm.patientId, p_encounter_id: admissionForm.encounterId || null, p_doctor_id: admissionForm.doctorId || user?.id || null, p_ward_id: admissionForm.wardId || null, p_diagnosis: admissionForm.diagnosis.trim(), p_acuity: admissionForm.acuity, p_priority: admissionForm.priority, p_code_system: admissionForm.codeSystem, p_code: admissionForm.code, p_display: admissionForm.display });
                 if (error) return setWorkflowError(error.message || 'The admission request could not be saved.');
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
                 setWorkflowError('');
                 setShowNewAdmission(false);
-                setAdmissionForm({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', acuity: 'stable', priority: 'routine' });
+                setAdmissionForm({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', codeSystem: null, code: null, display: null, acuity: 'stable', priority: 'routine' });
             };
 
             const allocateRequestedBed = async () => {
@@ -1460,7 +1460,7 @@
                             <Select label="Requested ward" value={admissionForm.wardId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, wardId: e.target.value, bedId: '' }))} options={[{ value: '', label: 'Select ward...' }, ...(appData.wards || []).filter((ward) => ward.status === 'active').map((ward) => ({ value: ward.id, label: ward.name }))]} />
                             <Select label="Active encounter" value={admissionForm.encounterId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'No encounter selected' }, ...(appData.encounters || []).filter((encounter) => encounter.patientId === admissionForm.patientId && !encounter.endedAt).map((encounter) => ({ value: encounter.id, label: `${encounter.encounterType} · ${encounter.reasonForVisit}` }))]} />
                             <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
-                            <Input label="Diagnosis" value={admissionForm.diagnosis} onChange={(e) => setAdmissionForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                            <CodedConceptInput label="Diagnosis" value={admissionForm.diagnosis} codeSystem={admissionForm.codeSystem} code={admissionForm.code} display={admissionForm.display} onChange={(term) => setAdmissionForm(prev => ({...prev,diagnosis:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                             <Select label="Admission priority" value={admissionForm.priority} onChange={(e) => setAdmissionForm(prev => ({ ...prev, priority: e.target.value }))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} />
                             <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
                             {workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}
@@ -1505,7 +1505,7 @@
             const { user } = useAuth();
             const [showSchedule, setShowSchedule] = useState(false);
             const [surgeries, setSurgeries] = useState(getLiveStore().surgeries || []);
-            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+            const [surgeryForm, setSurgeryForm] = useState({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', codeSystem: null, code: null, display: null, scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
             const [selectedSurgery, setSelectedSurgery] = useState(null);
             const [surgeryUpdate, setSurgeryUpdate] = useState({ status: 'accepted', reviewReason: '', consentStatus: 'pending', preoperativeNotes: '', operativeNotes: '', postoperativePlan: '', complications: '', scheduledDate: '', scheduledTime: '', otRoom: '' });
             const [surgeryMessage, setSurgeryMessage] = useState('');
@@ -1526,6 +1526,9 @@
                     priority: surgeryForm.priority,
                     indication: surgeryForm.indication,
                     diagnosis: surgeryForm.diagnosis,
+                    codeSystem: surgeryForm.codeSystem,
+                    code: surgeryForm.code,
+                    display: surgeryForm.display,
                     encounterId: surgeryForm.encounterId
                 };
 
@@ -1536,7 +1539,7 @@
                     scheduled_date: payload.scheduledDate || formatFacilityDate(), scheduled_time: payload.scheduledTime || null,
                     duration: payload.duration, status: payload.status, ot_room: payload.otRoom || null,
                     anesthesia: payload.anesthesia || null, priority: payload.priority, indication: payload.indication,
-                    diagnosis: payload.diagnosis, encounter_id: payload.encounterId || null, requesting_clinician_id: user?.id || null
+                    diagnosis: payload.diagnosis, code_system: payload.codeSystem, code: payload.code, display: payload.display, encounter_id: payload.encounterId || null, requesting_clinician_id: user?.id || null
                 }]).select();
                 if (error || !data?.[0]) return notifyPersistenceFailure('schedule surgery', error);
                 const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, surgeonId: data[0].surgeon_id || payload.surgeonId, scheduledDate: data[0].scheduled_date || payload.scheduledDate, scheduledTime: data[0].scheduled_time || payload.scheduledTime, otRoom: data[0].ot_room || payload.otRoom };
@@ -1544,7 +1547,7 @@
                 persistStoreTable('surgeries', next);
                 setSurgeries(next);
                 setShowSchedule(false);
-                setSurgeryForm({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
+                setSurgeryForm({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', codeSystem: null, code: null, display: null, scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
             };
 
             const saveSurgeryReview = async () => {
@@ -1642,7 +1645,7 @@
                             <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
                             <Input label="Indication" value={surgeryForm.indication} onChange={(e) => setSurgeryForm(prev => ({ ...prev, indication: e.target.value }))} />
-                            <Input label="Diagnosis" value={surgeryForm.diagnosis} onChange={(e) => setSurgeryForm(prev => ({ ...prev, diagnosis: e.target.value }))} />
+                            <CodedConceptInput label="Diagnosis" value={surgeryForm.diagnosis} codeSystem={surgeryForm.codeSystem} code={surgeryForm.code} display={surgeryForm.display} onChange={(term) => setSurgeryForm(prev => ({...prev,diagnosis:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={surgeryForm.scheduledDate} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledDate: e.target.value }))} />
                                 <Input label="Time" type="time" value={surgeryForm.scheduledTime} onChange={(e) => setSurgeryForm(prev => ({ ...prev, scheduledTime: e.target.value }))} />

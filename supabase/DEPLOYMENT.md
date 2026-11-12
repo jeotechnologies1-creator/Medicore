@@ -37,6 +37,7 @@ The front-end calls the following database contracts:
 | Patient portal booking and HIM scheduling | Patient-owned requests, appointment booking/confirmation, `get_appointment_providers()`, and patient confirmation notifications from `migrations/20261026000015_patient_appointment_coordination.sql` |
 | Family cards and insurance membership | `family_cards`, individual family memberships, `insurance_memberships`, and manual eligibility history from `migrations/20261026000018_workflow_completion.sql` |
 | Ward admission and bed occupancy | `request_inpatient_admission`, `allocate_requested_admission`, and `complete_inpatient_disposition` from `migrations/20261026000018_workflow_completion.sql` |
+| Coded clinical terminology | `code_systems`, `concepts`, coded diagnosis/allergy/condition/test/imaging columns, and the uncoded-entry report from `migrations/20261112000038_coded_terminology_foundation.sql` |
 | Encounter journey and BID/BOD | Encounter workflow events, unidentified emergency registration, and guarded identity merge/death assessment functions from `migrations/20261026000017_hospital_workflows.sql` and `migrations/20261026000018_workflow_completion.sql` |
 | Notifications | `notifications` and recipient-scoped policies from `migrations/20261026000011_app_activation.sql` |
 | Payment review | `payment_submissions` and `review_payment_submission(uuid,text)` from `migrations/20261026000016_accounts_payment_approval.sql`; payments remain pending until Accounts approval |
@@ -94,3 +95,7 @@ The staff form creates active `records_officer`, `surgeon`, `specialist`, and `t
 ## Edge Function hardening
 
 Set `ALLOWED_ORIGINS` to a comma-separated exact-origin list for `create-staff` and `create-patient-portal` (scheme, host, and port; no paths). These functions reject browser origins outside the list. All four Edge Functions require migration `20261112000036_edge_function_hardening.sql`; it creates service-only rate-limit and account-admin audit records. Rate limits apply independently per user and per hashed client IP. `integration-dispatch` processes at most five provider calls concurrently and uses constant-time bearer comparison. For each webhook, send `x-provider-timestamp` as a Unix timestamp in seconds and sign the exact request bytes as `HMAC-SHA256(secret, timestamp + "." + raw_body)`; the timestamp must be within five minutes. Existing `event_id` inbox deduplication remains enabled.
+
+## Coded terminology
+
+Migration `20261112000038_coded_terminology_foundation.sql` registers the four terminology systems without bundling clinical concept codes. After applying it to the intended environment, import only a licensed official export supplied by your organization with `node scripts/load-terminology.mjs '<system>' '<file.csv-or-tsv>'`. Keep the service-role key in a protected shell environment and follow [the terminology import guide](../docs/clinical/coded-terminology.md) for accepted columns, preferred-term exports, source metadata, and licensing notes. Review the Laboratory module's uncoded-entry report as concepts are loaded; historical free text is not automatically mapped.
