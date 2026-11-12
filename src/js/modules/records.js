@@ -27,6 +27,10 @@ const RecordsModule = () => {
     const [familyBusy, setFamilyBusy] = useState(false);
     const [familyEdits, setFamilyEdits] = useState({});
     const [identityForm, setIdentityForm] = useState({ temporaryPatientId: '', permanentPatientId: '', reason: '' });
+    const [mergeForm, setMergeForm] = useState({ sourceId: '', survivorId: '', reason: '' });
+    const [mergeHistory, setMergeHistory] = useState([]);
+    const [mergeMessage, setMergeMessage] = useState('');
+    const [mergeReversalReason, setMergeReversalReason] = useState('');
     const [patientJourney, setPatientJourney] = useState([]);
     const [recordFiles, setRecordFiles] = useState([]);
     const [fileMovementMessage, setFileMovementMessage] = useState('');
@@ -51,6 +55,14 @@ const RecordsModule = () => {
     };
 
     useEffect(() => { refreshPrivacyRequests(); }, [user?.id, user?.role]);
+
+    const refreshMergeHistory = async () => {
+        if (!['super_admin','records_officer'].includes(user?.role)) return;
+        const { data, error } = await window.OneMedSupabase.getClient().rpc('list_patient_merge_history');
+        if (error) setMergeMessage(`Merge history could not be loaded. ${error.message || ''}`.trim());
+        else setMergeHistory(data || []);
+    };
+    useEffect(() => { refreshMergeHistory(); }, [user?.id, user?.role]);
 
     const updatePrivacyRequest = async (request, status) => {
         const client = window.OneMedSupabase?.getClient?.();
@@ -281,6 +293,32 @@ const RecordsModule = () => {
         if (error) return setFamilyMessage(error.message || 'Identity verification was not saved.');
         setFamilyMessage('Temporary encounter history is now linked to the permanent patient record.');
         setIdentityForm({ temporaryPatientId: '', permanentPatientId: '', reason: '' });
+        window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+    };
+
+    const mergePatientRecords = async () => {
+        if (!mergeForm.sourceId || !mergeForm.survivorId || mergeForm.sourceId === mergeForm.survivorId || mergeForm.reason.trim().length < 10) {
+            return setMergeMessage('Choose two different patient records and document a reason of at least 10 characters.');
+        }
+        const { error } = await window.OneMedSupabase.getClient().rpc('merge_patient_records', {
+            p_source_patient_id: mergeForm.sourceId, p_survivor_patient_id: mergeForm.survivorId, p_reason: mergeForm.reason.trim()
+        });
+        if (error) return setMergeMessage(error.message || 'The patient records were not merged.');
+        setMergeMessage('Patient records merged. This merge can be reversed for 30 days.');
+        setMergeForm({ sourceId: '', survivorId: '', reason: '' });
+        await refreshMergeHistory();
+        window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+    };
+
+    const reversePatientMerge = async (merge) => {
+        if (mergeReversalReason.trim().length < 10) return setMergeMessage('Enter a reversal reason of at least 10 characters.');
+        const { error } = await window.OneMedSupabase.getClient().rpc('reverse_patient_merge', {
+            p_merge_id: merge.id, p_reason: mergeReversalReason.trim()
+        });
+        if (error) return setMergeMessage(error.message || 'The patient merge could not be reversed.');
+        setMergeReversalReason('');
+        setMergeMessage('Patient merge reversed and its moved records were restored.');
+        await refreshMergeHistory();
         window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
     };
 
@@ -574,6 +612,26 @@ const RecordsModule = () => {
             </Card>}
             {['super_admin','records_officer'].includes(user?.role) && (patients.some((patient) => patient.identity_status === 'unidentified' || patient.identityStatus === 'unidentified')) && <Card title="Emergency identity verification" subtitle="Link a temporary unidentified record to a verified patient after checking identity. The temporary record remains as a traceable merge record.">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-end"><Select label="Temporary emergency record" value={identityForm.temporaryPatientId} onChange={(event) => setIdentityForm((form) => ({...form,temporaryPatientId:event.target.value}))} options={[{value:'',label:'Select temporary record'},...patients.filter((patient) => patient.identity_status === 'unidentified' || patient.identityStatus === 'unidentified').map((patient) => ({value:patient.id,label:`${patient.patientNumber} · ${patient.firstName} ${patient.lastName}`}))]} /><Select label="Verified permanent record" value={identityForm.permanentPatientId} onChange={(event) => setIdentityForm((form) => ({...form,permanentPatientId:event.target.value}))} options={[{value:'',label:'Select verified patient'},...patients.filter((patient) => patient.identity_status !== 'unidentified' && patient.identityStatus !== 'unidentified' && patient.id !== identityForm.temporaryPatientId).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id.slice(0,8)}`}))]} /><Input label="Identity verification reason" value={identityForm.reason} onChange={(event) => setIdentityForm((form) => ({...form,reason:event.target.value}))} /><Button variant="primary" onClick={verifyTemporaryIdentity}>Verify and link records</Button></div>
+            </Card>}
+            {['super_admin','records_officer'].includes(user?.role) && <Card title="Patient identity merge and reversal" subtitle="Merge duplicate patient records into a selected survivor. The recorded merge can be reversed for 30 days.">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-end">
+                    <Select label="Source record to merge" value={mergeForm.sourceId} onChange={(event) => setMergeForm((form) => ({...form,sourceId:event.target.value}))} options={[{value:'',label:'Select source'},...patients.filter((patient) => patient.identity_status !== 'merged' && patient.identityStatus !== 'merged').map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id.slice(0,8)}`}))]} />
+                    <Select label="Surviving patient record" value={mergeForm.survivorId} onChange={(event) => setMergeForm((form) => ({...form,survivorId:event.target.value}))} options={[{value:'',label:'Select survivor'},...patients.filter((patient) => patient.id !== mergeForm.sourceId && patient.identity_status !== 'merged' && patient.identityStatus !== 'merged').map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id.slice(0,8)}`}))]} />
+                    <Input label="Merge reason" value={mergeForm.reason} onChange={(event) => setMergeForm((form) => ({...form,reason:event.target.value}))} placeholder="Document identity evidence (10+ characters)" />
+                    <Button variant="primary" onClick={mergePatientRecords}>Merge into survivor</Button>
+                </div>
+                {mergeMessage && <p className="mt-3 text-sm text-slate-700" role="status">{mergeMessage}</p>}
+                <div className="mt-4 space-y-2">
+                    {mergeHistory.map((merge) => {
+                        const source = patients.find((patient) => patient.id === merge.source_patient_id);
+                        const survivor = patients.find((patient) => patient.id === merge.survivor_patient_id);
+                        const canReverse = !merge.reversed_at && new Date(merge.reversible_until) > new Date();
+                        return <div key={merge.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+                            <span>{source ? `${source.firstName} ${source.lastName}` : merge.source_patient_id} → {survivor ? `${survivor.firstName} ${survivor.lastName}` : merge.survivor_patient_id} · {merge.reason} · {merge.reversed_at ? 'reversed' : `reversible until ${formatDate(merge.reversible_until)}`}</span>
+                            {canReverse && <div className="flex flex-wrap items-end gap-2"><Input label="Reversal reason" value={mergeReversalReason} onChange={(event) => setMergeReversalReason(event.target.value)} placeholder="10+ characters" /><Button size="sm" variant="secondary" onClick={() => reversePatientMerge(merge)}>Reverse merge</Button></div>}
+                        </div>;
+                    })}
+                </div>
             </Card>}
             <Card title="Patient index" subtitle={`${filteredPatients.length} of ${patients.length} records`}>
                 <div className="mb-4 max-w-lg">

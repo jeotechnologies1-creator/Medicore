@@ -18,7 +18,8 @@
             const [patients, setPatients] = useState((getLiveStore().patients || []));
             const [formErrors, setFormErrors] = useState({});
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
-            const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
+            const [selectedExistingPatientId, setSelectedExistingPatientId] = useState('');
+            const [nearMatchReason, setNearMatchReason] = useState('');
             const [patientAccessError, setPatientAccessError] = useState('');
             const [patientAccessWarning, setPatientAccessWarning] = useState('');
             const [saving, setSaving] = useState(false);
@@ -31,6 +32,7 @@
                 gender: '',
                 phone: '',
                 email: '',
+                nationalIdHash: '',
                 address: '',
                 bloodGroup: '',
                 emergencyContactName: '',
@@ -54,7 +56,8 @@
 
             useEffect(() => {
                 setPossibleDuplicates([]);
-                setDuplicateAcknowledged(false);
+                setSelectedExistingPatientId('');
+                setNearMatchReason('');
             }, [form]);
 
             useEffect(() => {
@@ -87,53 +90,51 @@
                 setFormErrors(errors);
                 if (Object.keys(errors).length) return;
 
-                const normalizeName = (value) => String(value || '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
-                const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
-                const email = String(form.email || '').trim().toLocaleLowerCase();
-                const matches = (patients || []).filter((patient) => {
-                    const sameNameAndBirthDate = normalizeName(patient.firstName) === normalizeName(form.firstName)
-                        && normalizeName(patient.lastName) === normalizeName(form.lastName)
-                        && patient.dateOfBirth === form.dateOfBirth;
-                    const samePhone = normalizePhone(form.phone).length >= 7 && normalizePhone(patient.phone) === normalizePhone(form.phone);
-                    const sameEmail = email.length > 0 && String(patient.email || '').trim().toLocaleLowerCase() === email;
-                    return sameNameAndBirthDate || samePhone || sameEmail;
-                });
-                if (matches.length && !duplicateAcknowledged) {
-                    setPossibleDuplicates(matches.slice(0, 5));
-                    return;
-                }
-
-                const payload = {
-                    // Patient numbers are unique in Postgres; use 64 random bits
-                    // so routine growth does not create avoidable registration collisions.
-                    patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase()}`,
-                    first_name: form.firstName,
-                    last_name: form.lastName,
-                    date_of_birth: form.dateOfBirth,
-                    gender: form.gender,
-                    phone: form.phone,
-                    email: form.email || null,
-                    address: form.address,
-                    blood_group: form.bloodGroup,
-                    emergency_contact_name: form.emergencyContactName,
-                    emergency_contact_phone: form.emergencyContactPhone,
-                    registration_date: formatFacilityDate(),
-                    home_facility_id: registrationFacilityId,
-                    status: 'active',
-                    allergies: 'None',
-                    chronic_conditions: 'None'
-                };
-
                 const client = window.OneMedSupabase && typeof window.OneMedSupabase.getClient === 'function' ? window.OneMedSupabase.getClient() : null;
                 if (!client) return notifyPersistenceFailure('register patient');
                 setSaving(true);
                 try {
-                    const { data, error } = await client.from('patients').insert([payload]).select();
-                    const created = data?.[0];
-                    if (error || !created) {
+                    const { data: candidateRows, error: candidateError } = await client.rpc('find_patient_duplicate_candidates', {
+                        p_first_name: form.firstName, p_last_name: form.lastName, p_date_of_birth: form.dateOfBirth,
+                        p_phone: form.phone, p_national_id_hash: (form.nationalIdHash || '').trim() || null
+                    });
+                    if (candidateError) {
+                        notifyPersistenceFailure('check for existing patients', candidateError);
+                        return;
+                    }
+                    const candidates = (candidateRows || []).map((candidate) => ({
+                        ...normalizePatients([candidate.patient])[0], matchType: candidate.match_type,
+                        exactMatch: candidate.exact_match, matchScore: candidate.match_score
+                    }));
+                    setPossibleDuplicates(candidates);
+                    if (candidates.some((candidate) => candidate.exactMatch) && !selectedExistingPatientId) {
+                        setFormErrors((current) => ({ ...current, duplicate: 'An exact match already exists. Choose “Use existing patient” to open that record.' }));
+                        return;
+                    }
+                    if (candidates.length && !selectedExistingPatientId && nearMatchReason.trim().length < 10) {
+                        setFormErrors((current) => ({ ...current, duplicate: 'Choose an existing record or document at least 10 characters explaining why this is a different person.' }));
+                        return;
+                    }
+                    const { data: result, error } = await client.rpc('register_patient_with_identity_check', {
+                        p_patient_number: `P-${new Date().getFullYear()}-${crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase()}`,
+                        p_first_name: form.firstName, p_last_name: form.lastName, p_date_of_birth: form.dateOfBirth,
+                        p_gender: form.gender, p_phone: form.phone, p_email: form.email || null, p_address: form.address || null,
+                        p_blood_group: form.bloodGroup || null, p_emergency_contact_name: form.emergencyContactName || null,
+                        p_emergency_contact_phone: form.emergencyContactPhone || null, p_facility_id: registrationFacilityId,
+                        p_national_id_hash: (form.nationalIdHash || '').trim() || null, p_existing_patient_id: selectedExistingPatientId || null,
+                        p_near_match_reason: nearMatchReason.trim() || null
+                    });
+                    if (error || !result) {
                         notifyPersistenceFailure('register patient', error);
                         return;
                     }
+                    if (result.status === 'existing') {
+                        setShowRegistration(false);
+                        setSelectedExistingPatientId('');
+                        await handlePatientClick(normalizePatients([result.patient])[0]);
+                        return;
+                    }
+                    const created = result.patient;
                     const mapped = {
                         ...created,
                         id: created.id,
@@ -149,10 +150,11 @@
                     const nextPatients = [...patients, mapped];
                     appData.patients = nextPatients;
                     setPatients(nextPatients);
-                    setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
+                    setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', nationalIdHash: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
                     setFormErrors({});
                     setPossibleDuplicates([]);
-                    setDuplicateAcknowledged(false);
+                    setSelectedExistingPatientId('');
+                    setNearMatchReason('');
                     setShowRegistration(false);
                 } catch (error) {
                     console.error('Patient registration failed:', error);
@@ -171,6 +173,7 @@
                     gender: patient.gender || '',
                     phone: patient.phone || '',
                     email: patient.email || '',
+                    nationalIdHash: '',
                     address: patient.address || '',
                     bloodGroup: patient.bloodGroup || '',
                     emergencyContactName: patient.emergencyContact?.name || patient.emergency_contact_name || '',
@@ -1499,14 +1502,18 @@
                         </>}
                         {!editingPatient && possibleDuplicates.length > 0 && (
                             <div className="col-span-2 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
-                                <h3 className="font-semibold text-amber-950">Possible existing patient record</h3>
-                                <p className="mt-1 text-sm text-amber-900">Compare these records before creating another chart. A shared phone number or similar demographic details may be legitimate; continue only after checking the patient identity.</p>
+                                <h3 className="font-semibold text-amber-950">Patient identity candidates found</h3>
+                                <p className="mt-1 text-sm text-amber-900">Exact identity matches cannot be registered again. For a near match, use an existing record or document why this person is different.</p>
                                 <ul className="mt-3 space-y-2 text-sm text-amber-950">
-                                    {possibleDuplicates.map((patient) => <li key={patient.id} className="rounded bg-white/70 px-3 py-2">{patient.patientNumber || 'No ID'} · {patient.firstName} {patient.lastName} · DOB {patient.dateOfBirth || 'unknown'} · {patient.phone || patient.email || 'no contact details'}</li>)}
+                                    {possibleDuplicates.map((patient) => <li key={patient.id} className="flex items-center justify-between gap-3 rounded bg-white/70 px-3 py-2">
+                                        <span>{patient.exactMatch ? 'Exact match' : `Possible match · ${patient.matchType}`} · {patient.patientNumber || 'No ID'} · {patient.firstName} {patient.lastName} · DOB {patient.dateOfBirth || 'unknown'} · {patient.phone || patient.email || 'no contact details'}</span>
+                                        <Button size="sm" variant={selectedExistingPatientId === patient.id ? 'primary' : 'secondary'} onClick={() => { setSelectedExistingPatientId(patient.id); setFormErrors((current) => ({...current,duplicate:''})); }}>{selectedExistingPatientId === patient.id ? 'Selected' : 'Use existing'}</Button>
+                                    </li>)}
                                 </ul>
-                                <Button className="mt-3" variant="secondary" onClick={() => setDuplicateAcknowledged(true)} disabled={duplicateAcknowledged}>{duplicateAcknowledged ? 'Reviewed — registration can continue' : 'I reviewed these records; continue'}</Button>
+                                {possibleDuplicates.some((patient) => !patient.exactMatch) && !selectedExistingPatientId && <Input className="mt-3" label="Reason this is a different person" value={nearMatchReason} onChange={(event) => setNearMatchReason(event.target.value)} placeholder="Explain the identity differences (minimum 10 characters)" />}
                             </div>
                         )}
+                        {formErrors.duplicate && <p className="col-span-2 text-sm text-red-700" role="alert">{formErrors.duplicate}</p>}
                         <div className="grid grid-cols-2 gap-4">
                             <Input label="First Name" required error={formErrors.firstName} value={form.firstName} onChange={(e) => setForm(prev => ({ ...prev, firstName: e.target.value }))} />
                             <Input label="Last Name" required error={formErrors.lastName} value={form.lastName} onChange={(e) => setForm(prev => ({ ...prev, lastName: e.target.value }))} />
@@ -1514,6 +1521,7 @@
                             <Select label="Gender" required error={formErrors.gender} value={form.gender} onChange={(e) => setForm(prev => ({ ...prev, gender: e.target.value }))} options={[{ value: '', label: 'Select...' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
                             <Input label="Phone Number" required error={formErrors.phone} value={form.phone} onChange={(e) => setForm(prev => ({ ...prev, phone: e.target.value }))} />
                             <Input label="Email" type="email" error={formErrors.email} value={form.email} onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))} />
+                            <Input label="National ID hash" value={form.nationalIdHash} onChange={(e) => setForm(prev => ({ ...prev, nationalIdHash: e.target.value }))} placeholder="Hash from approved identity service" />
                             <Input label="Address" className="col-span-2" value={form.address} onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))} />
                             <Select label="Blood Group" value={form.bloodGroup} onChange={(e) => setForm(prev => ({ ...prev, bloodGroup: e.target.value }))} options={[{ value: '', label: 'Select...' }, { value: 'A+', label: 'A+' }, { value: 'A-', label: 'A-' }, { value: 'B+', label: 'B+' }, { value: 'B-', label: 'B-' }, { value: 'AB+', label: 'AB+' }, { value: 'AB-', label: 'AB-' }, { value: 'O+', label: 'O+' }, { value: 'O-', label: 'O-' }]} />
                             <Input label="Emergency Contact Name" value={form.emergencyContactName} onChange={(e) => setForm(prev => ({ ...prev, emergencyContactName: e.target.value }))} />

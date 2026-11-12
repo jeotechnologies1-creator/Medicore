@@ -30,14 +30,14 @@ select ok(not exists (
 select throws_ok($$insert into public.patients(first_name,last_name,home_facility_id) values ('Synthetic','MFA AAL1','35000000-0000-4000-8000-000000000001')$$,'42501',null,'AAL1 cannot write protected data');
 select set_config('request.jwt.claims','{"sub":"35000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}',true);
 select ok(public.has_aal2(),'AAL2 claim is recognized');
-select lives_ok($$insert into public.patients(first_name,last_name,home_facility_id) values ('Synthetic','MFA AAL2','35000000-0000-4000-8000-000000000001')$$,'AAL2 can write when other policies allow it');
+select lives_ok($$select public.register_patient_with_identity_check('MFA-AAL2','Synthetic','MFA AAL2',date '1990-01-01','other','+2348000000101',null,null,null,null,null,'35000000-0000-4000-8000-000000000001')$$,'AAL2 can register through the duplicate-safe workflow');
 
 reset role;
 update public.system_settings set setting_value='{"enabled":false}'::jsonb where setting_key='mfa_enforcement';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal1"}',true);
 select ok(not public.mfa_required_for_current_user(),'explicit system setting can disable the role gate');
-select lives_ok($$insert into public.patients(first_name,last_name,home_facility_id) values ('Synthetic','MFA switch off','35000000-0000-4000-8000-000000000001')$$,'AAL1 can write only when the explicit switch is off');
+select lives_ok($$select public.register_patient_with_identity_check('MFA-SWITCH-OFF','Synthetic','MFA switch off',date '1990-01-02','other','+2348000000102',null,null,null,null,null,'35000000-0000-4000-8000-000000000001')$$,'AAL1 can register through the workflow only when the explicit switch is off');
 
 reset role;
 select * from finish();
