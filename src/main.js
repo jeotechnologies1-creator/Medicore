@@ -10,6 +10,13 @@ import './styles.css';
 
 globalThis.React = React;
 globalThis.ReactDOM = ReactDOM;
+Object.assign(globalThis, {
+    useState: React.useState,
+    useEffect: React.useEffect,
+    useCallback: React.useCallback,
+    useRef: React.useRef,
+    useMemo: React.useMemo
+});
 globalThis.__ONEMED_CAPTCHA_SITE_KEY__ = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
 // Keep diagnostics opt-in and text-only in development. Supabase errors can
