@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node tests/regression-checks.mjs",
+    "test:edge": "deno test supabase/functions/tests",
     "test:db": "supabase test db"
   }
 }

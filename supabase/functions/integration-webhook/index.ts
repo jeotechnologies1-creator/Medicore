@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkRateLimit, verifySignedTimestamp } from '../_shared/security.ts';
 
 const serviceClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const encoder = new TextEncoder();
@@ -7,15 +8,20 @@ const toHex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map((value) => 
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   const connectionId = request.headers.get('x-medicore-connection');
+  const timestampHeader = request.headers.get('x-provider-timestamp');
+  const timestamp = verifySignedTimestamp(timestampHeader);
   const signature = request.headers.get('x-provider-signature')?.replace(/^sha256=/, '');
-  if (!connectionId || !/^[0-9a-f-]{36}$/i.test(connectionId) || !signature || !/^[0-9a-f]{64}$/i.test(signature)) return new Response('Invalid webhook headers', { status: 400 });
+  if (!connectionId || !/^[0-9a-f-]{36}$/i.test(connectionId) || timestamp === null || !signature || !/^[0-9a-f]{64}$/i.test(signature)) return new Response('Invalid webhook headers or stale timestamp', { status: 400 });
+  try {
+    if (!await checkRateLimit(serviceClient, request, 'integration-webhook', connectionId, 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
+  } catch { return new Response('Rate limiting is temporarily unavailable', { status: 503 }); }
   const body = await request.text();
   if (encoder.encode(body).length > 1_000_000) return new Response('Payload too large', { status: 413 });
   const secretEnv = `MEDICORE_WEBHOOK_SECRET_${connectionId.replaceAll('-', '').toUpperCase()}`;
   const secret = Deno.env.get(secretEnv);
   if (!secret) return new Response('Webhook is not configured', { status: 404 });
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const expected = toHex(await crypto.subtle.sign('HMAC', key, encoder.encode(body)));
+  const expected = toHex(await crypto.subtle.sign('HMAC', key, encoder.encode(`${timestampHeader}.${body}`)));
   const receivedBytes = encoder.encode(signature.toLowerCase());
   const expectedBytes = encoder.encode(expected);
   let mismatch = receivedBytes.length ^ expectedBytes.length;

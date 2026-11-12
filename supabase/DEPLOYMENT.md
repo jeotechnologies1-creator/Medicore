@@ -108,3 +108,7 @@ The staff form creates active `records_officer`, `surgeon`, `specialist`, and `t
 7. Confirm an inactive user is signed out, then test each staff role cannot create or update a record outside its assigned workflow (including direct REST requests).
 8. Review any pre-existing rows that violate the new `NOT VALID` integrity constraints, remediate them, and run `VALIDATE CONSTRAINT` for each in a planned maintenance window.
 9. Confirm patient-linked reads are denied to inactive profiles and that opening a chart creates one row in `patient_access_logs` for the authenticated active profile.
+
+## Edge Function hardening
+
+Set `ALLOWED_ORIGINS` to a comma-separated exact-origin list for `create-staff` and `create-patient-portal` (scheme, host, and port; no paths). These functions reject browser origins outside the list. All four Edge Functions require migration `20261112000036_edge_function_hardening.sql`; it creates service-only rate-limit and account-admin audit records. Rate limits apply independently per user and per hashed client IP. `integration-dispatch` processes at most five provider calls concurrently and uses constant-time bearer comparison. For each webhook, send `x-provider-timestamp` as a Unix timestamp in seconds and sign the exact request bytes as `HMAC-SHA256(secret, timestamp + "." + raw_body)`; the timestamp must be within five minutes. Existing `event_id` inbox deduplication remains enabled.

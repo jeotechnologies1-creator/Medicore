@@ -1,12 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { checkRateLimit, corsHeadersFor, recordAccountAudit } from '../_shared/security.ts';
 
 Deno.serve(async (request) => {
+  const corsHeaders = corsHeadersFor(request);
+  if (!corsHeaders) return new Response('Origin not allowed', { status: 403 });
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
   const authHeader = request.headers.get('Authorization');
@@ -19,6 +16,12 @@ Deno.serve(async (request) => {
   const { data: { user }, error: userError } = await requesterClient.auth.getUser();
   if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
   const adminClient = createClient(url, serviceKey);
+  try {
+    if (!await checkRateLimit(adminClient, request, 'create-patient-portal', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
+  } catch (error) {
+    console.error('create-patient-portal rate limit failed:', error);
+    return Response.json({ error: 'Rate limiting is temporarily unavailable.' }, { status: 503, headers: corsHeaders });
+  }
   const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
   const enforceMfa = mfaSettingError || mfaSetting?.setting_value?.enabled !== false;
   if (enforceMfa) {
@@ -42,11 +45,15 @@ Deno.serve(async (request) => {
   const redirectTo = Deno.env.get('AUTH_INVITE_REDIRECT_URL');
   const inviteOptions = { data: { full_name: fullName }, ...(redirectTo ? { redirectTo } : {}) };
   const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
-  if (createError || !created.user) return Response.json({ error: createError?.message || 'Unable to create account.' }, { status: 400, headers: corsHeaders });
+  if (createError || !created.user) {
+    await recordAccountAudit(adminClient, user.id, null, email, 'patient', 'failure', { stage: 'invite', error: createError?.message || 'invite_failed' });
+    return Response.json({ error: createError?.message || 'Unable to create account.' }, { status: 400, headers: corsHeaders });
+  }
   const { data: profile, error: profileError } = await adminClient.from('profiles').update({ role: 'patient', patient_id: patientId, full_name: fullName, status: 'active' }).eq('auth_user_id', created.user.id).select('id, email, full_name, role, patient_id, status').single();
   if (profileError) {
     const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
     if (cleanupError) console.error('Failed to clean up unlinked portal auth user:', cleanupError);
+    await recordAccountAudit(adminClient, user.id, created.user.id, email, 'patient', 'failure', { stage: 'profile', error: profileError.message });
     return Response.json({ error: cleanupError
       ? 'Portal profile setup failed and automatic account cleanup did not complete. Check Edge Function logs before retrying.'
       : 'The portal profile could not be linked to the patient; the temporary account was removed.' }, { status: 500, headers: corsHeaders });
@@ -56,10 +63,12 @@ Deno.serve(async (request) => {
     if (patientUpdateError || !updatedPatient) {
       const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
       if (cleanupError) console.error('Failed to clean up portal auth user after patient email update failed:', cleanupError);
+      await recordAccountAudit(adminClient, user.id, created.user.id, email, 'patient', 'failure', { stage: 'patient_email_sync' });
       return Response.json({ error: cleanupError
         ? 'Patient email synchronization failed and automatic account cleanup did not complete. Check Edge Function logs before retrying.'
         : 'The patient email could not be synchronized; the temporary portal account was removed.' }, { status: 500, headers: corsHeaders });
     }
   }
+  await recordAccountAudit(adminClient, user.id, created.user.id, email, 'patient', 'success');
   return Response.json({ patient: profile }, { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });

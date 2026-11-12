@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkRateLimit, constantTimeEqual, mapBounded } from '../_shared/security.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -10,9 +11,13 @@ const routes: Record<string, string> = {
 };
 
 Deno.serve(async (request) => {
-  if (request.method !== 'POST' || request.headers.get('authorization') !== `Bearer ${serviceKey}`) {
+  const auth = request.headers.get('authorization') ?? '';
+  if (request.method !== 'POST' || !await constantTimeEqual(auth, `Bearer ${serviceKey}`)) {
     return new Response('Unauthorized', { status: 401 });
   }
+  try {
+    if (!await checkRateLimit(serviceClient, request, 'integration-dispatch', 'service-scheduler', 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
+  } catch { return new Response('Rate limiting is temporarily unavailable', { status: 503 }); }
   let limit = 25;
   try {
     const body = await request.json().catch(() => ({}));
@@ -22,7 +27,7 @@ Deno.serve(async (request) => {
   const { data: events, error } = await serviceClient.rpc('claim_integration_outbox', { p_limit: limit });
   if (error) return Response.json({ error: 'Unable to lease integration events' }, { status: 500 });
   const connectorConfig = JSON.parse(Deno.env.get('MEDICORE_CONNECTORS_JSON') ?? '{}');
-  const results = await Promise.all((events ?? []).map(async (event: Record<string, unknown>) => {
+  const results = await mapBounded((events ?? []) as Record<string, unknown>[], 5, async (event) => {
     const connector = connectorConfig[event.provider_code as string];
     const route = routes[event.event_type as string];
     try {
@@ -68,6 +73,6 @@ Deno.serve(async (request) => {
       });
       return { id: event.id, delivered: false };
     }
-  }));
+  });
   return Response.json({ processed: results.length, results });
 });
