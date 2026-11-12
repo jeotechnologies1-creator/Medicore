@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { createHmac } from 'node:crypto';
 
 function base32ToBuffer(value) {
@@ -39,8 +40,12 @@ test('login enforces MFA enrollment before granting app access', async ({ page }
 
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('navigation')).toBeVisible();
+  const dashboardA11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(dashboardA11y.violations, JSON.stringify(dashboardA11y.violations.map(({ id, impact, nodes }) => ({ id, impact, count: nodes.length })), null, 2)).toEqual([]);
 
   await page.getByText('Patients', { exact: true }).first().click();
+  const patientsA11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(patientsA11y.violations, JSON.stringify(patientsA11y.violations.map(({ id, impact, nodes }) => ({ id, impact, count: nodes.length })), null, 2)).toEqual([]);
   await page.getByRole('button', { name: 'Register Patient' }).first().click();
   const patient = `CI Patient ${Date.now()}`;
   await page.getByLabel('Registering facility').selectOption('a1000000-0000-4000-8000-000000000001');

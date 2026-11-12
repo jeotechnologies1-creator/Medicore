@@ -486,10 +486,10 @@
             .app-main .flex-wrap { row-gap: 0.625rem; }
             .app-main .flex:not(.flex-col) { min-width: 0; }
             /* Keep mobile action rows usable without shrinking controls to slivers. */
-            .app-main .flex:not(.flex-col):not([role="tablist"]) { flex-wrap: wrap; row-gap: 0.5rem; }
-            .app-main .flex:not(.flex-col):not([role="tablist"]) > * { min-width: 0; max-width: 100%; }
-            .app-main [role="tablist"].flex { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
-            .app-main [role="tab"] { flex: 0 0 auto; min-height: 2.75rem; white-space: nowrap; }
+            .app-main .flex:not(.flex-col):not([aria-label="Page sections"]) { flex-wrap: wrap; row-gap: 0.5rem; }
+            .app-main .flex:not(.flex-col):not([aria-label="Page sections"]) > * { min-width: 0; max-width: 100%; }
+            .app-main [role="group"][aria-label="Page sections"].flex { max-width: 100%; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+            .app-main [aria-label="Page sections"] > button { flex: 0 0 auto; min-height: 2.75rem; white-space: nowrap; }
             .app-main button { min-width: 0; min-height: 2.75rem; max-width: 100%; white-space: normal; line-height: 1.25; }
             .app-main button > svg { flex: 0 0 auto; }
             .login-page button, .modal-overlay button { min-height: 2.75rem; max-width: 100%; white-space: normal; line-height: 1.25; }
@@ -558,6 +558,9 @@
 .refund-policy-main li { margin: .55rem 0; }
 .refund-policy-main .note { padding: 1rem; background: #eff6ff; border-left: 4px solid #2563eb; }
 .refund-policy-main a { color: #1455a0; }
+.skip-link { position: fixed; top: .5rem; left: .5rem; z-index: 100; transform: translateY(-150%); padding: .75rem 1rem; border-radius: .5rem; background: #fff; color: #102a43; box-shadow: 0 0 0 3px #2563eb; }
+.skip-link:focus { transform: translateY(0); }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 3px solid #1d4ed8 !important; outline-offset: 2px !important; }
 .nav-menu-item { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: .75rem; align-items: center; }
 .nav-menu-item-top { align-items: start; }
 .data-table-actions-column { width: 8rem; }

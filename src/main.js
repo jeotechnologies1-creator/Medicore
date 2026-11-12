@@ -12,6 +12,18 @@ globalThis.React = React;
 globalThis.ReactDOM = ReactDOM;
 globalThis.__ONEMED_CAPTCHA_SITE_KEY__ = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
+// Keep diagnostics opt-in and text-only in development. Supabase errors can
+// include request payloads, so never forward object arguments to the console.
+for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
+    const original = console[method].bind(console);
+    console[method] = (...args) => {
+        if (import.meta.env.DEV) {
+            const safeText = args.filter((value) => typeof value === 'string');
+            if (safeText.length) original(...safeText);
+        }
+    };
+}
+
 const loadLegacyModule = async (path) => {
   const module = await import(path);
   Object.assign(globalThis, module);

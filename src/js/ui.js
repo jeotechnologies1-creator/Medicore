@@ -82,6 +82,7 @@
                         placeholder={placeholder}
                         className={'w-full rounded-lg border ' + (error ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : 'border-slate-300 focus:border-medical-500 focus:ring-medical-200') + ' focus:ring-2 focus:ring-opacity-50 outline-none transition-all ' + (Icon ? 'pl-10' : 'pl-4') + ' pr-4 py-2.5 text-sm ' + (error ? 'text-red-900 placeholder-red-300' : 'text-slate-900 placeholder-slate-400')}
                         required={required}
+                        aria-label={label ? undefined : (props['aria-label'] || placeholder || 'Text input')}
                         aria-invalid={Boolean(error)}
                         aria-describedby={error ? `${inputId}-error` : undefined}
                         {...props}
@@ -209,6 +210,7 @@
                     className={'w-full rounded-lg border focus:ring-2 focus:ring-opacity-50 outline-none transition-all pl-4 pr-8 py-2.5 text-sm text-slate-900 bg-white ' + (error ? 'border-red-300 focus:border-red-500 focus:ring-red-200' : 'border-slate-300 focus:border-medical-500 focus:ring-medical-200')}
                     required={required}
                     disabled={disabled}
+                    aria-label={label ? undefined : (props['aria-label'] || 'Selection')}
                     {...props}
                 >
                     {options.map((opt) => (
@@ -237,6 +239,7 @@
                     className={'w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 resize-vertical ' + (error ? 'border-red-400' : '')}
                     required={required}
                     disabled={disabled}
+                    aria-label={label ? undefined : (props['aria-label'] || placeholder || 'Text area')}
                     {...props}
                 />
                 {error && <p id={`${textareaId}-error`} role="alert" className="mt-1 text-xs text-red-700">{error}</p>}
@@ -286,14 +289,13 @@
 
         const Tabs = ({ tabs, activeTab, onChange, className = '' }) => (
             <div className={'border-b border-slate-200 ' + className}>
-                <div className="flex gap-1" role="tablist" aria-label="Page sections">
+                <div className="flex gap-1" role="group" aria-label="Page sections">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
                             type="button"
                             onClick={() => onChange(tab.id)}
-                            role="tab"
-                            aria-selected={activeTab === tab.id}
+                            aria-pressed={activeTab === tab.id}
                             className={'px-4 py-3 text-sm font-medium transition-colors relative ' + (activeTab === tab.id ? 'text-medical-600 tab-active' : 'text-slate-500 hover:text-slate-700')}
                         >
                             {tab.label}
@@ -346,7 +348,9 @@
                             {data.map((row, idx) => (
                                 <tr
                                     key={idx}
+                                    tabIndex={onRowClick ? 0 : undefined}
                                     onClick={() => onRowClick && onRowClick(row)}
+                                    onKeyDown={(event) => { if (onRowClick && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onRowClick(row); } }}
                                     className={(onRowClick ? 'cursor-pointer hover:bg-slate-50' : '') + ' transition-colors'}
                                 >
                                     {columns.map((col) => (
@@ -413,7 +417,7 @@
             return (
                 <div>
                     {label && <div className="flex justify-between text-xs mb-1"><span className="text-slate-600">{label}</span><span className="text-slate-900 font-medium">{Math.round(percentage)}%</span></div>}
-                    <div className={'w-full bg-slate-100 rounded-full ' + heights[size]}>
+                    <div className={'w-full bg-slate-100 rounded-full ' + heights[size]} role="progressbar" aria-label={label || 'Progress'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percentage)}>
                         <div className={colors[color] + ' rounded-full ' + heights[size] + ' transition-all duration-500 w-[' + Math.round(percentage) + '%]'} />
                     </div>
                 </div>

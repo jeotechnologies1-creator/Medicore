@@ -649,14 +649,17 @@
 
         const formatDate = (dateStr) => {
             if (!dateStr) return 'N/A';
-            const d = new Date(dateStr);
-            return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            const dateOnly = typeof dateStr === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.test(dateStr);
+            const d = dateOnly ? new Date(`${dateStr}T00:00:00.000Z`) : new Date(dateStr);
+            if (Number.isNaN(d.valueOf())) return 'N/A';
+            return new Intl.DateTimeFormat('en-GB', { timeZone: dateOnly ? 'UTC' : (window.OneMedFacilityTimezone || 'Africa/Lagos'), day: '2-digit', month: 'short', year: 'numeric' }).format(d);
         };
 
         const formatDateTime = (dateStr) => {
             if (!dateStr) return 'N/A';
             const d = new Date(dateStr);
-            return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            if (Number.isNaN(d.valueOf())) return 'N/A';
+            return new Intl.DateTimeFormat('en-GB', { timeZone: window.OneMedFacilityTimezone || 'Africa/Lagos', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
         };
 
         const formatCurrency = (amount) => {

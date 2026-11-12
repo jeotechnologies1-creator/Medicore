@@ -311,7 +311,8 @@
                                 onMenuClick={() => setSidebarOpen(true)}
                                 menuOpen={sidebarOpen}
                             />
-                            <main className="flex-1 overflow-y-auto app-main">
+                            <a className="skip-link" href="#main-content">Skip to main content</a>
+                            <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto app-main" aria-label="Main content">
                                 {dataLoad.loading && (
                                     <div className="mx-6 mt-4 rounded-xl border border-medical-200 bg-medical-50 px-4 py-3 text-sm text-medical-800" role="status">
                                         Loading your authorized records…
