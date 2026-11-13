@@ -471,8 +471,16 @@
                         clearSignedOutState();
                         return;
                     }
-                    const { data } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
+                    const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
                     if (!active || revision !== sessionRevision) return;
+                    // A transient Data API/network failure is not proof that an
+                    // account was deactivated. Keep the Supabase session (and
+                    // any user already established by the login flow) intact;
+                    // the next auth event or reload can retry this lookup.
+                    if (error) {
+                        console.warn('Could not refresh the signed-in profile; keeping the current auth session.');
+                        return;
+                    }
                     // An Auth session alone is not sufficient to use the EMR.
                     // Deactivated accounts must not enter the UI until RLS rejects
                     // their first request.
