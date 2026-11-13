@@ -496,7 +496,19 @@
                     }
                 };
                 client.auth.getSession().then(({ data }) => applySession(data.session));
-                const { data: subscription } = client.auth.onAuthStateChange((_event, session) => applySession(session));
+                const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
+                    if (!session?.user) {
+                        sessionRevision += 1;
+                        clearSignedOutState();
+                        return;
+                    }
+                    // Supabase awaits auth-state callbacks while holding its
+                    // auth lock. Defer profile/MFA requests until after this
+                    // synchronous callback returns to avoid deadlocking sign-in.
+                    window.setTimeout(() => {
+                        if (active) void applySession(session);
+                    }, 0);
+                });
                 return () => { active = false; subscription.subscription.unsubscribe(); };
             }, [requiresMfa, setMfaChallenge]);
 
