@@ -8,6 +8,8 @@ set local statement_timeout='15min';
 set local lock_timeout='5s';
 set local request.jwt.claim.role='authenticated';
 set local request.jwt.claim.sub=:'auth_user_id';
-explain (analyze,buffers)
+explain (analyze,buffers,settings)
 select public.get_him_dashboard_analytics(:'facility_id'::uuid,:'start_date'::date,:'end_date'::date);
+explain (analyze,buffers,settings)
+select public.get_screen_kpis(:'facility_id'::uuid,:'start_date'::date,:'end_date'::date);
 rollback;
