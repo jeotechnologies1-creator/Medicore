@@ -86,7 +86,21 @@ try {
     throw new Error('Auth email/password were updated, but the linked profile email did not update. Ask a project owner to sync public.profiles.email for this same auth_user_id.');
   }
 
+  const { error: auditError } = await admin.rpc('record_account_admin_audit', {
+    p_actor_auth_user_id: null,
+    p_target_auth_user_id: userId,
+    p_target_email: email,
+    p_action: 'account_recovered',
+    p_assigned_role: 'super_admin',
+    p_outcome: 'success',
+    p_details: { actor: 'break-glass script' }
+  });
+  if (auditError) {
+    throw new Error('Recovery completed, but the audit entry could not be written. Contact the designated facility reviewer and record the event through the approved audit process.');
+  }
+
   stdout.write('\nRecovery complete. The new email is confirmed and the new password is set. Sign in with those credentials.\n');
+  stdout.write('Reminder: have the designated facility reviewer review the account audit log and document the post-use review.\n');
 } catch (error) {
   stdout.write(`\n${error.message || 'Recovery failed.'}\n`);
   process.exitCode = 1;

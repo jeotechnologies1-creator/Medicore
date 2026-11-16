@@ -6,6 +6,7 @@
             const [activeTab, setActiveTab] = useState('flow');
             const [selectedDept, setSelectedDept] = useState('all');
             const [criticalDelivery, setCriticalDelivery] = useState({ loading: true, error: false, count: 0, rows: [] });
+            const [activeSuperAdminCount, setActiveSuperAdminCount] = useState(null);
 
             useEffect(() => {
                 if (user?.role !== 'super_admin') return undefined;
@@ -16,21 +17,23 @@
                         if (active) setCriticalDelivery({ loading: false, error: true, count: 0, rows: [] });
                         return;
                     }
-                    const [alerts, deliveries] = await Promise.all([
+                    const [alerts, deliveries, adminCount] = await Promise.all([
                         client.rpc('get_operations_alerts'),
-                        client.rpc('list_critical_result_delivery_status')
+                        client.rpc('list_critical_result_delivery_status'),
+                        client.rpc('get_active_super_admin_count')
                     ]);
                     if (!active) return;
-                    if (alerts.error || deliveries.error) {
+                    if (!alerts.error && !deliveries.error) {
+                        setCriticalDelivery({
+                            loading: false,
+                            error: false,
+                            count: Number(alerts.data?.undelivered_critical_result_messages || 0),
+                            rows: Array.isArray(deliveries.data) ? deliveries.data : []
+                        });
+                    } else {
                         setCriticalDelivery({ loading: false, error: true, count: 0, rows: [] });
-                        return;
                     }
-                    setCriticalDelivery({
-                        loading: false,
-                        error: false,
-                        count: Number(alerts.data?.undelivered_critical_result_messages || 0),
-                        rows: Array.isArray(deliveries.data) ? deliveries.data : []
-                    });
+                    if (!adminCount.error) setActiveSuperAdminCount(Number(adminCount.data));
                 };
                 refreshCriticalDelivery();
                 const timer = window.setInterval(refreshCriticalDelivery, 60_000);
@@ -100,6 +103,13 @@
                         <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
                         <StatCard title="Open appointments" value={(appData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
                     </div>
+
+                    {user?.role === 'super_admin' && activeSuperAdminCount !== null && activeSuperAdminCount < 2 && (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" role="alert">
+                            <h3 className="font-semibold">Single-admin continuity warning</h3>
+                            <p className="mt-1 text-sm">There {activeSuperAdminCount === 1 ? 'is only 1 active Super Admin' : `are only ${activeSuperAdminCount} active Super Admins`}. Add and verify a second active Super Admin before demoting, suspending, or deleting an administrator account.</p>
+                        </div>
+                    )}
 
                     {user?.role === 'super_admin' && (
                         <Card title="Critical result external notifications">
