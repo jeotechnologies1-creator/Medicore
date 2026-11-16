@@ -1,0 +1,1 @@
+{"event":"chargeback.initiated","data":{"id":600000001,"flw_ref":"FLW-MOCK-TRANSACTION-02","amount":125,"comment":"Recorded test fixture","status":"initiated","due_date":"2026-12-01T00:00:00Z"}}

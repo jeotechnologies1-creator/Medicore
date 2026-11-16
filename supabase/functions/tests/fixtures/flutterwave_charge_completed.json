@@ -1,0 +1,1 @@
+{"event":"charge.completed","data":{"id":800000001,"tx_ref":"MC-00000000000040008000000000000002","flw_ref":"FLW-MOCK-TRANSACTION-02","amount":125,"currency":"NGN","status":"successful"}}

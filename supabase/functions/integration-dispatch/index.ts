@@ -1,5 +1,6 @@
 import { createClient } from '../_shared/supabase.ts';
 import { checkRateLimit, constantTimeEqual, mapBounded, reportSafeEdgeError, parseConnectorConfig } from '../_shared/security.ts';
+import { connectorTokenEnvironment, dispatchPaymentGatewayEvent } from '../_shared/payment_gateway_adapters.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -9,6 +10,7 @@ const routes: Record<string, string> = {
   'payer.eligibility.check': 'eligibility',
   'payer.preauthorization.request': 'preauthorizations',
   'payment.intent.create': 'payment-intents',
+  'payment.refund.create': 'refunds',
   'ledger.journal.posted': 'journal-entries',
 };
 
@@ -38,16 +40,12 @@ Deno.serve(async (request) => {
   const results = await mapBounded((events ?? []) as Record<string, unknown>[], 5, async (event) => {
     const connector = connectorConfig[event.provider_code as string] as Record<string, unknown> | undefined;
     const route = routes[event.event_type as string];
+    const isPaymentGateway = event.provider_code === 'paystack' || event.provider_code === 'flutterwave';
     try {
-      if (!connector || !route || typeof connector.baseUrl !== 'string' || typeof connector.tokenEnv !== 'string') {
+      if (!connector || !route || (!isPaymentGateway && typeof connector.baseUrl !== 'string')) {
         throw new Error('Connector is not configured for this event');
       }
-      const baseUrl = connector.baseUrl;
-      const tokenEnv = connector.tokenEnv;
-      const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-      if (base.protocol !== 'https:' && base.hostname !== 'host.docker.internal' && base.hostname !== 'localhost') {
-        throw new Error('Connector URL must use HTTPS');
-      }
+      const tokenEnv = connectorTokenEnvironment(connector, String(event.connection_id));
       const token = Deno.env.get(tokenEnv);
       if (!token) throw new Error('Connector credential is missing');
       if (event.event_type === 'payment.intent.create' && typeof connector.returnUrl === 'string' && new URL(connector.returnUrl).protocol !== 'https:') {
@@ -56,16 +54,26 @@ Deno.serve(async (request) => {
       const outboundPayload = event.event_type === 'payment.intent.create' && typeof connector.returnUrl === 'string'
         ? { ...(event.payload as Record<string, unknown>), return_url: connector.returnUrl }
         : event.payload;
-      const response = await fetch(new URL(route, base), {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': String(event.idempotency_key) },
-        body: JSON.stringify(outboundPayload),
-        signal: AbortSignal.timeout(15000),
-      });
-      const responseBody = await response.text();
-      if (!response.ok) throw new Error(`Connector returned HTTP ${response.status}`);
-      let normalized: Record<string, unknown> = {};
-      try { normalized = JSON.parse(responseBody); } catch { /* provider may return an empty body */ }
+      let normalized: Record<string, unknown>;
+      if (isPaymentGateway) {
+        normalized = await dispatchPaymentGatewayEvent(String(event.provider_code), connector, token, String(event.event_type), outboundPayload as Record<string, unknown>);
+      } else {
+        const baseUrl = connector.baseUrl as string;
+        const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+        if (base.protocol !== 'https:' && base.hostname !== 'host.docker.internal' && base.hostname !== 'localhost') {
+          throw new Error('Connector URL must use HTTPS');
+        }
+        const response = await fetch(new URL(route, base), {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': String(event.idempotency_key) },
+          body: JSON.stringify(outboundPayload),
+          signal: AbortSignal.timeout(15000),
+        });
+        const responseBody = await response.text();
+        if (!response.ok) throw new Error(`Connector returned HTTP ${response.status}`);
+        normalized = {};
+        try { normalized = JSON.parse(responseBody); } catch { /* provider may return an empty body */ }
+      }
       if (event.event_type === 'payment.intent.create' && (typeof normalized.checkout_url !== 'string' || !normalized.checkout_url.startsWith('https://'))) {
         throw new Error('Gateway did not return a secure checkout URL');
       }

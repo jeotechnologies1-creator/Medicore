@@ -27,6 +27,7 @@ const appData = getAppData();
             const [appointmentMessage, setAppointmentMessage] = useState('');
             const [submittingAppointment, setSubmittingAppointment] = useState(false);
             const [paymentGateways, setPaymentGateways] = useState([]);
+            const [selectedPaymentGatewayId, setSelectedPaymentGatewayId] = useState('');
             const [providerPayments, setProviderPayments] = useState([]);
             const [portalDataError, setPortalDataError] = useState('');
             const [checkoutMessage, setCheckoutMessage] = useState('');
@@ -80,7 +81,11 @@ const appData = getAppData();
                 client.from('integration_connections').select('id,facility_id,provider_code').eq('integration_type', 'payment_gateway').eq('status', 'active').then(({ data, error }) => {
                     if (!active) return;
                     if (error) setPortalDataError('Online payment availability could not be checked.');
-                    else setPaymentGateways(data || []);
+                    else {
+                        const gateways = data || [];
+                        setPaymentGateways(gateways);
+                        setSelectedPaymentGatewayId((current) => gateways.some((gateway) => gateway.id === current) ? current : (gateways[0]?.id || ''));
+                    }
                 }).catch(() => {
                     if (active) setPortalDataError('Online payment availability could not be checked.');
                 });
@@ -191,7 +196,8 @@ const appData = getAppData();
                         client.from('payment_provider_transactions').select('id,billing_id,amount,currency,status,checkout_url,created_at').order('created_at', { ascending: false })
                     ]);
                     if (gatewayResult.error || transactionResult.error) throw gatewayResult.error || transactionResult.error;
-                    setPaymentGateways(gatewayResult.data || []); setProviderPayments(transactionResult.data || []);
+                    const gateways = gatewayResult.data || [];
+                    setPaymentGateways(gateways); setSelectedPaymentGatewayId((current) => gateways.some((gateway) => gateway.id === current) ? current : (gateways[0]?.id || '')); setProviderPayments(transactionResult.data || []);
                     setCheckoutMessage('Payment status refreshed.');
                 } catch (error) {
                     console.error('Portal payment refresh failed:', error);
@@ -201,7 +207,7 @@ const appData = getAppData();
 
             const startCheckout = async (invoice) => {
                 const client = window.OneMedSupabase?.getClient?.();
-                const gateway = paymentGateways[0];
+                const gateway = paymentGateways.find((item) => item.id === selectedPaymentGatewayId) || paymentGateways[0];
                 if (!client || !gateway) { setCheckoutMessage('Online payment is not configured for this facility. Please use the listed bank transfer instructions.'); return; }
                 setCheckoutUrl('');
                 setCheckoutMessage('Creating secure checkout…');
@@ -480,6 +486,7 @@ const appData = getAppData();
                                     ]}
                                     data={appData.billing.filter(b => b.patientId === patient.id)}
                                 />
+                                {paymentGateways.length > 1 && <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">Payment provider<select className="rounded border border-slate-300 px-2 py-1" value={selectedPaymentGatewayId} onChange={(event) => setSelectedPaymentGatewayId(event.target.value)}>{paymentGateways.map((gateway) => <option key={gateway.id} value={gateway.id}>{gateway.provider_code}</option>)}</select></label>}
                                 {checkoutMessage && <p role="status" className="mt-3 text-sm text-slate-700">{checkoutMessage}{checkoutUrl && <> <a className="font-medium text-medical-700 underline" href={checkoutUrl} target="_blank" rel="noopener noreferrer">Continue to secure checkout</a></>}</p>}
                                 <div className="mt-3 flex items-center justify-between"><p className="text-xs text-slate-500">Provider payments remain pending until the provider webhook is received and Accounts reviews the payment.</p><Button size="sm" variant="ghost" onClick={refreshPayments}>Refresh payment status</Button></div>
                             </Card>
