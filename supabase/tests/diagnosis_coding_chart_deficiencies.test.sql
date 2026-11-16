@@ -1,0 +1,18 @@
+begin;
+select plan(14);
+select has_table('public','encounter_diagnosis_codes','diagnosis coding assignment table exists');
+select has_table('public','coding_clinician_queries','clinician query workflow exists');
+select has_table('public','chart_audit_templates','versioned chart audit templates exist');
+select has_table('public','chart_deficiencies','assigned chart deficiencies exist');
+select has_view('public','discharged_encounter_coding_worklist','discharged encounter worklist exists');
+select has_view('public','coding_completeness_by_department','coding completeness metrics exist');
+select has_view('public','chart_deficiency_compliance_by_department','department compliance metrics exist');
+select has_trigger('public','encounter_diagnosis_codes','audit_encounter_diagnosis_codes','diagnosis assignment writes are audited');
+select has_trigger('public','coding_clinician_queries','audit_coding_clinician_queries','clinician query writes are audited');
+select has_trigger('public','chart_audit_templates','audit_chart_audit_templates','template versions are audited');
+select has_trigger('public','chart_deficiencies','audit_chart_deficiencies','deficiencies and resolutions are audited');
+select ok(exists(select 1 from pg_constraint where conrelid='public.encounter_diagnosis_codes'::regclass and contype='f' and confrelid='public.concepts'::regclass), 'diagnosis codes must reference loaded concepts');
+select ok(exists(select 1 from public.role_permission_grants where role='records_officer' and permission_key='coding.manage' and scope='facility'), 'records officers receive facility-scoped coding permission');
+select ok(not exists(select 1 from public.encounter_diagnosis_codes), 'migration adds no diagnosis codes');
+select * from finish();
+rollback;

@@ -272,6 +272,18 @@ assert.match(accountingRollback, /Rollback refused/, 'Rollback must preserve sup
 assert.match(accountingTests, /non-finance roles cannot read AP ageing[\s\S]*database trigger rejects a posting dated in a closed period/, 'pgTAP must cover finance-only visibility and period enforcement.');
 assert.match(billingUi, /Accounting periods[\s\S]*Accounts receivable ageing[\s\S]*Trial balance/, 'Billing must expose AR ageing, trial balance, and accounting period controls.');
 assert.match(deploymentDocs, /Billing → General Ledger exposes supplier invoice capture[\s\S]*trial balance/, 'Deployment docs must locate the AR/AP and ledger workflows.');
+const codingMigration = await read('supabase/migrations/20261116000066_diagnosis_coding_chart_deficiencies.sql');
+const codingRollback = await read('supabase/rollback/20261116000066_diagnosis_coding_chart_deficiencies.sql');
+const codingTests = await read('supabase/tests/diagnosis_coding_chart_deficiencies.test.sql');
+assert.match(codingMigration, /foreign key\(code_system,code\) references public\.concepts\(system,code\)/, 'Diagnosis assignments must reference loaded concepts.');
+assert.match(codingMigration, /code_system_version/, 'Diagnosis assignments must retain terminology version metadata.');
+assert.match(codingMigration, /discharged_encounter_coding_worklist[\s\S]*coding_completeness_by_department/, 'Coding worklist and completeness metrics must be available.');
+assert.match(codingMigration, /ask_coding_clinician_query[\s\S]*respond_coding_clinician_query/, 'Coding queries must support clinician response.');
+assert.match(codingMigration, /chart_audit_templates[\s\S]*chart_deficiencies[\s\S]*assigned_clinician_id[\s\S]*due_date/, 'Chart audits must support configurable templates and assigned, dated deficiencies.');
+assert.match(codingMigration, /chart_deficiency_compliance_by_department/, 'Chart compliance must be reported by department.');
+assert.match(codingMigration, /records_officer[\s\S]*coding\.manage/, 'Records officers must receive facility-scoped coding permission.');
+assert.match(codingRollback, /Rollback|archive them before rollback/, 'Rollback must preserve existing coding and audit history.');
+assert.match(codingTests, /migration adds no diagnosis codes/, 'pgTAP must verify that the workflow does not bundle codes.');
 const paymentGatewayMigration = await read('supabase/migrations/20261116000064_payment_gateway_vendor_adapters.sql');
 const paymentGatewayRollback = await read('supabase/rollback/20261116000064_payment_gateway_vendor_adapters.sql');
 const gatewayAdapter = await read('supabase/functions/_shared/payment_gateway_adapters.ts');
