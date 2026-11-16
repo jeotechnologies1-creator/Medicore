@@ -11,14 +11,14 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('super_admin','patient.import.stage','global'),('super_admin','patient.import.review','global')
 on conflict do nothing;
 
-create table public.patient_import_batches(
+create table if not exists public.patient_import_batches(
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  source_name text not null, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now(),
  status text not null default 'staged' check(status in ('staged','partially_approved','approved','rolled_back')),
  rolled_back_at timestamptz, rolled_back_by uuid references public.profiles(id), rollback_reason text,
  check((status='rolled_back' and rolled_back_at is not null and rolled_back_by is not null) or (status<>'rolled_back' and rolled_back_at is null and rolled_back_by is null))
 );
-create table public.patient_import_rows(
+create table if not exists public.patient_import_rows(
  id uuid primary key default gen_random_uuid(), batch_id uuid not null references public.patient_import_batches(id) on delete restrict,
  source_record_key text not null, row_number integer not null, raw_data jsonb not null,
  validation_errors jsonb not null default '[]'::jsonb, duplicate_candidates jsonb not null default '[]'::jsonb,
@@ -30,17 +30,20 @@ create table public.patient_import_rows(
        (status in ('approved','skipped','rolled_back') and reviewer_id is not null and reviewed_at is not null)),
  check(status<>'approved' or created_patient_id is not null)
 );
-create unique index patient_import_source_global_uidx on public.patient_import_rows(source_record_key);
-create index patient_import_review_queue_idx on public.patient_import_batches(facility_id,status,created_at desc);
-create index patient_import_rows_batch_idx on public.patient_import_rows(batch_id,status,row_number);
+create unique index if not exists patient_import_source_global_uidx on public.patient_import_rows(source_record_key);
+create index if not exists patient_import_review_queue_idx on public.patient_import_batches(facility_id,status,created_at desc);
+create index if not exists patient_import_rows_batch_idx on public.patient_import_rows(batch_id,status,row_number);
 do $$ declare t text; begin foreach t in array array['patient_import_batches','patient_import_rows'] loop
  execute format('alter table public.%I enable row level security',t);
  execute format('revoke all on public.%I from public,anon,authenticated',t);
  execute format('grant select on public.%I to authenticated',t);
  execute format('grant select,insert,update on public.%I to service_role',t);
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop policy if exists patient_import_batch_read on public.patient_import_batches;
 create policy patient_import_batch_read on public.patient_import_batches for select to authenticated using(public.has_org_permission('patient.import.review',facility_id,null) or public.has_org_permission('patient.import.stage',facility_id,null));
+drop policy if exists patient_import_row_read on public.patient_import_rows;
 create policy patient_import_row_read on public.patient_import_rows for select to authenticated using(exists(select 1 from public.patient_import_batches b where b.id=batch_id and (public.has_org_permission('patient.import.review',b.facility_id,null) or public.has_org_permission('patient.import.stage',b.facility_id,null))));
 
 create or replace function public.stage_patient_import(p_facility_id uuid,p_operator_profile_id uuid,p_source_name text,p_rows jsonb)
