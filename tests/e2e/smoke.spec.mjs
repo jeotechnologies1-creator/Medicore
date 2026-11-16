@@ -181,6 +181,28 @@ test('login enforces MFA enrollment and service price changes require a second a
     await expect(page.getByText('This module could not be loaded. Reload the page and try again.')).toHaveCount(0);
     await expect(page.locator('#main-content')).not.toBeEmpty();
   }
+  await page.getByRole('button', { name: 'Clinical Workflows', exact: true }).click();
+  await page.getByLabel('Patient').selectOption({ label: `CI ${patientName}` });
+  await page.getByLabel('Presenting complaint / circumstances').fill('TEST synthetic consultation encounter');
+  await page.getByRole('button', { name: 'Register encounter' }).click();
+  await expect(page.getByText('Encounter registered.')).toBeVisible();
+  await page.getByRole('button', { name: 'Consultations', exact: true }).click();
+  await page.getByLabel('Patient').selectOption({ label: `CI ${patientName}` });
+  await page.getByLabel('Encounter').selectOption({ label: /TEST synthetic consultation encounter/ });
+  await page.getByLabel('Chief Complaint').fill('TEST synthetic chief complaint');
+  await page.getByLabel('Diagnosis').fill('TEST synthetic diagnosis');
+  await page.getByLabel('Assessment').fill('TEST synthetic assessment');
+  await page.getByLabel('Plan / Treatment').fill('TEST synthetic plan');
+  await page.getByRole('button', { name: 'Save Draft' }).click();
+  await expect(page.getByText(/Draft consultation saved/)).toBeVisible();
+  const noteCard = page.locator('article').filter({ hasText: 'TEST synthetic chief complaint' }).first();
+  await noteCard.getByRole('button', { name: 'Sign note' }).click();
+  await expect(page.getByText(/Consultation signed and locked/)).toBeVisible();
+  await noteCard.getByRole('button', { name: 'History' }).click();
+  await page.getByLabel('Correction reason').fill('TEST synthetic correction reason');
+  await page.getByLabel('Addendum').fill('TEST synthetic correction detail');
+  await page.getByRole('button', { name: 'Addendum', exact: true }).click();
+  await expect(page.getByText('TEST synthetic correction reason')).toBeVisible();
   await page.getByRole('button', { name: 'Billing', exact: true }).click();
   await page.getByRole('button', { name: 'Price Catalogue', exact: true }).click();
   await page.getByLabel('Facility').selectOption('a1000000-0000-4000-8000-000000000001');

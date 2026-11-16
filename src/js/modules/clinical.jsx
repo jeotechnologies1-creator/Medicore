@@ -4,8 +4,11 @@ const appData = getAppData();
         const ConsultationsModule = () => {
             const { user } = useAuth();
             const [consultations, setConsultations] = useState(getAppData().consultations || []);
-            const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
+            const [form, setForm] = useState({ patientId: '', encounterId: '', doctorId: user?.id || '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
             const [consultationMessage, setConsultationMessage] = useState('');
+            const [historyNote, setHistoryNote] = useState(null);
+            const [historyRows, setHistoryRows] = useState([]);
+            const [addendumForm, setAddendumForm] = useState({ reason: '', content: '' });
             const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, formularyItemId: '', quantity: 1, dose: '', doseUnit: '', route: '', frequency: '', duration: '', instructions: '', priority: 'routine' });
             const [prescriptionMessage, setPrescriptionMessage] = useState('');
             const [formulary, setFormulary] = useState([]);
@@ -20,21 +23,47 @@ const appData = getAppData();
             }, []);
 
             const handleSaveConsultation = async () => {
-                if (!form.patientId || !form.chiefComplaint.trim() || !form.diagnosis.trim() || !form.assessment.trim() || !form.plan.trim()) return setConsultationMessage('Patient, presenting complaint, diagnosis, assessment, and plan are required before finalizing.');
+                if (!form.patientId || !form.encounterId || !form.doctorId || !form.chiefComplaint.trim() || !form.diagnosis.trim() || !form.assessment.trim() || !form.plan.trim()) return setConsultationMessage('Patient, encounter, author, presenting complaint, diagnosis, assessment, and plan are required.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return setConsultationMessage('The clinical database is unavailable. No consultation was saved.');
-                const encounter = (appData.encounters || []).find((item) => item.patientId === form.patientId && !item.endedAt);
                 const { data, error } = await client.from('consultations').insert({
-                    patient_id: form.patientId, encounter_id: encounter?.id || null, doctor_id: form.doctorId || user?.id || null, chief_complaint: form.chiefComplaint,
+                    patient_id: form.patientId, encounter_id: form.encounterId, doctor_id: form.doctorId, chief_complaint: form.chiefComplaint,
                     diagnosis: form.diagnosis || null, code_system: form.diagnosisCodeSystem, code: form.diagnosisCode, display: form.diagnosisDisplay, assessment: form.assessment || null, plan: form.plan || null,
-                    follow_up_date: form.followUpDate || null, status: 'completed'
+                    follow_up_date: form.followUpDate || null, status: 'draft', note_state: 'draft'
                 }).select();
                 if (error || !data?.[0]) return setConsultationMessage(error?.message || 'Consultation was not saved.');
                 const next = [normalizeConsultations(data)[0], ...consultations];
                 appData.consultations = next;
                 setConsultations(next);
-                setForm({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
-                setConsultationMessage('Consultation finalized and saved to the patient record.');
+                setForm({ patientId: '', encounterId: '', doctorId: user?.id || '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
+                setConsultationMessage('Draft consultation saved. Sign it when it is ready to become immutable.');
+            };
+
+            const signConsultation = async (note) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                const { error } = await client.rpc('sign_consultation', { p_consultation_id: note.id });
+                if (error) return setConsultationMessage(error.message);
+                const next = consultations.map((row) => row.id === note.id ? { ...row, note_state: 'signed', status: 'completed' } : row);
+                setConsultations(next); appData.consultations = next;
+                setConsultationMessage('Consultation signed and locked. Corrections must be recorded as an addendum.');
+            };
+
+            const showConsultationHistory = async (note) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                const [{ data: signature }, { data: addenda }] = await Promise.all([
+                    client.from('consultation_signatures').select('author_id,signed_at').eq('consultation_id', note.id).maybeSingle(),
+                    client.from('consultation_addenda').select('id,reason,content,author_id,created_at').eq('consultation_id', note.id).order('created_at')
+                ]);
+                setHistoryRows([{ type: 'original', ...note, signature }, ...(addenda || []).map((item) => ({ ...item, type: 'addendum' }))]);
+                setHistoryNote(note);
+            };
+
+            const saveAddendum = async () => {
+                if (!addendumForm.reason.trim() || !addendumForm.content.trim()) return setConsultationMessage('A reason and addendum content are required.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('add_consultation_addendum', { p_consultation_id: historyNote.id, p_reason: addendumForm.reason, p_content: addendumForm.content });
+                if (error) return setConsultationMessage(error.message);
+                setAddendumForm({ reason: '', content: '' });
+                await showConsultationHistory(historyNote);
             };
 
             const savePrescription = async () => {
@@ -70,15 +99,16 @@ const appData = getAppData();
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="New Consultation" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getAppData().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value, encounterId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Encounter" value={form.encounterId} onChange={(e) => setForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'Select encounter...' }, ...(appData.encounters || []).filter(item => item.patientId === form.patientId).map(item => ({ value: item.id, label: `${item.encounterType || 'Encounter'} · ${item.reasonForVisit || item.startedAt || item.id}` }))]} />
+                                <p className="text-xs text-slate-500">Author: {user?.name || 'Signed-in clinician'}</p>
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
                                 <CodedConceptInput label="Diagnosis" value={form.diagnosis} codeSystem={form.diagnosisCodeSystem} code={form.diagnosisCode} display={form.diagnosisDisplay} onChange={(term) => setForm(prev => ({ ...prev, diagnosis: term.value, diagnosisCodeSystem: term.codeSystem, diagnosisCode: term.code, diagnosisDisplay: term.display }))} />
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
                                 <TextArea label="Plan / Treatment" value={form.plan} onChange={(e) => setForm(prev => ({ ...prev, plan: e.target.value }))} rows={3} />
                                 <Input label="Follow-up Date" type="date" value={form.followUpDate} onChange={(e) => setForm(prev => ({ ...prev, followUpDate: e.target.value }))} />
                                 {consultationMessage && <p className="text-sm text-slate-700" role="status">{consultationMessage}</p>}
-                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveConsultation}>Save Consultation</Button>
+                                <Button variant="primary" className="w-full justify-center" icon={Icons.Save} onClick={handleSaveConsultation}>Save Draft</Button>
                             </div>
                         </Card>
 
@@ -97,21 +127,15 @@ const appData = getAppData();
                         {prescriptionMessage && <p className="mt-3 text-sm text-slate-700" role="status">{prescriptionMessage}</p>}<Button className="mt-4" variant="primary" onClick={savePrescription}>Send prescription to pharmacy</Button>
                     </Card>}
 
-                    <Card title="Recent Encounters">
-                        <DataTable
-                            columns={[
-                                { key: 'createdAt', title: 'Date', render: (row) => formatDateTime(row.createdAt) },
-                                { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = appData.patients.find(p => p.id === row.patientId);
-                                    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
-                                }},
-                                { key: 'chiefComplaint', title: 'Complaint' },
-                                { key: 'diagnosis', title: 'Diagnosis' },
-                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : 'default'}>{row.status}</Badge> }
-                            ]}
-                            data={consultations.slice(0, 10)}
-                        />
+                    <Card title="Consultation history">
+                        <div className="space-y-3">{consultations.slice(0, 10).map((note) => <article key={note.id} className="rounded-lg border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong>{(appData.patients || []).find((p) => p.id === note.patientId)?.firstName || 'Patient'} · {note.chiefComplaint || 'Consultation'}</strong><p className="text-xs text-slate-500">{formatDateTime(note.createdAt)} · {note.note_state || 'draft'}</p></div><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => showConsultationHistory(note)}>History</Button>{note.note_state !== 'signed' && note.doctorId === user?.id && <Button size="sm" variant="primary" onClick={() => signConsultation(note)}>Sign note</Button>}</div></div><p className="mt-2 text-sm text-slate-600">{note.assessment}</p></article>)}</div>
                     </Card>
+
+                    {historyNote && <div role="dialog" aria-modal="true" aria-label="Consultation history" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><Card title="Signed note history" className="max-h-[85vh] w-full max-w-2xl overflow-auto"><div className="space-y-4">{historyRows.map((item) => { const authorId = item.type === 'original' ? item.signature?.author_id : item.author_id; const author = (getAppData().users || []).find((person) => person.id === authorId)?.name || authorId || 'Unknown'; return <article key={item.id} className="border-l-2 border-medical-500 pl-4"><strong>{item.type === 'original' ? 'Original signed note' : 'Addendum'}</strong><p className="text-xs text-slate-500">{formatDateTime(item.type === 'original' ? item.signature?.signed_at : item.created_at)} · Author {author}</p>{item.type === 'addendum' && <p className="text-sm"><strong>Reason:</strong> {item.reason}</p>}<p className="whitespace-pre-wrap text-sm">{item.type === 'original' ? `${item.chiefComplaint}\n${item.diagnosis}\n${item.assessment}\n${item.plan}` : item.content}</p></article>; })}
+                        {historyNote.note_state === 'signed' && <><TextArea label="Correction reason" value={addendumForm.reason} onChange={(event) => setAddendumForm((current) => ({ ...current, reason: event.target.value }))} rows={2} />
+                        <TextArea label="Addendum" value={addendumForm.content} onChange={(event) => setAddendumForm((current) => ({ ...current, content: event.target.value }))} rows={3} /></>}
+                        <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setHistoryNote(null)}>Close</Button>{historyNote.note_state === 'signed' && <Button variant="primary" onClick={saveAddendum}>Addendum</Button>}</div>
+                    </div></Card></div>}
                 </div>
             );
         };
