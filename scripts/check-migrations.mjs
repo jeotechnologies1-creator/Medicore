@@ -5,10 +5,29 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationDirectory = path.join(repositoryRoot, 'supabase', 'migrations');
 const rollbackDirectory = path.join(repositoryRoot, 'supabase', 'rollback');
+const testDirectory = path.join(repositoryRoot, 'supabase', 'tests');
+const exceptionPath = path.join(testDirectory, 'migration-test-exceptions.json');
 const entries = (await readdir(migrationDirectory)).filter((name) => name.endsWith('.sql'));
 const errors = [];
 const timestampPattern = /^(\d{14})_[a-z0-9_]+\.sql$/;
 const timestamped = [];
+const exceptions = JSON.parse(await readFile(exceptionPath, 'utf8'));
+const exceptionByMigration = new Map(exceptions.map((entry) => [entry.migration, entry.reason]));
+const testFiles = new Set((await readdir(testDirectory)).filter((name) => name.endsWith('.test.sql')));
+const hasMatchingTest = (migrationName) => {
+  const exact = `${migrationName.slice(0, -4)}.test.sql`;
+  const feature = migrationName.replace(/^\d{14}_/, '').replace(/\.sql$/, '');
+  return testFiles.has(exact) || [...testFiles].some((file) => {
+    const testFeature = file.replace(/^\d{14}_/, '').replace(/\.test\.sql$/, '');
+    return testFeature === feature || testFeature.startsWith(`${feature}_`);
+  });
+};
+
+for (const entry of exceptions) {
+  if (!entry.migration || !entry.reason || entry.reason.trim().length < 20) {
+    errors.push(`Invalid test coverage exception: each entry needs a migration and a reason of at least 20 characters`);
+  }
+}
 
 for (const name of entries) {
   const migrationPath = path.join(migrationDirectory, name);
@@ -34,6 +53,15 @@ for (const name of entries) {
   } catch {
     errors.push(`${name}: missing matching rollback/${name}`);
   }
+
+  if (!hasMatchingTest(name) && !exceptionByMigration.has(name)) {
+    errors.push(`${name}: missing corresponding migration or feature test and no justified exception is recorded`);
+  }
+}
+
+for (const exception of exceptions) {
+  if (!entries.includes(exception.migration)) errors.push(`${exception.migration}: stale migration test exception`);
+  if (hasMatchingTest(exception.migration)) errors.push(`${exception.migration}: remove exception because a matching test now exists`);
 }
 
 const chronological = [...timestamped].sort((left, right) => left.timestamp.localeCompare(right.timestamp));

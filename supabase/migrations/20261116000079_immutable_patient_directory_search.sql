@@ -16,7 +16,7 @@ begin
     (search_text='' or lower(x.first_name || ' ' || x.last_name || coalesce(' ' || x.patient_number,'') || coalesce(' ' || x.medical_record_number,'') || coalesce(' ' || x.phone,'')) like '%'||search_text||'%')
     and public.can_read_patient_record(x.id) and public.has_patient_facility_access(x.id)
     order by x.last_name,x.first_name,x.id offset p_offset limit p_limit loop
-    insert into public.patient_access_logs(patient_id,actor_id,action,purpose,source) values(p.id,auth.uid(),'search_result','patient_directory','search_patient_directory');
+    insert into public.patient_access_logs(patient_id,actor_id,action,purpose,source) values(p.id,actor_id,'search_result','patient_directory','search_patient_directory');
     return next p;
   end loop;
 end $$;

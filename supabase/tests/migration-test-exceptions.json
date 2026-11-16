@@ -1,0 +1,138 @@
+[
+  {
+    "migration": "20261026000001_schema.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000002_medical_offices.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000003_office_staff.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000004_wards_beds_insurance.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000005_clinical_modules.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000008_production_hardening.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000009_atomic_pharmacy_dispensing.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000010_quality_safety_upgrade.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000011_app_activation.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000012_role_authorization.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000013_safe_core_multibranch.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000014_receptionist_records_referrals.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000015_patient_appointment_coordination.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000016_accounts_payment_approval.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000017_hospital_workflows.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000018_workflow_completion.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000019_organization_permissions.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000020_finance_posting_refunds.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000021_clinical_department_rls.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000022_external_finance_integrations.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261026000023_patient_portal_chat_payments.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000024_document_storage_scope.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000025_specialist_clinical_authoring.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000026_clinical_record_retention.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000027_payment_dispute_workflow.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000028_appointment_slot_integrity.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261103000029_patient_facility_scope.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261111000031_lab_result_patient_visibility.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261112000032_critical_lab_in_app_alerts.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261112000046_screen_scoped_data_loading.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261112000047_patient_identity_merge_workflow.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261112000048_printable_documents_audit.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261116000060_surgical_safety_anaesthesia.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  },
+  {
+    "migration": "20261116000061_lab_accession_qc_radiology_flow.sql",
+    "reason": "Legacy baseline migration predates migration-specific suites; this explicit exception tracks coverage debt while the new gate requires direct tests for new migrations."
+  }
+]

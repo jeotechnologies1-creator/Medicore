@@ -116,20 +116,24 @@ end $$;
 
 create or replace function public.rollback_patient_import_batch(p_batch_id uuid,p_reason text)
 returns integer language plpgsql security definer set search_path=public as $$
-declare actor uuid; b public.patient_import_batches%rowtype; n integer; imported record; fk record; has_dependents boolean;
+declare actor uuid; b public.patient_import_batches%rowtype; n integer; imported record; fk record; has_dependents boolean; imported_patient_ids uuid[];
 begin
  actor:=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active'); select * into b from public.patient_import_batches where id=p_batch_id for update;
  if actor is null or b.id is null or not public.has_org_permission('patient.import.review',b.facility_id,null) or b.status='rolled_back' or length(btrim(coalesce(p_reason,'')))<10 then raise exception 'Authorized reviewer and documented rollback reason required'; end if;
+ select coalesce(array_agg(p.id),'{}'::uuid[]) into imported_patient_ids from public.patient_import_rows r join public.patients p on p.id=r.created_patient_id where r.batch_id=b.id and r.status='approved';
  for imported in select p.id from public.patient_import_rows r join public.patients p on p.id=r.created_patient_id where r.batch_id=b.id and r.status='approved' loop
   for fk in select ns.nspname schema_name,rel.relname table_name,att.attname column_name
     from pg_constraint con join pg_class rel on rel.oid=con.conrelid join pg_namespace ns on ns.oid=rel.relnamespace
     join pg_attribute att on att.attrelid=rel.oid and att.attnum=con.conkey[1]
-    where con.contype='f' and con.confrelid='public.patients'::regclass and array_length(con.conkey,1)=1 and rel.oid<>'public.patients'::regclass loop
+    where con.contype='f' and con.confrelid='public.patients'::regclass and array_length(con.conkey,1)=1
+      and rel.oid not in ('public.patients'::regclass,'public.patient_import_rows'::regclass) loop
    execute format('select exists(select 1 from %I.%I where %I=$1)',fk.schema_name,fk.table_name,fk.column_name) into has_dependents using imported.id;
    if has_dependents then raise exception 'Rollback refused: imported patient % has dependent rows in %.%',imported.id,fk.schema_name,fk.table_name; end if;
   end loop;
  end loop;
- delete from public.patients p using public.patient_import_rows r where r.batch_id=b.id and r.created_patient_id=p.id and r.status='approved';
+ -- Keep the quarantine audit row while releasing its restrictive patient FK.
+ update public.patient_import_rows set status='rolled_back',created_patient_id=null where batch_id=b.id and status='approved';
+ delete from public.patients where id=any(imported_patient_ids);
  get diagnostics n=row_count;
  update public.patient_import_rows set status='rolled_back' where batch_id=b.id and status in ('approved','skipped');
  update public.patient_import_batches set status='rolled_back',rolled_back_at=now(),rolled_back_by=actor,rollback_reason=btrim(p_reason) where id=b.id; return n;

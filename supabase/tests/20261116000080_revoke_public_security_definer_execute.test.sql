@@ -13,7 +13,7 @@ select ok(not exists (
   select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname='public' and p.prokind='f' and p.prosecdef
     and has_function_privilege('authenticated',p.oid,'EXECUTE')
-    and p.oid <> all(array[
+    and p.oid::regprocedure <> all(array[
     'public.acknowledge_nursing_handover(uuid)'::regprocedure,
     'public.acknowledge_payment_dispute_alert(uuid)'::regprocedure,
     'public.add_consultation_addendum(uuid,text,text)'::regprocedure,
@@ -224,7 +224,7 @@ select ok(not exists (
     'public.verify_data_subject_request(uuid,text,text)'::regprocedure,
     'public.verify_release_information_request(uuid,text,text,text)'::regprocedure,
     'public.verify_vital_registration(text,uuid,text,text)'::regprocedure
-    ]::oid[])
+    ]::regprocedure[])
 ), 'authenticated SECURITY DEFINER execution is limited to the reviewed allowlist');
 
 select ok(not has_function_privilege('authenticated','public.discharge_context(uuid)','EXECUTE')

@@ -36,10 +36,13 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci --no-audit --no-fund
       - name: Lint
+        id: lint
         run: npm run lint
       - name: Static checks
+        id: static
         run: npm test
       - name: Check migration order and rollback coverage
+        id: migrations
         run: npm run check:migrations
 
       - name: Start Supabase
@@ -47,7 +50,11 @@ jobs:
       - name: Reset local database and apply all migrations
         run: supabase db reset
       - name: Run pgTAP database tests
+        id: pgtap
         run: supabase test db
+      - name: Run Edge Function tests
+        id: edge
+        run: npm run test:edge
 
       - name: Export local Supabase credentials
         shell: bash
@@ -59,12 +66,37 @@ jobs:
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
-      - name: Build frontend
+      - name: Build frontend and enforce bundle size
+        id: build
         run: npm run build
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Run Playwright smoke tests
+        id: e2e
         run: npm run test:e2e
+      - name: Write CI suite summary
+        if: always()
+        env:
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          STATIC_OUTCOME: ${{ steps.static.outcome }}
+          MIGRATION_OUTCOME: ${{ steps.migrations.outcome }}
+          PGTAP_OUTCOME: ${{ steps.pgtap.outcome }}
+          EDGE_OUTCOME: ${{ steps.edge.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+        run: |
+          {
+            echo '## CI suites'
+            echo '| Suite | Result |'
+            echo '| --- | --- |'
+            echo "| Lint | ${LINT_OUTCOME:-not run} |"
+            echo "| Static checks | ${STATIC_OUTCOME:-not run} |"
+            echo "| Migration and test coverage gate | ${MIGRATION_OUTCOME:-not run} |"
+            echo "| pgTAP database tests | ${PGTAP_OUTCOME:-not run} |"
+            echo "| Edge Function tests | ${EDGE_OUTCOME:-not run} |"
+            echo "| Frontend build and bundle-size check | ${BUILD_OUTCOME:-not run} |"
+            echo "| Playwright E2E | ${E2E_OUTCOME:-not run} |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Stop Supabase
         if: always()
         run: supabase stop --no-backup
