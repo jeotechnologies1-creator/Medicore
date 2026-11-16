@@ -294,6 +294,7 @@ const appData = getAppData();
                             <Card title="Low-stock inventory"><DataTable columns={[{ key: 'name', title: 'Item' }, { key: 'stockQuantity', title: 'Stock' }, { key: 'reorderLevel', title: 'Reorder level' }]} data={lowStockItems} /></Card>
                         </div>
                     )}
+
                 </div>
             );
         };
@@ -812,6 +813,15 @@ const appData = getAppData();
             const [payerWorkflowRecords, setPayerWorkflowRecords] = useState({ eligibility: [], preauthorizations: [], batches: [] });
             const [payerPlanDraft, setPayerPlanDraft] = useState({ facilityId: '', payerCode: '', planCode: '', displayName: '', requiredClaimFields: ['claim_number','billing_id','membership_id','amount_claimed'] });
             const [ledgerEntries, setLedgerEntries] = useState([]);
+            const [arAgeing, setArAgeing] = useState([]);
+            const [trialBalance, setTrialBalance] = useState([]);
+            const [accountingPeriods, setAccountingPeriods] = useState([]);
+            const [payableInvoices, setPayableInvoices] = useState([]);
+            const [payableDraft, setPayableDraft] = useState({ facilityId: '', supplier: '', invoiceNumber: '', invoiceDate: new Date().toISOString().slice(0, 10), dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), amount: '', currency: 'NGN', description: '' });
+            const [periodDraft, setPeriodDraft] = useState(() => {
+                const year = new Date().getFullYear() + 1;
+                return { facilityId: '', name: String(year), startsOn: `${year}-01-01`, endsOn: `${year}-12-31` };
+            });
             const [integrationMessage, setIntegrationMessage] = useState('');
             const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', payerPlanId: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
             const [membershipMessage, setMembershipMessage] = useState('');
@@ -889,9 +899,20 @@ const appData = getAppData();
                         client.from('claim_batches').select('id,payer_plan_id,status,created_at,submitted_at').order('created_at', { ascending: false }).limit(100),
                     ]).then(([eligibility, preauthorizations, batches]) => setPayerWorkflowRecords({ eligibility: eligibility.data || [], preauthorizations: preauthorizations.data || [], batches: batches.data || [] }));
                 }
-                if (activeTab === 'ledger') client.from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }).then(({ data, error }) => {
-                    if (!error) setLedgerEntries(data || []);
-                    else setIntegrationMessage(error.message);
+                if (activeTab === 'ledger') Promise.all([
+                    client.from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }),
+                    client.from('accounts_receivable_ageing').select('*').order('age_days', { ascending: false }),
+                    client.from('trial_balance_report').select('*').order('period_name').order('account_code'),
+                    client.from('accounting_periods').select('*').order('starts_on', { ascending: false }),
+                    client.from('accounts_payable_ageing').select('*').order('due_date'),
+                ]).then(([journal, ar, balance, periods, payables]) => {
+                    const error = journal.error || ar.error || balance.error || periods.error || payables.error;
+                    if (error) setIntegrationMessage(error.message);
+                    else {
+                        setLedgerEntries(journal.data || []); setArAgeing(ar.data || []); setTrialBalance(balance.data || []); setAccountingPeriods(periods.data || []); setPayableInvoices(payables.data || []);
+                        setPeriodDraft((draft) => ({ ...draft, facilityId: draft.facilityId || periods.data?.[0]?.facility_id || '' }));
+                        setPayableDraft((draft) => ({ ...draft, facilityId: draft.facilityId || periods.data?.[0]?.facility_id || '' }));
+                    }
                 });
             }, [activeTab]);
 
@@ -1090,6 +1111,47 @@ const appData = getAppData();
                 ,{ id: 'ledger', label: 'General Ledger' }
                 ,{ id: 'catalogue', label: 'Price Catalogue' }
             ];
+
+            const createAccountingPeriod = async () => {
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('create_accounting_period', {
+                    p_facility_id: periodDraft.facilityId || accountingPeriods[0]?.facility_id, p_period_name: periodDraft.name, p_starts_on: periodDraft.startsOn, p_ends_on: periodDraft.endsOn
+                });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage(`Accounting period ${periodDraft.name} opened.`);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+                const { data: rows } = await window.OneMedSupabase.getClient().from('accounting_periods').select('*').order('starts_on', { ascending: false });
+                setAccountingPeriods(rows || []);
+            };
+
+            const closeAccountingPeriod = async (period) => {
+                if (!window.confirm(`Close ${period.period_name}? New journal postings dated in this period will be rejected.`)) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('close_accounting_period', { p_period_id: period.id });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage(`Accounting period ${period.period_name} closed.`);
+                const { data } = await window.OneMedSupabase.getClient().from('accounting_periods').select('*').order('starts_on', { ascending: false });
+                setAccountingPeriods(data || []);
+            };
+
+            const createPayableInvoice = async () => {
+                const { error } = await window.OneMedSupabase.getClient().rpc('record_procurement_invoice', {
+                    p_facility_id: payableDraft.facilityId, p_supplier_name: payableDraft.supplier, p_invoice_number: payableDraft.invoiceNumber,
+                    p_invoice_date: payableDraft.invoiceDate, p_due_date: payableDraft.dueDate, p_amount: Number(payableDraft.amount),
+                    p_currency: payableDraft.currency, p_description: payableDraft.description || null
+                });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage('Supplier invoice recorded.');
+                const { data } = await window.OneMedSupabase.getClient().from('accounts_payable_ageing').select('*').order('due_date');
+                setPayableInvoices(data || []);
+            };
+
+            const paySupplierInvoice = async (invoice) => {
+                const amount = Number(window.prompt(`Payment amount for ${invoice.supplier_name} invoice ${invoice.invoice_number}`) || 0);
+                if (!amount) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('record_procurement_invoice_payment', { p_invoice_id: invoice.invoice_id, p_amount: amount, p_idempotency_key: `ap-payment-${window.crypto?.randomUUID?.() || Date.now()}` });
+                if (error) return setIntegrationMessage(error.message);
+                const { data } = await window.OneMedSupabase.getClient().from('accounts_payable_ageing').select('*').order('due_date');
+                setPayableInvoices(data || []);
+            };
 
             const createInsuranceMembership = async () => {
                 if (!membershipForm.patientId || !membershipForm.provider.trim() || !membershipForm.policyNumber.trim()) return setMembershipMessage('Patient, insurer, and policy number are required.');
@@ -1490,6 +1552,55 @@ const appData = getAppData();
 
                     {activeTab === 'ledger' && <div className="space-y-4">
                         {integrationMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{integrationMessage}</p>}
+                        <Card title="Accounting periods" subtitle="Closed periods reject all new journal entries. Record corrections in an open period after the closed period.">
+                            <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-5">
+                                <Select label="Facility" value={periodDraft.facilityId} onChange={(event) => setPeriodDraft({ ...periodDraft, facilityId: event.target.value })} options={[{ value: '', label: 'Select facility' }, ...Array.from(new Map(accountingPeriods.map((period) => [period.facility_id, { value: period.facility_id, label: period.facility_id }])).values())]} />
+                                <Input label="Period name" value={periodDraft.name} onChange={(event) => setPeriodDraft({ ...periodDraft, name: event.target.value })} />
+                                <Input label="Starts on" type="date" value={periodDraft.startsOn} onChange={(event) => setPeriodDraft({ ...periodDraft, startsOn: event.target.value })} />
+                                <Input label="Ends on" type="date" value={periodDraft.endsOn} onChange={(event) => setPeriodDraft({ ...periodDraft, endsOn: event.target.value })} />
+                                <Button className="self-end" variant="secondary" onClick={createAccountingPeriod}>Open period</Button>
+                            </div>
+                            <DataTable columns={[
+                                { key: 'period_name', title: 'Period' }, { key: 'facility_id', title: 'Facility' },
+                                { key: 'starts_on', title: 'Starts' }, { key: 'ends_on', title: 'Ends' }, { key: 'status', title: 'Status' },
+                                { key: 'close', title: 'Action', render: (row) => row.status === 'open' ? <Button size="sm" variant="secondary" onClick={() => closeAccountingPeriod(row)}>Close period</Button> : 'Closed' }
+                            ]} data={accountingPeriods} />
+                        </Card>
+                        <Card title="Accounts receivable ageing" subtitle="Open invoice balances by days since invoice date.">
+                            <DataTable columns={[
+                                { key: 'invoice_number', title: 'Invoice' }, { key: 'invoice_date', title: 'Invoice date' },
+                                { key: 'age_days', title: 'Age (days)' }, { key: 'outstanding', title: 'Outstanding', render: (row) => formatCurrency(row.outstanding) },
+                                { key: 'current_amount', title: '0–30 days', render: (row) => formatCurrency(row.current_amount) },
+                                { key: 'days_31_60', title: '31–60', render: (row) => formatCurrency(row.days_31_60) },
+                                { key: 'days_61_90', title: '61–90', render: (row) => formatCurrency(row.days_61_90) },
+                                { key: 'days_over_90', title: 'Over 90', render: (row) => formatCurrency(row.days_over_90) }
+                            ]} data={arAgeing} />
+                        </Card>
+                        <Card title="Accounts payable ageing" subtitle="Supplier invoice balances by days past due date. Record invoices and payments through the finance workflow.">
+                            <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                                <Select label="Facility" value={payableDraft.facilityId} onChange={(event) => setPayableDraft({ ...payableDraft, facilityId: event.target.value })} options={[{ value: '', label: 'Select facility' }, ...Array.from(new Map(accountingPeriods.map((period) => [period.facility_id, { value: period.facility_id, label: period.facility_id }])).values())]} />
+                                <Input label="Supplier" value={payableDraft.supplier} onChange={(event) => setPayableDraft({ ...payableDraft, supplier: event.target.value })} />
+                                <Input label="Invoice number" value={payableDraft.invoiceNumber} onChange={(event) => setPayableDraft({ ...payableDraft, invoiceNumber: event.target.value })} />
+                                <Input label="Amount" type="number" min="0.01" value={payableDraft.amount} onChange={(event) => setPayableDraft({ ...payableDraft, amount: event.target.value })} />
+                                <Input label="Invoice date" type="date" value={payableDraft.invoiceDate} onChange={(event) => setPayableDraft({ ...payableDraft, invoiceDate: event.target.value })} />
+                                <Input label="Due date" type="date" value={payableDraft.dueDate} onChange={(event) => setPayableDraft({ ...payableDraft, dueDate: event.target.value })} />
+                                <p className="self-end pb-2 text-sm text-slate-600">Currency: NGN</p>
+                                <Button className="self-end" variant="secondary" onClick={createPayableInvoice}>Record supplier invoice</Button>
+                            </div>
+                            <DataTable columns={[
+                                { key: 'supplier_name', title: 'Supplier' }, { key: 'invoice_number', title: 'Invoice' }, { key: 'due_date', title: 'Due date' }, { key: 'currency', title: 'Currency' },
+                                { key: 'outstanding', title: 'Outstanding', render: (row) => formatCurrency(row.outstanding) }, { key: 'overdue_days', title: 'Days overdue' },
+                                { key: 'action', title: 'Action', render: (row) => <Button size="sm" variant="secondary" onClick={() => paySupplierInvoice(row)}>Record payment</Button> }
+                            ]} data={payableInvoices} />
+                        </Card>
+                        <Card title="Trial balance" subtitle="Debits and credits grouped by facility, period, and ledger account.">
+                            <DataTable columns={[
+                                { key: 'period_name', title: 'Period' }, { key: 'account_code', title: 'Account' }, { key: 'account_name', title: 'Name' },
+                                { key: 'debit_total', title: 'Debits', render: (row) => formatCurrency(row.debit_total) },
+                                { key: 'credit_total', title: 'Credits', render: (row) => formatCurrency(row.credit_total) },
+                                { key: 'net_balance', title: 'Net', render: (row) => formatCurrency(row.net_balance) }
+                            ]} data={trialBalance} />
+                        </Card>
                         <Card title="Posted general-ledger journal" subtitle="Entries are immutable and delivered to each active facility ledger connector.">
                             <DataTable columns={[
                                 { key: 'posted_at', title: 'Posted', render: (row) => formatDateTime(row.posted_at) },

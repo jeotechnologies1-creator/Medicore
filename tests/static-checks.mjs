@@ -260,6 +260,18 @@ assert.match(payerWorkflow, /resubmit_denied_claim/, 'Denied claims must support
 assert.match(payerWorkflow, /process_payer_workflow_event/, 'Eligibility and authorization events must use normalized webhook processing.');
 assert.match(integrationWorker, /payer\.eligibility\.check/, 'Eligibility requests must use the existing leased integration outbox.');
 assert.match(integrationWebhook, /payer\.preauthorization\.updated/, 'Pre-authorization updates must use the signed webhook contract.');
+const accountingMigration = await read('supabase/migrations/20261116000065_accounts_receivable_payable_period_close.sql');
+const accountingRollback = await read('supabase/rollback/20261116000065_accounts_receivable_payable_period_close.sql');
+const accountingTests = await read('supabase/tests/accounts_receivable_payable_period_close.test.sql');
+assert.match(accountingMigration, /accounts_receivable_ageing[\s\S]*accounts_payable_ageing[\s\S]*trial_balance_report/, 'Accounting migration must expose AR, AP, and trial balance reports.');
+assert.match(accountingMigration, /journal_open_period_guard before insert on public\.journal_entries/, 'Closed-period enforcement must run on every journal insert.');
+assert.match(accountingMigration, /for update;[\s\S]*No open accounting period covers this posting date/, 'Posting checks must serialize against period close.');
+assert.match(accountingMigration, /post_ledger_adjustment[\s\S]*debit_total<>credit_total/, 'Manual corrections must be balanced immutable journal entries.');
+assert.match(accountingMigration, /record_procurement_invoice_payment/, 'Accounts payable must track supplier invoice payments.');
+assert.match(accountingRollback, /Rollback refused/, 'Rollback must preserve supplier invoices and period-close history.');
+assert.match(accountingTests, /non-finance roles cannot read AP ageing[\s\S]*database trigger rejects a posting dated in a closed period/, 'pgTAP must cover finance-only visibility and period enforcement.');
+assert.match(billingUi, /Accounting periods[\s\S]*Accounts receivable ageing[\s\S]*Trial balance/, 'Billing must expose AR ageing, trial balance, and accounting period controls.');
+assert.match(deploymentDocs, /Billing → General Ledger exposes supplier invoice capture[\s\S]*trial balance/, 'Deployment docs must locate the AR/AP and ledger workflows.');
 const paymentGatewayMigration = await read('supabase/migrations/20261116000064_payment_gateway_vendor_adapters.sql');
 const paymentGatewayRollback = await read('supabase/rollback/20261116000064_payment_gateway_vendor_adapters.sql');
 const gatewayAdapter = await read('supabase/functions/_shared/payment_gateway_adapters.ts');
