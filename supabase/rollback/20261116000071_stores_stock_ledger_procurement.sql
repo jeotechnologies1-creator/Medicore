@@ -1,0 +1,31 @@
+begin;
+set local lock_timeout='2s';
+set local statement_timeout='60s';
+drop trigger if exists pharmacy_stock_ledger_guard on public.pharmacy_inventory;
+drop trigger if exists pharmacy_stock_mapping_guard on public.pharmacy_inventory;
+drop trigger if exists apply_stock_movement_after_insert on public.stock_movements;
+drop function if exists public.guard_legacy_pharmacy_stock_change();
+drop function if exists public.guard_pharmacy_stock_mapping();
+drop function if exists public.apply_stock_movement();
+drop function if exists public.record_supplier_performance(uuid,uuid,numeric,numeric,text);
+drop function if exists public.return_supplier_goods(uuid,text,text,jsonb);
+drop function if exists public.receive_purchase_order(uuid,jsonb,text);
+drop function if exists public.approve_purchase_order(uuid,text,text);
+drop function if exists public.submit_purchase_order(uuid,uuid,text,jsonb);
+drop function if exists public.record_store_stock_movement(uuid,text,numeric,text,uuid,uuid,text,text);
+drop function if exists public.record_store_item_movement(uuid,text,numeric,text,uuid,uuid,text,text);
+drop function if exists public.link_pharmacy_lot_to_store(uuid,uuid,text,text);
+drop function if exists public.create_store_stock_item(uuid,text,text,text);
+drop function if exists public.create_procurement_supplier(uuid,text,jsonb);
+drop function if exists public.create_store_location(uuid,text,text);
+drop function if exists public.configure_purchase_approval_tier(uuid,numeric,numeric,integer,text);
+alter table public.pharmacy_inventory drop column if exists store_stock_item_id;
+drop table if exists public.supplier_performance_records,public.supplier_return_items,public.supplier_returns,public.goods_received_note_items,
+ public.goods_received_notes,public.purchase_order_approvals,public.purchase_order_items,public.purchase_orders,public.suppliers,public.purchase_approval_tiers,
+ public.stock_movements,public.stock_balances,public.store_stock_items,public.store_locations;
+drop index if exists public.pharmacy_inventory_facility_idx;
+alter table public.pharmacy_inventory drop column if exists facility_id;
+delete from public.role_permission_grants where permission_key in ('stock.read','stock.manage','procurement.manage','procurement.approve');
+delete from public.permission_catalog where permission_key in ('stock.read','stock.manage','procurement.manage','procurement.approve');
+notify pgrst,'reload schema';
+commit;
