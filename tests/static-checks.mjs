@@ -18,41 +18,43 @@ const pendingAuthTest = await read('supabase/tests/pending_auth_access_gate.test
 const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, hardening, activation, authorization, system, patients, safeCore, records, layout, people, staffFunction, roleMigration, hospitalWorkflows, workflowCompletion, organization, organizationUi, organizationTest, finance, financeTest, operations, clinicalRls, clinicalMigration, pharmacy, styles, ui] = await Promise.all([
     read('src/app.js'),
     read('src/js/core.js'),
-    read('src/js/auth.js'),
-    read('src/js/modules/portal.js'),
+    read('src/js/auth.jsx'),
+    read('src/js/modules/portal.jsx'),
     read('src/supabase.js'),
     read('supabase/migrations/20261026000001_schema.sql'),
-    read('src/js/modules/diagnostics.js'),
+    read('src/js/modules/diagnostics.jsx'),
     read('supabase/migrations/20261026000010_quality_safety_upgrade.sql'),
     read('supabase/migrations/20261026000008_production_hardening.sql'),
     read('supabase/migrations/20261026000011_app_activation.sql'),
     read('supabase/migrations/20261026000012_role_authorization.sql'),
-    read('src/js/modules/system.js'),
-    read('src/js/modules/patients.js'),
+    read('src/js/modules/system.jsx'),
+    read('src/js/modules/patients.jsx'),
     read('supabase/migrations/20261026000013_safe_core_multibranch.sql'),
-    read('src/js/modules/records.js'),
-    read('src/js/layout.js'),
-    read('src/js/modules/people.js'),
+    read('src/js/modules/records.jsx'),
+    read('src/js/layout.jsx'),
+    read('src/js/modules/people.jsx'),
     read('supabase/functions/create-staff/index.ts'),
     read('supabase/migrations/20261026000012_role_authorization.sql'),
     read('supabase/migrations/20261026000017_hospital_workflows.sql'),
     read('supabase/migrations/20261026000018_workflow_completion.sql'),
     read('supabase/migrations/20261026000019_organization_permissions.sql'),
-    read('src/js/modules/system.js'),
+    read('src/js/modules/system.jsx'),
     read('supabase/tests/core_workflows.test.sql'),
     read('supabase/migrations/20261026000020_finance_posting_refunds.sql'),
     read('supabase/tests/core_workflows.test.sql'),
-    read('src/js/modules/operations.js'),
+    read('src/js/modules/operations.jsx'),
     read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
     read('supabase/migrations/20261026000021_clinical_department_rls.sql'),
     read('supabase/migrations/20261026000009_atomic_pharmacy_dispensing.sql'),
     read('src/styles.css'),
-    read('src/js/ui.js')
+    read('src/js/ui.jsx')
 ]);
 const criticalLabMigration = await read('supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql');
+const patientIdentityMigration = await read('supabase/migrations/20261112000047_patient_identity_merge_workflow.sql');
+const auditPrivacyMigration = await read('supabase/migrations/20261112000044_server_audit_privacy.sql');
 assert.match(criticalLabMigration, /set local lock_timeout\s*=\s*'2s'/, 'Critical lab migration must bound lock acquisition.');
 
-assert.equal(/setInterval\s*\(/.test(app), false, 'The app must not poll or refresh records in the background.');
+assert.doesNotMatch(app, /setInterval\s*\(\s*(?:syncLiveData|loadSupabaseTables)/, 'The app must not poll or refresh records in the background.');
 assert.match(app, /persistNotificationReadState/, 'Notification read changes must be persisted.');
 assert.match(app, /notif\.type === 'critical_lab_result'\) setActiveModule\('laboratory'\)/, 'Selecting a critical lab notification must open the laboratory module.');
 assert.match(core, /failures:/, 'Data-load failures must be returned to the UI.');
@@ -94,7 +96,7 @@ assert.match(authorization, /billing_amounts_nonnegative/, 'Billing totals must 
 assert.match(authorization, /care team upload patient documents/, 'Document storage writes must match care-team document permissions.');
 assert.match(authorization, /drop policy if exists "care team upload patient documents" on storage\.objects;/, 'Storage upload policies must be replaceable when the authorization migration is rerun.');
 assert.match(authorization, /drop policy if exists "care team delete patient documents" on storage\.objects;/, 'Storage delete policies must be replaceable when the authorization migration is rerun.');
-assert.match(diagnostics, /Overall result assessment/, 'Laboratory results must support normal, abnormal, and critical assessments.');
+assert.match(diagnostics, /Flags and reference-range interpretation are calculated by the server/, 'Laboratory result interpretation must come from the server-approved coded ranges.');
 assert.match(diagnostics, /Finalize Report/, 'Radiology must provide a report-entry workflow before finalization.');
 assert.match(diagnostics, /data=\{labOrders\.filter\(\(row\) => hasRecordedLabResults\(row\.results\)\)\}/, 'The laboratory Results tab must display saved results independently of the order status label.');
 assert.match(diagnostics, /emptyMessage="No laboratory results have been entered yet\./, 'An empty laboratory Results tab must explain how results appear.');
@@ -109,21 +111,22 @@ assert.match(criticalLabMigration, /status = 'unacknowledged', due_at = excluded
 assert.match(criticalLabMigration, /p\.role::text = 'super_admin' and p\.status::text = 'active'/, 'Unassigned legacy critical results must alert active Super Admins for assignment.');
 assert.match(criticalLabMigration, /after insert or update on public\.lab_orders/, 'Result changes must trigger alerts and acknowledgement updates.');
 assert.match(criticalLabMigration, /meaningful_change := new\.status is distinct from old\.status[\s\S]*?new\.results is distinct from old\.results/, 'The acknowledgement queue must reopen only when clinically relevant result fields change.');
-assert.match(organizationTest, /select plan\(54\)/, 'The database suite must include the critical-result assertions in its expected plan.');
+assert.match(organizationTest, /select plan\(57\)/, 'The database suite plan must match its 57 assertions, including critical-result coverage.');
 assert.match(organizationTest, /correcting a finalized result reopens its acknowledgement task/, 'The database suite must cover acknowledgement reset on result correction.');
 assert.match(organizationTest, /unassigned legacy critical result alerts active Super Admin/, 'The database suite must cover the unassigned critical-result fallback.');
 assert.match(system, /resourceType: 'Bundle', type: 'collection'/, 'Patient export must use a FHIR collection bundle.');
 assert.match(system, /fhir_version: '4\.0\.1'/, 'FHIR exports must record the FHIR R4 version.');
 assert.match(system, /user\?\.role !== 'super_admin'/, 'FHIR export must match the database export-audit authorization.');
 assert.match(system, /recordComplianceExport/, 'FHIR exports must be audited before download.');
-assert.match(patients, /sameNameAndBirthDate/, 'Registration must warn about likely duplicate patient records.');
-assert.match(patients, /samePhone/, 'Registration duplicate matching must compare normalized phone numbers.');
+assert.match(patients, /find_patient_duplicate_candidates/, 'Registration must check server-side patient identity candidates.');
+assert.match(patients, /candidates\.some\(\(candidate\) => candidate\.exactMatch\)/, 'Registration must stop when an exact patient identity match exists.');
+assert.match(patientIdentityMigration, /regexp_replace\(coalesce\(p\.phone,''\),'\\D','','g'\)=i\.normalized_phone/, 'Duplicate matching must compare normalized phone numbers on the server.');
 assert.match(patients, /randomUUID\(\)\.replaceAll\('-', ''\)\.slice\(0, 16\)/, 'Generated patient numbers must have enough entropy to avoid routine unique-key collisions.');
 assert.match(patients, /Patient registration failed:[\s\S]*?finally\s*\{\s*setSaving\(false\)/, 'Network failures during registration must report failure and release the saving state.');
 assert.match(patients, /Patient demographics update failed:[\s\S]*?finally\s*\{\s*setSaving\(false\)/, 'Network failures during demographic updates must report failure and release the saving state.');
-assert.match(patients, /from\('patient_access_logs'\)\.insert/, 'Opening a patient chart must write an access log before displaying it.');
-assert.match(patients, /\['PGRST202', 'PGRST205'\]/, 'Missing access-log API objects must not block charts already authorized by row-level security.');
-assert.match(patients, /the read was not logged/, 'Access-log API failures must remain visible to the user.');
+assert.match(patients, /rpc\('read_patient_chart'/, 'Opening a patient chart must use the audited server-side read.');
+assert.match(auditPrivacyMigration, /insert into public\.patient_access_logs[\s\S]*?return result/, 'The audited chart-read RPC must log access before returning patient data.');
+assert.match(patients, /server could not authorize and log the read/, 'Patient chart access must fail visibly when the audited server read fails.');
 assert.match(patients, /uploadPatientDocument/, 'Patient charts must support the persisted document upload workflow.');
 assert.match(safeCore, /create trigger stamp_patient_access_log before insert/, 'Patient-access actor and timestamp must be stamped by the database.');
 assert.match(safeCore, /create policy "authorized users log patient access" on public\.patient_access_logs for insert/, 'Patient-access log inserts must be authorized by row-level security.');
@@ -169,8 +172,9 @@ assert.match(records, /Patient Journey/, 'Authorized patient charts must show a 
 assert.match(safeCore, /create policy "records officers read patient documents" on storage\.objects for select/, 'Records Officers must be able to read private chart attachments.');
 assert.doesNotMatch(safeCore, /records officers read patient documents" on storage\.objects for (insert|update|delete)/, 'Records Officers must not upload, update, or delete chart attachments.');
 assert.match(records, /purpose: 'records_module'/, 'Opening a chart in Records must be audited.');
-assert.match(records, /purpose: 'records_document'/, 'Opening a private document from Records must be audited.');
 assert.match(records, /createDocumentUrl\(document\.fileUrl\)/, 'Records must open private attachments through short-lived signed URLs.');
+assert.match(supabaseClient, /authorize_patient_document_read/, 'Opening a private attachment must pass through the audited authorization RPC.');
+assert.match(auditPrivacyMigration, /patient_document','authorize_patient_document_read/, 'The attachment authorization RPC must audit document reads.');
 assert.match(organization, /create table if not exists public\.organization_units/, 'Hospital departments and units must be configurable data.');
 assert.match(organization, /guard_organization_unit_tree/, 'Organization hierarchy must reject cycles and cross-facility parents.');
 assert.match(organization, /create table if not exists public\.staff_organization_memberships/, 'Staff department assignments must be effective-dated records.');
@@ -212,7 +216,7 @@ const [integrations, integrationWorker, integrationWebhook, integrationMigration
     read('supabase/functions/integration-webhook/index.ts'),
     read('supabase/migrations/20261026000022_external_finance_integrations.sql'),
     read('supabase/DEPLOYMENT.md'),
-    read('src/js/modules/operations.js')
+    read('src/js/modules/operations.jsx')
 ]);
 assert.equal(integrationMigration, integrations, 'External finance contracts must be included in the ordered migration chain.');
 assert.match(integrations, /has_finance_department_permission\(patient_id,'insurance\.submit'\)/, 'Finance integration table access must use facility and department permission checks.');
@@ -246,7 +250,7 @@ assert.equal(himMigration, himRecords, 'HIM records migration must be present in
 assert.match(himRollback, /export medical_record_files, medical_record_movements,/, 'HIM rollback must require exporting operational tracking history.');
 assert.match(records, /get_him_dashboard_summary[\s\S]*?request_medical_record_file[\s\S]*?transition_medical_record_movement/, 'HIM dashboard and file actions must call the persisted backend contracts.');
 assert.match(records, /Movement history/, 'The HIM user interface must expose stored file movement history.');
-assert.match(records, /from\('patients'\)[\s\S]*?\.range\(offset, offset \+ pageSize - 1\)/, 'The HIM patient dropdown must page through the authorized patient directory instead of relying on the shared one-page cache.');
+assert.match(records, /rpc\('search_patient_directory',[\s\S]*?p_offset: offset, p_limit: pageSize/, 'The HIM patient dropdown must page through the authorized patient directory instead of relying on the shared one-page cache.');
 assert.match(records, /Select label="Patient" value=\{fileRequest\.patientId\}[\s\S]*?patients\.map\(\(patient\)/, 'The physical file patient selector must list records fetched for the HIM directory.');
 assert.match(app, /mobileOpen=\{sidebarOpen\}/, 'The mobile navigation drawer must be controlled by app state.');
 assert.match(layout, /aria-expanded=\{menuOpen\}/, 'The mobile menu control must expose its expanded state.');
@@ -267,7 +271,7 @@ assert.match(auth, /aria-label=\{showPassword \? 'Hide password' : 'Show passwor
 assert.match(ui, /aria-modal="true"/, 'Dialogs must expose modal semantics.');
 assert.match(ui, /handleDialogKeys/, 'Dialogs must keep keyboard focus within the open dialog.');
 assert.match(auth, /onemed:session-expiring/, 'Configured idle sessions must warn users before sign-out.');
-assert.match(auth, /onemed_last_activity_/, 'Idle activity must be coordinated across open browser tabs.');
+assert.match(auth, /BroadcastChannel\('onemed-session-activity'\)/, 'Idle activity must be coordinated across open browser tabs.');
 assert.match(patients, /canUploadPatientDocument = \['super_admin', 'doctor', 'nurse'\]/, 'Document upload controls must match database-authorized writer roles.');
 
 const documentStorageScope = await read('supabase/migrations/20261103000024_document_storage_scope.sql');

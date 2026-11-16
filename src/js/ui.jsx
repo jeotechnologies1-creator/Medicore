@@ -331,7 +331,7 @@
                 <div className={'overflow-x-auto data-table-scroll ' + className} role="region" aria-label={scrollLabel} tabIndex={0}>
                     <table className={'data-table w-full ' + tableClassName} aria-label={scrollLabel}>
                         <colgroup>
-                            {columns.map((col) => <col key={col.key} />)}
+                            {columns.map((col) => <col key={col.key} style={col.width ? { width: col.width } : undefined} />)}
                             {actions && <col className="data-table-actions-column" />}
                         </colgroup>
                         <thead>
