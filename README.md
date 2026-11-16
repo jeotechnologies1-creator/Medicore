@@ -66,6 +66,8 @@ For a disposable local Supabase environment, run `supabase start`, `supabase db 
 
 ## Required production setup
 
+Before building the production frontend, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_TURNSTILE_SITE_KEY` in the static host's build environment. The Turnstile site key is public and must be registered for the deployed hostname. In the hosted Supabase Auth settings, enable CAPTCHA with the matching Turnstile provider and configure its secret key server-side. Never use Cloudflare's public test keys or expose the Turnstile secret in frontend variables. A missing frontend site key disables sign-in; mismatched keys cause CAPTCHA verification to fail.
+
 `supabase/migrations/20261026000006_clinical_safety.sql` deliberately removes the legacy `profiles.password` field. Create staff accounts in **Supabase Auth** (email/password or SSO) instead. A profile is created or linked by email on first sign-up; a super admin must then assign its `role` in `profiles`. The automatic first role is `receptionist`, never administrator.
 
 `supabase/migrations/20261026000008_production_hardening.sql` replaces the temporary "any authenticated user" policies with staff/patient-scoped policies and creates a private document bucket. Test it using every role before entering patient data, and keep the Supabase service-role key strictly server-side.

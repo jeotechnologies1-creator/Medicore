@@ -16,6 +16,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Public Cloudflare test credentials are restricted to automated testing.
+    # Never use these values in a deployed environment.
+    env:
+      SUPABASE_AUTH_CAPTCHA_SECRET: 1x0000000000000000000000000000000AA
+      VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,7 +34,7 @@ jobs:
           deno-version: v2.x
 
       - name: Install JavaScript dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Lint
         run: npm run lint
       - name: Static checks

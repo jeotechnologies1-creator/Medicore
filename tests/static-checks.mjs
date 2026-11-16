@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+const ciWorkflow = await read('.github/workflows/ci.yml');
 const specialistAuthoring = await read('supabase/migrations/20261103000025_specialist_clinical_authoring.sql');
 const clinicalRetention = await read('supabase/migrations/20261103000026_clinical_record_retention.sql');
 const clinicalRetentionRollback = await read('supabase/rollback/20261103000026_clinical_record_retention.sql');
@@ -53,6 +54,8 @@ const criticalLabMigration = await read('supabase/migrations/20261112000032_crit
 const patientIdentityMigration = await read('supabase/migrations/20261112000047_patient_identity_merge_workflow.sql');
 const auditPrivacyMigration = await read('supabase/migrations/20261112000044_server_audit_privacy.sql');
 assert.match(criticalLabMigration, /set local lock_timeout\s*=\s*'2s'/, 'Critical lab migration must bound lock acquisition.');
+assert.match(ciWorkflow, /SUPABASE_AUTH_CAPTCHA_SECRET: 1x0000000000000000000000000000000AA/, 'CI must use Cloudflare’s test-only CAPTCHA secret for local authentication.');
+assert.match(ciWorkflow, /VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA/, 'CI must provide the matching Cloudflare test widget key to browser tests.');
 
 assert.doesNotMatch(app, /setInterval\s*\(\s*(?:syncLiveData|loadSupabaseTables)/, 'The app must not poll or refresh records in the background.');
 assert.match(app, /persistNotificationReadState/, 'Notification read changes must be persisted.');
