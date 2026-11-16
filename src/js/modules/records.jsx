@@ -577,6 +577,7 @@ const RecordsModule = () => {
             </div>
             {['super_admin', 'records_officer'].includes(user?.role) && <DiagnosisCodingPanel />}
             {['super_admin', 'records_officer'].includes(user?.role) && <ReleaseInformationPanel patients={patients} />}
+            {['super_admin', 'records_officer'].includes(user?.role) && <RetentionManagementPanel patients={patients} />}
             {['super_admin','records_officer','doctor','nurse','pharmacist','laboratory_scientist','radiographer','surgeon','specialist','theatre_staff','safety_officer'].includes(user?.role) && <DowntimeReconciliationPanel />}
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
             {patientDirectoryError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{patientDirectoryError}</div>}
