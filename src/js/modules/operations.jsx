@@ -469,6 +469,7 @@ const appData = getAppData();
             const [prescriptionItems, setPrescriptionItems] = useState({});
             const [controlledApprovals, setControlledApprovals] = useState([]);
             const [formulary, setFormulary] = useState([]);
+            const [safetyChecksReady, setSafetyChecksReady] = useState(false);
             const [showAddStock, setShowAddStock] = useState(false);
             const [stockForm, setStockForm] = useState({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
             const [stockMessage, setStockMessage] = useState('');
@@ -480,6 +481,7 @@ const appData = getAppData();
             useEffect(() => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return;
+                client.rpc('clinical_safety_status').then(({ data, error }) => setSafetyChecksReady(!error && data?.interactions_ready && data?.dose_limits_ready));
                 client.from('formulary_items').select('id,generic_name,form,strength,unit,route,controlled').eq('active', true).order('generic_name')
                     .then(({ data, error }) => { if (!error && data) setFormulary(data); });
                 client.from('prescription_items').select('id,prescription_id,formulary_item_id,dose,dose_unit,frequency,route,duration,quantity,formulary_items(generic_name,strength,form,controlled)')
@@ -610,6 +612,7 @@ const appData = getAppData();
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
+                    {!safetyChecksReady && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">Interaction/dose checks are inactive. Safety rule tables are empty or do not have a signed-off version.</div>}
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">Pharmacy</h2>
