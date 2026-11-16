@@ -23,6 +23,7 @@ This application is a clinical-record system. Do not describe it as certified, c
 ## Operational readiness
 
 - Apply all Supabase migrations in the order in `README.md`; do not run a synthetic patient seed script in a live environment.
+- [ ] Configure hosted Auth/API settings from [hosted-auth-settings.md](docs/deployment/hosted-auth-settings.md) in staging and production. Run `npm run verify:hosted-config` against each deployed frontend and Supabase project; resolve failures and manually review every item reported as unverifiable before promotion/go-live.
 - Create real staff through Supabase Auth and assign roles only through the authorized admin workflow. Confirm no hard-coded staff identifiers are present in the browser code.
 - Exercise each role end-to-end in a staging project: registration, appointment, encounter, vital signs, orders/results, prescription/dispense, admission/discharge, billing/payment/claim, documents, portal requests, and audit review.
 - Establish clinical governance: named medical director, safety lead, privacy officer, change-control process, user training, support escalation, and release rollback plan.
