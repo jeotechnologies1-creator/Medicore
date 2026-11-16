@@ -78,13 +78,13 @@ await Promise.all([
 
 const routeModules = {
   patients: ['./js/modules/patients.jsx'],
-  records: ['./js/modules/records.jsx'],
+  records: ['./js/modules/records.jsx', './js/modules/diagnosis-coding.jsx'],
   appointments: ['./js/modules/diagnostics.jsx', './js/modules/portal.jsx'],
   doctors: ['./js/modules/people.jsx'],
-  consultations: ['./js/modules/clinical.jsx'],
+  consultations: ['./js/modules/clinical.jsx', './js/modules/diagnosis-coding.jsx'],
   laboratory: ['./js/modules/diagnostics.jsx'],
   radiology: ['./js/modules/diagnostics.jsx'],
-  clinical_workflows: ['./js/modules/clinical.jsx'],
+  clinical_workflows: ['./js/modules/clinical.jsx', './js/modules/diagnosis-coding.jsx'],
   clinical_decision_support: ['./js/modules/diagnostics.jsx'],
   operations: ['./js/modules/operations.jsx'],
   procurement: ['./js/modules/operations.jsx'],
