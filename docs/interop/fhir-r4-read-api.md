@@ -1,0 +1,7 @@
+# Read-only FHIR R4 API
+
+Deploy the `fhir-r4` Supabase Edge Function after migration `20261116000077_fhir_read_audit.sql`. The API accepts only `GET` and publishes `GET /fhir/r4/metadata` plus resource reads/searches for Patient, Encounter, Observation, AllergyIntolerance, Condition, MedicationRequest, and DiagnosticReport. Patient reads require `_id`; other resource searches require `patient=Patient/{id}`. Responses use FHIR JSON and are marked `no-store`.
+
+The function constructs its Supabase client with the anon key and forwards the caller's bearer JWT. Database reads therefore pass through the caller's RLS policies. `authorize_fhir_read` independently verifies active caller, patient record permission, facility scope, and an active `data_sharing` consent before returning a resource; it writes a patient-access log and a FHIR-shaped AuditEvent payload into the append-only audit chain for every returned resource. No write interaction is advertised or implemented.
+
+Only source values with an actual terminology system and code are returned as `Coding`. Locally named or free-text clinical values remain text. Vitals are mapped to standard LOINC codes and UCUM units; this mapping is explicit in the Edge Function. Lab values without a structured result value are omitted from Observation output. The official HL7 FHIR R4 JSON schema test fetches the FHIR R4 schema bundle from `https://hl7.org/fhir/R4/fhir.schema.json` and validates representative synthetic resources.
