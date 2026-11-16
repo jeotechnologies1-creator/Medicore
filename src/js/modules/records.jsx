@@ -1,6 +1,76 @@
 import { getAppData } from '../store.js';
 const appData = getAppData();
 
+const DowntimeReconciliationPanel = () => {
+    const { user } = useAuth();
+    const client = window.OneMedSupabase?.getClient?.();
+    const facilityId = user?.facility_id || user?.facilityId || '';
+    const [queue, setQueue] = useState([]);
+    const [form, setForm] = useState({ downtimeId: '', downtimeDate: formatFacilityDate(), patientReference: '', formType: '', department: user?.department || '', paperAuthor: '', eventAt: '', paperReference: '', emrType: '', emrId: '', entryNote: '' });
+    const [checkDrafts, setCheckDrafts] = useState({});
+    const [message, setMessage] = useState('');
+    const [error, setError] = useState('');
+    const [busy, setBusy] = useState(false);
+    const canCheck = ['super_admin', 'records_officer', 'safety_officer'].includes(user?.role);
+    const refresh = useCallback(async () => {
+        if (!client || !facilityId) return;
+        const { data, error: loadError } = await client.from('downtime_reconciliation_entries').select('id,downtime_id,patient_reference,form_type,department,paper_author,event_at,entered_at,entered_by,status,checked_by,checker_note,emr_record_type,emr_record_id,downtime_reconciliation_discrepancies(discrepancy,status,resolution)').eq('facility_id', facilityId).order('event_at', { ascending: true });
+        if (loadError) setError('Downtime reconciliation queue could not be loaded.'); else { setQueue(data || []); setError(''); }
+    }, [client, facilityId]);
+    useEffect(() => { refresh(); }, [refresh]);
+    const allocateId = async () => {
+        if (!client || !facilityId) return;
+        if (!client) return setError('Database connection is unavailable.');
+        const { data, error: rpcError } = await client.rpc('next_downtime_id', { p_facility_id: facilityId, p_downtime_date: form.downtimeDate });
+        if (rpcError) setError(rpcError.message); else { setForm((current) => ({ ...current, downtimeId: data })); setError(''); }
+    };
+    const enterRecord = async (event) => {
+        event.preventDefault(); setBusy(true); setError('');
+        if (!client) { setBusy(false); return setError('Database connection is unavailable.'); }
+        const { error: rpcError } = await client.rpc('enter_downtime_reconciliation', {
+            p_facility_id: facilityId, p_downtime_id: form.downtimeId, p_patient_id: null, p_patient_reference: form.patientReference,
+            p_form_type: form.formType, p_department: form.department, p_paper_author: form.paperAuthor, p_event_at: new Date(form.eventAt).toISOString(),
+            p_paper_form_reference: form.paperReference || null, p_emr_record_type: form.emrType || null, p_emr_record_id: form.emrId || null, p_entry_note: form.entryNote || null
+        });
+        setBusy(false);
+        if (rpcError) setError(rpcError.message); else { setMessage('Paper-captured record entered in the reconciliation queue.'); setForm((current) => ({ ...current, downtimeId: '', patientReference: '', formType: '', paperAuthor: '', eventAt: '', paperReference: '', emrType: '', emrId: '', entryNote: '' })); refresh(); }
+    };
+    const signCheck = async (entry, matches) => {
+        const draft = checkDrafts[entry.id] || {};
+        const { error: rpcError } = await client.rpc('check_downtime_reconciliation', { p_entry_id: entry.id, p_matches: matches, p_checker_statement: draft.statement || '', p_discrepancy: matches ? null : (draft.discrepancy || '') });
+        if (rpcError) setError(rpcError.message); else { setMessage(matches ? 'Independent checker sign-off recorded.' : 'Discrepancy recorded for resolution.'); setError(''); refresh(); }
+    };
+    const resolve = async (entry) => {
+        const draft = checkDrafts[entry.id] || {};
+        if (!draft.resolution) return setError('Enter a resolution before closing the discrepancy.');
+        const { data: discrepancies, error: findError } = await client.from('downtime_reconciliation_discrepancies').select('id').eq('entry_id', entry.id).eq('status', 'open').limit(1);
+        if (findError || !discrepancies?.[0]) return setError('Open discrepancy could not be located.');
+        const { error: rpcError } = await client.rpc('resolve_downtime_discrepancy', { p_discrepancy_id: discrepancies[0].id, p_resolution: draft.resolution });
+        if (rpcError) setError(rpcError.message); else { setMessage('Discrepancy resolved and entry reconciled.'); setError(''); refresh(); }
+    };
+    const setDraft = (id, key, value) => setCheckDrafts((current) => ({ ...current, [id]: { ...(current[id] || {}), [key]: value } }));
+    const input = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm';
+    return <Card title="Downtime reconciliation queue" subtitle="Enter paper records after recovery. Clinical content is entered directly into the EMR; this queue stores identifiers and reconciliation metadata only.">
+        <div className="mb-4 flex flex-wrap gap-3"><a href="/downtime-forms.html" target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-medical-700">Print downtime cover sheets</a><button type="button" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" onClick={refresh}>Refresh queue</button></div>
+        {message && <p className="mb-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{message}</p>}{error && <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
+        <form className="mb-6 grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-3" onSubmit={enterRecord}>
+            <input aria-label="Downtime declaration date" className={input} type="date" required value={form.downtimeDate} onChange={(e) => setForm({ ...form, downtimeDate: e.target.value })} />
+            <div className="flex gap-2 md:col-span-2"><input aria-label="Downtime ID" className={`${input} min-w-64 flex-1`} placeholder="DT-FACILITY-YYYYMMDD-0001" required value={form.downtimeId} onChange={(e) => setForm({ ...form, downtimeId: e.target.value })} /><button className="rounded-lg border px-3 py-2 text-sm" type="button" onClick={allocateId}>Allocate ID</button></div>
+            <input aria-label="Patient MRN or temporary identifier" className={input} placeholder="MRN or TMP identifier" required value={form.patientReference} onChange={(e) => setForm({ ...form, patientReference: e.target.value })} />
+            <input aria-label="Form type" className={input} placeholder="Paper form type" required value={form.formType} onChange={(e) => setForm({ ...form, formType: e.target.value })} />
+            <input aria-label="Department" className={input} placeholder="Department" required value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+            <input aria-label="Paper author" className={input} placeholder="Paper author" required value={form.paperAuthor} onChange={(e) => setForm({ ...form, paperAuthor: e.target.value })} />
+            <input aria-label="Clinical event time" className={input} type="datetime-local" required value={form.eventAt} onChange={(e) => setForm({ ...form, eventAt: e.target.value })} />
+            <input aria-label="Paper form reference" className={input} placeholder="Paper form / attachment reference" value={form.paperReference} onChange={(e) => setForm({ ...form, paperReference: e.target.value })} />
+            <input aria-label="EMR record type" className={input} placeholder="EMR record type" value={form.emrType} onChange={(e) => setForm({ ...form, emrType: e.target.value })} />
+            <input aria-label="EMR record reference" className={input} placeholder="EMR record reference" value={form.emrId} onChange={(e) => setForm({ ...form, emrId: e.target.value })} />
+            <input aria-label="Entry note" className={input} placeholder="Reconciliation note (no clinical text)" value={form.entryNote} onChange={(e) => setForm({ ...form, entryNote: e.target.value })} />
+            <div className="md:col-span-3"><Button variant="primary" disabled={busy || !facilityId}>{busy ? 'Saving…' : 'Enter paper record'}</Button></div>
+        </form>
+        <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="px-2 py-2">Downtime ID / patient ref</th><th className="px-2 py-2">Form / department</th><th className="px-2 py-2">Paper author / event time</th><th className="px-2 py-2">EMR entry</th><th className="px-2 py-2">Status / checker</th><th className="px-2 py-2">Discrepancy</th><th className="px-2 py-2">Review</th></tr></thead><tbody>{queue.map((entry) => <tr key={entry.id} className="border-b align-top"><td className="px-2 py-3"><strong>{entry.downtime_id}</strong><p className="text-xs text-slate-500">{entry.patient_reference}</p></td><td className="px-2 py-3">{entry.form_type}<p className="text-xs text-slate-500">{entry.department}</p></td><td className="px-2 py-3">{entry.paper_author}<p className="text-xs text-slate-500">{formatDateTime(entry.event_at)}</p></td><td className="px-2 py-3">{entry.emr_record_type || '—'} {entry.emr_record_id || ''}<p className="text-xs text-slate-500">Entered {formatDateTime(entry.entered_at)} · staff {entry.entered_by}</p></td><td className="px-2 py-3 capitalize">{entry.status.replaceAll('_', ' ')}<p className="text-xs text-slate-500">{entry.checked_by ? `Checker ${entry.checked_by}` : 'Awaiting independent checker'}</p></td><td className="max-w-56 px-2 py-3 text-xs">{(entry.downtime_reconciliation_discrepancies || []).map((d) => <p key={`${d.status}-${d.discrepancy}`} className="mb-1">{d.discrepancy} · {d.status}{d.resolution ? `: ${d.resolution}` : ''}</p>)}</td><td className="min-w-64 px-2 py-3">{canCheck && entry.status === 'entered' && <div className="space-y-2"><input className={input} placeholder="Checker statement" value={checkDrafts[entry.id]?.statement || ''} onChange={(e) => setDraft(entry.id, 'statement', e.target.value)} /><input className={input} placeholder="Discrepancy (if mismatch)" value={checkDrafts[entry.id]?.discrepancy || ''} onChange={(e) => setDraft(entry.id, 'discrepancy', e.target.value)} /><div className="flex gap-2"><button type="button" className="rounded bg-emerald-700 px-2 py-1 text-xs text-white" onClick={() => signCheck(entry, true)}>Matches · sign</button><button type="button" className="rounded bg-amber-700 px-2 py-1 text-xs text-white" onClick={() => signCheck(entry, false)}>Log discrepancy</button></div></div>}{canCheck && entry.status === 'discrepancy' && <div className="space-y-2"><input className={input} placeholder="Resolution / correction reference" value={checkDrafts[entry.id]?.resolution || ''} onChange={(e) => setDraft(entry.id, 'resolution', e.target.value)} /><button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => resolve(entry)}>Resolve discrepancy</button></div>}</td></tr>)}</tbody></table>{!queue.length && <p className="py-6 text-center text-sm text-slate-500">No downtime records in the facility queue.</p>}</div>
+    </Card>;
+};
+
 // ==========================================
 // HEALTH INFORMATION MANAGEMENT (HIM) MODULE
 // Read-only chart index for Health Information Management staff.
@@ -505,6 +575,7 @@ const RecordsModule = () => {
                 <h2 className="text-2xl font-bold text-slate-900">Health Information Management (HIM)</h2>
                 <p className="mt-1 text-sm text-slate-500">Patient information operations and physical file circulation. Counts are aggregated from records you are authorized to access.</p>
             </div>
+            {['super_admin','records_officer','doctor','nurse','pharmacist','laboratory_scientist','radiographer','surgeon','specialist','theatre_staff','safety_officer'].includes(user?.role) && <DowntimeReconciliationPanel />}
             {accessError && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{accessError}</div>}
             {patientDirectoryError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{patientDirectoryError}</div>}
             {['super_admin', 'records_officer'].includes(user?.role) && <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">

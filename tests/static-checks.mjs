@@ -395,4 +395,20 @@ assert.match(patientPortalFunction, /if \(!url \|\| !anonKey \|\| !serviceKey\)/
 assert.match(patientPortalFunction, /linkedProfile, error: linkedProfileError/, 'Patient portal provisioning must not ignore profile lookup failures.');
 assert.match(patientPortalFunction, /patientUpdateError[\s\S]*?deleteUser\(created\.user\.id\)/, 'Patient portal provisioning must clean up the newly created Auth account if email synchronization fails.');
 
+const downtimeProcedure = await read('docs/deployment/downtime-procedure.md');
+const downtimeGenerator = await read('scripts/generate-downtime-forms.mjs');
+const downtimeForms = await read('public/downtime-forms.html');
+const downtimeWorker = await read('public/service-worker.js');
+const downtimeOfflinePage = await read('public/offline.html');
+const downtimeQueueUi = await read('src/js/modules/records.jsx');
+const downtimeMigration = await read('supabase/migrations/20261116000075_downtime_reconciliation.sql');
+assert.match(downtimeGenerator, /Paper forms to keep available/, 'Printable downtime covers must derive from the procedure inventory.');
+assert.match(downtimeForms, /Controlled clinical form required/, 'Generated covers must warn users to use locally approved controlled forms.');
+assert.match(downtimeWorker, /SAFE_SHELL_URLS = \['\/offline\.html', '\/offline\.css', '\/downtime-forms\.html', '\/downtime-forms\.css'\]/, 'Service worker may cache only static offline instructions, styles, and cover sheets.');
+assert.doesNotMatch(downtimeWorker, /cache\.put\(|cache\.add\(request|caches\.match\(request\)/, 'Service worker must not persist app or API responses.');
+assert.match(downtimeOfflinePage, /SYSTEM UNREACHABLE — FOLLOW DOWNTIME PROCEDURE/, 'Offline shell must clearly direct staff to the downtime procedure.');
+assert.match(downtimeQueueUi, /Downtime reconciliation queue[\s\S]*?check_downtime_reconciliation/, 'Records UI must enter paper metadata and provide checker sign-off.');
+assert.match(downtimeMigration, /actor=e\.entered_by[\s\S]*?downtime_reconciliation_signatures/, 'The database must require an independent checker.');
+assert.match(downtimeProcedure, /does not accept or cache the paper clinical narrative/, 'Downtime documentation must prohibit storing clinical narrative in the app queue.');
+
 console.log('Regression checks passed.');

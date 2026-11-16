@@ -22,11 +22,17 @@ This mode is not a substitute for infrastructure isolation or provider-level inc
 
 Departments maintain locally approved versions with version/date and controlled storage. Do not improvise medication or critical-result forms.
 
+The printable reconciliation cover sheets at `/downtime-forms.html` are generated from the inventory above with `node scripts/generate-downtime-forms.mjs`. They document identifiers, paper authorship, event time, EMR reference, and signatures; they are not clinical forms and do not replace facility-approved controlled forms. Regenerate them whenever this inventory changes.
+
 ## Downtime identifiers and records
 
 At declaration, the records lead issues sequential identifiers in this form: `DT-<facility-code>-<YYYYMMDD>-<sequence>`, for example `DT-ABC-20261112-0001`. Record the identifier on every form and cross-reference any known patient MRN/record number. For an unidentified patient, use a temporary `TMP-<facility-code>-<YYYYMMDD>-<sequence>` identifier, apply the facility's approved wristband/label, and do not invent or reuse an MRN. The identity officer reconciles temporary identifiers to verified patient records after restoration.
 
 Maintain a reconciliation queue with downtime ID, patient/MRN or temporary ID, form type, department, author, event time, entered-by, entry time, independent checker, status, discrepancy, and both signatures. Enter records in chronological order. Link the scanned paper form to the resulting EMR record under approved access controls. Preserve the original paper record under the facility retention schedule.
+
+After recovery, staff use **Records → Downtime reconciliation queue** to enter metadata for each paper record and its resulting EMR reference. The queue does not accept or cache the paper clinical narrative. Facility-authorized staff allocate IDs online with the sequence RPC; if the service is unavailable at declaration, the records lead uses the controlled paper downtime log and enters the issued ID during reconciliation. A different staff member records the checker sign-off. Mismatches open a discrepancy and require a separate reviewer to record the resolution.
+
+The service worker caches only the static offline instruction page and generated printable cover sheets. It does not cache API responses, application pages, or patient/clinical records. On a failed navigation or network request the app displays **“System unreachable — follow downtime procedure.”** Keep printed facility forms and the downtime log available; do not rely on a browser or printer becoming available during a full outage.
 
 ## Recovery and sign-off
 

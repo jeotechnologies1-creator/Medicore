@@ -604,3 +604,6 @@
     .print-document--specimen-label .print-patient-block { margin: .06in 0; padding: .06in; }
     .print-document--specimen-label .print-document-fields { grid-template-columns: 1fr 1fr; gap: .05in .12in; }
 }
+ .onemed-downtime-overlay{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:#f1f5f9;padding:1rem;color:#0f172a;font:16px system-ui,sans-serif}
+ .onemed-downtime-overlay main{max-width:42rem;border:1px solid #cbd5e1;border-top:6px solid #b91c1c;border-radius:1rem;background:#fff;padding:2rem}
+ .onemed-downtime-alert{font-weight:700;color:#991b1b}

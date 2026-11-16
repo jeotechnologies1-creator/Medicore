@@ -1,0 +1,11 @@
+begin;
+drop trigger if exists downtime_signatures_immutable on public.downtime_reconciliation_signatures;
+drop function if exists public.next_downtime_id(uuid,date);
+drop function if exists public.enter_downtime_reconciliation(uuid,text,uuid,text,text,text,text,timestamptz,text,text,text,text);
+drop function if exists public.check_downtime_reconciliation(uuid,boolean,text,text);
+drop function if exists public.resolve_downtime_discrepancy(uuid,text);
+drop table if exists public.downtime_reconciliation_signatures,public.downtime_reconciliation_discrepancies,public.downtime_reconciliation_entries,public.downtime_id_sequences cascade;
+delete from public.role_permission_grants where permission_key in ('downtime.enter','downtime.reconcile');
+delete from public.permission_catalog where permission_key in ('downtime.enter','downtime.reconcile');
+notify pgrst,'reload schema';
+commit;

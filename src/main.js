@@ -48,6 +48,23 @@ const loadLegacyModule = async (path) => {
 
 const { OneMedSupabase } = await import('./supabase.js');
 globalThis.OneMedSupabase = OneMedSupabase;
+const showDowntimeScreen = () => {
+  if (document.getElementById('onemed-downtime-screen')) return;
+  const screen = document.createElement('div');
+  screen.id = 'onemed-downtime-screen';
+  screen.setAttribute('role', 'alert');
+  screen.className = 'onemed-downtime-overlay';
+  screen.innerHTML = '<main><p class="onemed-downtime-alert">SYSTEM UNREACHABLE — FOLLOW DOWNTIME PROCEDURE</p><h1>OneMed is not reachable</h1><p>Do not store patient or clinical information in this browser. Use the facility’s approved paper forms and downtime log. Preserve signed paper records for reconciliation after recovery.</p><p>Use locally approved medication, specimen, critical-result, imaging, consent, and procedure forms. Printable sheets are reconciliation covers only.</p><p><a href="/downtime-forms.html">Open printable downtime covers</a> · <a href="/offline.html">Downtime instructions</a></p></main>';
+  document.body.appendChild(screen);
+};
+const clearDowntimeScreen = () => document.getElementById('onemed-downtime-screen')?.remove();
+window.addEventListener('offline', showDowntimeScreen);
+window.addEventListener('online', () => window.setTimeout(clearDowntimeScreen, 1000));
+if (!navigator.onLine) showDowntimeScreen();
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => { if (event.data?.type === 'SYSTEM_UNREACHABLE') showDowntimeScreen(); });
+  navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+}
 await Promise.all([
   './js/core.js',
   './js/icons.jsx',
