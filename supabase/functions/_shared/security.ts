@@ -42,6 +42,47 @@ export const checkRateLimit = async (
   return data === true;
 };
 
+export const parseConnectorConfig = (raw: string): Record<string, unknown> => {
+  const value: unknown = JSON.parse(raw);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Connector configuration must be an object');
+  return value as Record<string, unknown>;
+};
+
+export const createTtlCache = <T>() => {
+  let cached: { value: T; expiresAt: number } | null = null;
+  let pending: Promise<T> | null = null;
+  return {
+    getOrLoad: async (loader: () => Promise<T>, ttlMs: number, now = Date.now()): Promise<T> => {
+      if (cached && cached.expiresAt > now) return cached.value;
+      if (pending) return pending;
+      pending = loader();
+      try {
+        const value = await pending;
+        cached = { value, expiresAt: now + ttlMs };
+        return value;
+      } finally {
+        pending = null;
+      }
+    },
+    clear: () => { cached = null; pending = null; },
+  };
+};
+
+const edgeErrorClasses = new Set(['Error','TypeError','RangeError','ReferenceError','NetworkError','UnknownError']);
+const edgeEnvironments = new Set(['development','staging','production','other']);
+
+export const safeEdgeErrorMetadata = (caughtError: unknown, environment: string | undefined) => ({
+  error_class: caughtError instanceof Error && edgeErrorClasses.has(caughtError.name) ? caughtError.name : 'UnknownError',
+  environment: environment && edgeEnvironments.has(environment) ? environment : 'production',
+});
+
+export const monitoringCounterGroups = (server: { authenticationAnomalies: number; edgeFunctionErrors: number }, client: { errors: number; authAnomalies: number }) => ({
+  authentication_anomalies: server.authenticationAnomalies,
+  edge_function_errors: server.edgeFunctionErrors,
+  client_reported_client_errors: client.errors,
+  client_reported_auth_anomalies: client.authAnomalies,
+});
+
 export const recordAccountAudit = async (
   client: { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ error: unknown }> },
   actorId: string,
@@ -76,7 +117,7 @@ export const constantTimeEqual = async (left: string, right: string): Promise<bo
   return mismatch === 0;
 };
 
-export const reportSafeEdgeError = async (moduleName: string): Promise<void> => {
+export const reportSafeEdgeError = async (moduleName: string, caughtError: unknown = undefined): Promise<void> => {
   const base = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!base || !serviceKey) return;
@@ -84,7 +125,7 @@ export const reportSafeEdgeError = async (moduleName: string): Promise<void> => 
   try {
     await fetch(`${base.replace(/\/$/, '')}/functions/v1/monitoring`, {
       method: 'POST', headers: { authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ event_type: 'edge_error', error_class: 'UnknownError', module: allowed.has(moduleName) ? moduleName : 'other', environment: 'production' }),
+      body: JSON.stringify({ event_type: 'edge_error', ...safeEdgeErrorMetadata(caughtError, Deno.env.get('MEDICORE_ENVIRONMENT')), module: allowed.has(moduleName) ? moduleName : 'other' }),
       signal: AbortSignal.timeout(3000),
     });
   } catch { /* Monitoring failure must not expose request data or block clinical delivery. */ }

@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from '../_shared/supabase.ts';
 import { checkRateLimit, verifySignedTimestamp } from '../_shared/security.ts';
 
 const serviceClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -13,7 +13,8 @@ Deno.serve(async (request) => {
   const signature = request.headers.get('x-provider-signature')?.replace(/^sha256=/, '');
   if (!connectionId || !/^[0-9a-f-]{36}$/i.test(connectionId) || timestamp === null || !signature || !/^[0-9a-f]{64}$/i.test(signature)) return new Response('Invalid webhook headers or stale timestamp', { status: 400 });
   try {
-    if (!await checkRateLimit(serviceClient, request, 'integration-webhook', connectionId, 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
+    // This pre-authentication bucket is IP-only: an exposed connection UUID cannot consume a provider-specific quota.
+    if (!await checkRateLimit(serviceClient, request, 'integration-webhook', null, 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
   } catch { return new Response('Rate limiting is temporarily unavailable', { status: 503 }); }
   const body = await request.text();
   if (encoder.encode(body).length > 1_000_000) return new Response('Payload too large', { status: 413 });

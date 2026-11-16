@@ -1,5 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { checkRateLimit, constantTimeEqual, mapBounded, reportSafeEdgeError } from '../_shared/security.ts';
+import { createClient } from '../_shared/supabase.ts';
+import { checkRateLimit, constantTimeEqual, mapBounded, reportSafeEdgeError, parseConnectorConfig } from '../_shared/security.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -18,6 +18,13 @@ Deno.serve(async (request) => {
   try {
     if (!await checkRateLimit(serviceClient, request, 'integration-dispatch', 'service-scheduler', 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
   } catch { return new Response('Rate limiting is temporarily unavailable', { status: 503 }); }
+  let connectorConfig: Record<string, unknown>;
+  try {
+    connectorConfig = parseConnectorConfig(Deno.env.get('MEDICORE_CONNECTORS_JSON') ?? '{}');
+  } catch (error) {
+    await reportSafeEdgeError('integration', error);
+    return Response.json({ error: 'Connector configuration is invalid' }, { status: 500 });
+  }
   let limit = 25;
   try {
     const body = await request.json().catch(() => ({}));
@@ -26,19 +33,20 @@ Deno.serve(async (request) => {
 
   const { data: events, error } = await serviceClient.rpc('claim_integration_outbox', { p_limit: limit });
   if (error) return Response.json({ error: 'Unable to lease integration events' }, { status: 500 });
-  const connectorConfig = JSON.parse(Deno.env.get('MEDICORE_CONNECTORS_JSON') ?? '{}');
   const results = await mapBounded((events ?? []) as Record<string, unknown>[], 5, async (event) => {
-    const connector = connectorConfig[event.provider_code as string];
+    const connector = connectorConfig[event.provider_code as string] as Record<string, unknown> | undefined;
     const route = routes[event.event_type as string];
     try {
       if (!connector || !route || typeof connector.baseUrl !== 'string' || typeof connector.tokenEnv !== 'string') {
         throw new Error('Connector is not configured for this event');
       }
-      const base = new URL(connector.baseUrl.endsWith('/') ? connector.baseUrl : `${connector.baseUrl}/`);
+      const baseUrl = connector.baseUrl;
+      const tokenEnv = connector.tokenEnv;
+      const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
       if (base.protocol !== 'https:' && base.hostname !== 'host.docker.internal' && base.hostname !== 'localhost') {
         throw new Error('Connector URL must use HTTPS');
       }
-      const token = Deno.env.get(connector.tokenEnv);
+      const token = Deno.env.get(tokenEnv);
       if (!token) throw new Error('Connector credential is missing');
       if (event.event_type === 'payment.intent.create' && typeof connector.returnUrl === 'string' && new URL(connector.returnUrl).protocol !== 'https:') {
         throw new Error('Payment return URL must use HTTPS');
@@ -68,7 +76,7 @@ Deno.serve(async (request) => {
       return { id: event.id, delivered: true };
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Connector request failed';
-      await reportSafeEdgeError('integration');
+      await reportSafeEdgeError('integration', cause);
       await serviceClient.rpc('complete_integration_outbox', {
         p_id: event.id, p_attempt: event.attempts, p_ok: false, p_response: {}, p_external_reference: null, p_error: message.slice(0, 500),
       });

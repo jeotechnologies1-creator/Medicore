@@ -1,5 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { constantTimeEqual, mapBounded, reportSafeEdgeError } from '../_shared/security.ts';
+import { createClient } from '../_shared/supabase.ts';
+import { checkRateLimit, constantTimeEqual, mapBounded, parseConnectorConfig, reportSafeEdgeError } from '../_shared/security.ts';
 
 const url = Deno.env.get('SUPABASE_URL')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -9,6 +9,16 @@ Deno.serve(async (request) => {
   const authorization = request.headers.get('authorization') ?? '';
   if (request.method !== 'POST' || !await constantTimeEqual(authorization, `Bearer ${serviceKey}`)) {
     return new Response('Unauthorized', { status: 401 });
+  }
+  try {
+    if (!await checkRateLimit(client, request, 'notification-dispatch', 'service-scheduler', 120, 60)) return new Response('Rate limit exceeded', { status: 429 });
+  } catch { return new Response('Rate limiting is temporarily unavailable', { status: 503 }); }
+  let config: Record<string, unknown>;
+  try {
+    config = parseConnectorConfig(Deno.env.get('MEDICORE_NOTIFICATION_CONNECTOR_JSON') ?? '{}');
+  } catch (error) {
+    await reportSafeEdgeError('notification', error);
+    return Response.json({ error: 'Notification connector configuration is invalid' }, { status: 500 });
   }
   let limit = 25;
   try {
@@ -20,7 +30,6 @@ Deno.serve(async (request) => {
 
   // Connector contract is provider-neutral: POST one message envelope to the
   // configured HTTPS endpoint and return any 2xx status for successful delivery.
-  const config = JSON.parse(Deno.env.get('MEDICORE_NOTIFICATION_CONNECTOR_JSON') ?? '{}');
   const results = await mapBounded((messages ?? []) as Record<string, unknown>[], 5, async (message) => {
     let ok = false;
     let errorText = 'Connector is not configured';
@@ -43,7 +52,7 @@ Deno.serve(async (request) => {
       errorText = '';
     } catch (cause) {
       errorText = cause instanceof Error ? cause.message : 'Connector request failed';
-      await reportSafeEdgeError('notification');
+      await reportSafeEdgeError('notification', cause);
     }
     const { error: saveError } = await client.rpc('complete_outbound_message', {
       p_id: message.id, p_lease: message.lease_token, p_ok: ok, p_error: ok ? null : errorText.slice(0, 500),
