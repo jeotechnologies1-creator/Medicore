@@ -1,0 +1,20 @@
+begin;
+set local lock_timeout='2s';
+set local statement_timeout='60s';
+
+drop function if exists public.export_statutory_report(uuid,date,date,text,text);
+drop function if exists public.aggregate_statutory_report(uuid,date,date);
+drop function if exists public.configure_statutory_small_cell_rule(uuid,integer,text);
+drop function if exists public.configure_statutory_report(uuid,text,text,jsonb,boolean);
+drop function if exists public.verify_vital_registration(text,uuid,text,text);
+drop function if exists public.register_death(uuid,uuid,uuid,text,uuid,timestamptz,text);
+drop function if exists public.register_birth(uuid,uuid,uuid,uuid,uuid,text,timestamptz,text,integer,integer,text,text);
+drop table if exists public.statutory_report_exports;
+drop table if exists public.statutory_report_suppression_rules;
+drop table if exists public.statutory_report_definitions;
+drop table if exists public.death_registrations;
+drop table if exists public.birth_registrations;
+delete from public.role_permission_grants where permission_key in ('vital_registry.read','vital_registry.manage','statutory_report.read','statutory_report.manage');
+delete from public.permission_catalog where permission_key in ('vital_registry.read','vital_registry.manage','statutory_report.read','statutory_report.manage');
+notify pgrst,'reload schema';
+commit;
