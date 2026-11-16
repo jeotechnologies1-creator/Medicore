@@ -284,6 +284,16 @@ assert.match(codingMigration, /chart_deficiency_compliance_by_department/, 'Char
 assert.match(codingMigration, /records_officer[\s\S]*coding\.manage/, 'Records officers must receive facility-scoped coding permission.');
 assert.match(codingRollback, /Rollback|archive them before rollback/, 'Rollback must preserve existing coding and audit history.');
 assert.match(codingTests, /migration adds no diagnosis codes/, 'pgTAP must verify that the workflow does not bundle codes.');
+const roiMigration = await read('supabase/migrations/20261116000067_release_information_disclosure_workflow.sql');
+const roiRollback = await read('supabase/rollback/20261116000067_release_information_disclosure_workflow.sql');
+const roiTests = await read('supabase/tests/release_information_disclosure_workflow.test.sql');
+assert.match(roiMigration, /disclosure_register[\s\S]*release_request_id/, 'Release events must extend and link to the existing disclosure register.');
+assert.match(roiMigration, /verify_release_information_request[\s\S]*approve_release_information_request[\s\S]*second_reviewed_by/, 'Release approval must follow identity and authority verification, with second review support.');
+assert.match(roiMigration, /r\.sensitive_scope and r\.second_reviewed_by is null/, 'Sensitive releases must require a second reviewer.');
+assert.match(roiMigration, /configure_data_subject_deadline[\s\S]*pending_legal_review/, 'Patient request deadlines must remain configurable pending counsel.');
+assert.match(roiMigration, /p_released_scope <@ r\.requested_scope/, 'Released scope must not exceed the approved request scope.');
+assert.match(roiRollback, /Rollback refused/, 'Rollback must preserve disclosure and verification history.');
+assert.match(roiTests, /no statutory deadline is imposed until configured/, 'pgTAP must protect against hardcoded statutory deadlines.');
 const paymentGatewayMigration = await read('supabase/migrations/20261116000064_payment_gateway_vendor_adapters.sql');
 const paymentGatewayRollback = await read('supabase/rollback/20261116000064_payment_gateway_vendor_adapters.sql');
 const gatewayAdapter = await read('supabase/functions/_shared/payment_gateway_adapters.ts');
