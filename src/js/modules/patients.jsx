@@ -1,3 +1,6 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
         // ==========================================
         // PATIENTS MODULE
         // ==========================================
@@ -15,7 +18,7 @@
             const [filterStatus, setFilterStatus] = useState('all');
             const [patientPage, setPatientPage] = useState(0);
             const [patientCount, setPatientCount] = useState(0);
-            const [patients, setPatients] = useState((getLiveStore().patients || []));
+            const [patients, setPatients] = useState((getAppData().patients || []));
             const [formErrors, setFormErrors] = useState({});
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
             const [selectedExistingPatientId, setSelectedExistingPatientId] = useState('');

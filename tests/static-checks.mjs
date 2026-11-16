@@ -59,6 +59,8 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
     read('src/js/ui.jsx')
 ]);
 const criticalLabMigration = await read('supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql');
+const notificationDispatchHandler = await read('supabase/functions/notification-dispatch/handler.ts');
+const appStore = await read('src/js/store.js');
 const patientIdentityMigration = await read('supabase/migrations/20261112000047_patient_identity_merge_workflow.sql');
 const auditPrivacyMigration = await read('supabase/migrations/20261112000044_server_audit_privacy.sql');
 const edgeRateLimitMigration = await read('supabase/migrations/20261116000050_edge_rate_limit_scopes.sql');
@@ -71,6 +73,9 @@ assert.match(ciWorkflow, /SUPABASE_AUTH_CAPTCHA_SECRET: 1x0000000000000000000000
 assert.match(ciWorkflow, /VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA/, 'CI must provide the matching Cloudflare test widget key to browser tests.');
 assert.doesNotMatch(sourceText, /\bdocument\s*\.\s*write\s*\(/i, 'Application source must not write printable HTML into a popup.');
 assert.doesNotMatch(sourceText, /<script\b(?![^>]*\bsrc\s*=)[^>]*>/i, 'Application source must not create inline scripts.');
+assert.doesNotMatch(sourceText, /globalThis\.appData|window\.appData/, 'Patient and clinical records must not be attached to the global object.');
+assert.match(appStore, /export const getAppData = \(\) => appData/, 'Application records must be accessed through the module-scoped store getter.');
+assert.doesNotMatch(core, /getLiveStore|store:\s*appData/, 'Shared exports and load results must not return the patient data store.');
 assert.doesNotMatch(sourceText, /\bon[a-z]+(?:[A-Z][a-zA-Z]*)?\s*=\s*(['"])[^'"\r\n]*?\1/, 'Application source must not use string-based inline event handlers.');
 const remoteImports = [...edgeText.matchAll(/(?:from\s*|import\s*)['"](https?:\/\/[^'"]+)['"]/g)].map((match) => match[1]);
 assert.ok(remoteImports.length > 0 && remoteImports.every((url) => /@\d+\.\d+\.\d+(?:\/|$)/.test(url)), 'Every Edge Function remote import must use an exact version pin.');
@@ -78,7 +83,7 @@ assert.ok(remoteImports.some((url) => url === 'https://esm.sh/@supabase/supabase
 assert.match(edgeText, /monitoring-health[\s\S]*?15_000/, 'Monitoring health checks must be rate limited and cached for 15 seconds.');
 assert.match(edgeText, /monitoring-post/, 'Monitoring POST events must be rate limited.');
 assert.match(edgeText, /client_reported_auth_anomalies/, 'Client-reported events must have counters separate from server events.');
-assert.match(edgeText, /MEDICORE_NOTIFICATION_CONNECTOR_JSON[\s\S]*?catch[\s\S]*?reportSafeEdgeError/, 'Notification connector configuration errors must be safely reported.');
+assert.match(notificationDispatchHandler, /parseConnectorConfig[\s\S]*?catch \(error\)[\s\S]*?reportError\('notification', error\)/, 'Notification connector configuration errors must be safely reported.');
 assert.match(edgeText, /MEDICORE_CONNECTORS_JSON[\s\S]*?catch[\s\S]*?reportSafeEdgeError/, 'Integration connector configuration errors must be safely reported.');
 assert.match(edgeText, /'integration-webhook', null, 120, 60/, 'Webhook pre-authentication rate limits must use IP only.');
 assert.match(edgeRateLimitMigration, /'monitoring-health'[\s\S]*?'monitoring-post'[\s\S]*?'notification-dispatch'/, 'The rate-limit RPC must allow the new monitoring and notification scopes.');

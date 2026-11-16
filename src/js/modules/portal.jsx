@@ -1,3 +1,6 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
         // PATIENT PORTAL MODULE
         // ==========================================
         const PatientPortalModule = ({ initialTab = 'overview' }) => {

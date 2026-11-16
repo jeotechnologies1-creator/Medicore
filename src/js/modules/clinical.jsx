@@ -1,6 +1,9 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
         const ConsultationsModule = () => {
             const { user } = useAuth();
-            const [consultations, setConsultations] = useState(getLiveStore().consultations || []);
+            const [consultations, setConsultations] = useState(getAppData().consultations || []);
             const [form, setForm] = useState({ patientId: '', doctorId: '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
             const [consultationMessage, setConsultationMessage] = useState('');
             const [prescriptionForm, setPrescriptionForm] = useState({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, formularyItemId: '', quantity: 1, dose: '', doseUnit: '', route: '', frequency: '', duration: '', instructions: '', priority: 'routine' });
@@ -65,8 +68,8 @@
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="New Consultation" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getLiveStore().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Clinician" value={form.doctorId} onChange={(e) => setForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getAppData().users || []).filter(u => u.role === 'doctor').map(u => ({ value: u.id, label: u.name }))]} />
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
                                 <CodedConceptInput label="Diagnosis" value={form.diagnosis} codeSystem={form.diagnosisCodeSystem} code={form.diagnosisCode} display={form.diagnosisDisplay} onChange={(term) => setForm(prev => ({ ...prev, diagnosis: term.value, diagnosisCodeSystem: term.codeSystem, diagnosisCode: term.code, diagnosisDisplay: term.display }))} />
                                 <TextArea label="Assessment" value={form.assessment} onChange={(e) => setForm(prev => ({ ...prev, assessment: e.target.value }))} rows={3} />
@@ -112,7 +115,7 @@
 
         const VitalsModule = () => {
             const { user } = useAuth();
-            const [vitals, setVitals] = useState(getLiveStore().vitals || []);
+            const [vitals, setVitals] = useState(getAppData().vitals || []);
             const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0', consciousness: 'A', supplementalOxygen: false, spo2Scale: 'scale_1' });
             const [vitalsMessage, setVitalsMessage] = useState('');
 
@@ -157,7 +160,7 @@
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="Record Vitals" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                                 <div className="grid grid-cols-2 gap-4">
                                     <Input label="Temperature (°C)" value={form.temperature} onChange={(e) => setForm(prev => ({ ...prev, temperature: e.target.value }))} />
                                     <Input label="Heart Rate" value={form.heartRate} onChange={(e) => setForm(prev => ({ ...prev, heartRate: e.target.value }))} />
@@ -207,15 +210,15 @@
 
         const ClinicalSafetyModule = () => {
             const { user } = useAuth();
-            const [allergies, setAllergies] = useState(getLiveStore().allergies || []);
-            const [conditions, setConditions] = useState(getLiveStore().conditions || []);
-            const [carePlans, setCarePlans] = useState(getLiveStore().carePlans || []);
-            const [alerts, setAlerts] = useState(getLiveStore().clinicalAlerts || []);
-            const [resultAcknowledgements, setResultAcknowledgements] = useState(getLiveStore().resultAcknowledgements || []);
+            const [allergies, setAllergies] = useState(getAppData().allergies || []);
+            const [conditions, setConditions] = useState(getAppData().conditions || []);
+            const [carePlans, setCarePlans] = useState(getAppData().carePlans || []);
+            const [alerts, setAlerts] = useState(getAppData().clinicalAlerts || []);
+            const [resultAcknowledgements, setResultAcknowledgements] = useState(getAppData().resultAcknowledgements || []);
             const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', codeSystem: null, code: null, display: null, reaction: '', severity: 'moderate', criticality: 'low' });
             const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', codeSystem: null, code: null, display: null, onsetDate: '' });
             const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
-            const patients = getLiveStore().patients || [];
+            const patients = getAppData().patients || [];
 
             const save = async (table, payload, setter, appTable, mapper) => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -360,7 +363,7 @@
 
         const InventoryModule = () => {
             const { user } = useAuth();
-            const [inventory, setInventory] = useState(getLiveStore().pharmacyInventory || []);
+            const [inventory, setInventory] = useState(getAppData().pharmacyInventory || []);
             const [search, setSearch] = useState('');
             const [showAddItem, setShowAddItem] = useState(false);
             const [saving, setSaving] = useState(false);
@@ -478,9 +481,9 @@
         const ClinicalWorkflowsModule = () => {
             const { user } = useAuth();
             const [tab, setTab] = useState('encounters');
-            const [encounters, setEncounters] = useState(getLiveStore().encounters || []);
-            const [immunizations, setImmunizations] = useState(getLiveStore().immunizations || []);
-            const [administrations, setAdministrations] = useState(getLiveStore().medicationAdministrations || []);
+            const [encounters, setEncounters] = useState(getAppData().encounters || []);
+            const [immunizations, setImmunizations] = useState(getAppData().immunizations || []);
+            const [administrations, setAdministrations] = useState(getAppData().medicationAdministrations || []);
             const isRegistrationOnly = ['records_officer', 'receptionist'].includes(user?.role);
             const [unknownIdentity, setUnknownIdentity] = useState(false);
             const [intakeMessage, setIntakeMessage] = useState('');
@@ -490,7 +493,7 @@
             const [immunizationForm, setImmunizationForm] = useState({ patientId: '', vaccine: '', administeredDate: formatFacilityDate(), nextDueDate: '', notes: '' });
             const [administrationForm, setAdministrationForm] = useState({ patientId: '', prescriptionItemId: '', dosage: '', notes: '' });
             const [prescribedMedicationItems, setPrescribedMedicationItems] = useState([]);
-            const patients = getLiveStore().patients || [];
+            const patients = getAppData().patients || [];
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))];
             const patientName = (id) => {
                 const patient = patients.find((item) => item.id === id);
@@ -590,7 +593,7 @@
         };
 
         const DocumentsModule = () => {
-            const [documents, setDocuments] = useState(getLiveStore().documents || []);
+            const [documents, setDocuments] = useState(getAppData().documents || []);
             const [patientId, setPatientId] = useState('');
             const [documentType, setDocumentType] = useState('Clinical Note');
             const [uploadError, setUploadError] = useState('');
@@ -630,7 +633,7 @@
 
                     <Card>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Document type" value={documentType} onChange={(e) => setDocumentType(e.target.value)} options={['Clinical Note', 'Consent', 'Laboratory', 'Radiology', 'Discharge Summary', 'Referral'].map(value => ({ value, label: value }))} />
                             {uploadError && <p className="self-end text-sm text-red-600">{uploadError}</p>}
                         </div>

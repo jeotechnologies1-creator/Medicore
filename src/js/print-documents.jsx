@@ -1,3 +1,4 @@
+import { getAppData } from './store.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -59,7 +60,7 @@ const PrintDocumentView = ({ document, onClose, onReady }) => {
 
 const printDocument = async ({ type, id, patientId, title, fields = [], author = '' }) => {
     const client = globalThis.OneMedSupabase?.getClient?.();
-    const patient = (globalThis.appData?.patients || []).find((row) => row.id === patientId);
+    const patient = (getAppData().patients || []).find((row) => row.id === patientId);
     if (!client || !patient) throw new Error('Patient or database connection is unavailable.');
 
     const { error: auditError } = await client.rpc('record_document_print', {

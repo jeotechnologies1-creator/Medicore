@@ -1,56 +1,12 @@
 
+        import { getAppData } from './store.js';
+
+        const appData = getAppData();
         const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
         // ==========================================
         // LIVE DATA STORE
         // ==========================================
-        const appData = new Proxy({
-            users: [],
-            patients: [],
-            appointments: [],
-            labOrders: [],
-            radiologyOrders: [],
-            prescriptions: [],
-            pharmacyInventory: [],
-            billing: [],
-            paymentSubmissions: [],
-            admissions: [],
-            surgeries: [],
-            encounters: [],
-            notifications: [],
-            auditLogs: [],
-            vitals: [],
-            medicationAdministrations: [],
-            consultations: [],
-            documents: [],
-            immunizations: [],
-            allergies: [],
-            conditions: [],
-            medicationOrders: [],
-            carePlans: [],
-            clinicalTasks: [],
-            clinicalAlerts: [],
-            wards: [],
-            beds: [],
-            insuranceClaims: [],
-            refillRequests: [],
-            offices: [],
-            officeStaff: [],
-            resultAcknowledgements: [],
-            medicationReconciliations: []
-        }, {
-            get(target, prop) {
-                if (!(prop in target)) {
-                    target[prop] = [];
-                }
-                return target[prop];
-            },
-            set(target, prop, value) {
-                target[prop] = value;
-                return true;
-            }
-        });
-
         const normalizeUsers = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -476,18 +432,6 @@
 
         const initializeEmptyStore = () => {
             Object.assign(appData, createEmptyStore());
-            return appData;
-        };
-
-        // The browser store only mirrors rows read from Supabase. It starts empty
-        // so a missing connection can never produce demonstration records.
-        const getLiveStore = () => {
-            const tables = ['users', 'patients', 'appointments', 'labOrders', 'radiologyOrders', 'prescriptions', 'pharmacyInventory', 'billing', 'paymentSubmissions', 'admissions', 'surgeries', 'encounters', 'notifications', 'auditLogs', 'vitals', 'medicationAdministrations', 'consultations', 'documents', 'immunizations', 'allergies', 'conditions', 'medicationOrders', 'carePlans', 'clinicalTasks', 'clinicalAlerts', 'wards', 'beds', 'insuranceClaims', 'refillRequests', 'offices', 'officeStaff', 'resultAcknowledgements', 'medicationReconciliations'];
-            const next = {};
-            tables.forEach((table) => {
-                next[table] = Array.isArray(appData[table]) ? appData[table] : [];
-            });
-            return next;
         };
 
         const persistStoreTable = (table, rows) => {
@@ -574,7 +518,6 @@
                 : null;
             if (!client) {
                 return {
-                    store: appData,
                     failures: [{ table: 'connection', message: 'Supabase is not configured or is unavailable.' }]
                 };
             }
@@ -622,7 +565,6 @@
                 else if (error) loadedTables.push({ failure: { table: 'dashboard_kpis', message: error.message || 'Dashboard totals could not be loaded.' } });
             }
             return {
-                store: appData,
                 counts: Object.fromEntries(loadedTables.map((entry) => [entry.appTable, entry.count || 0])),
                 failures: loadedTables.filter((entry) => entry.failure).map((entry) => entry.failure)
             };
@@ -736,4 +678,4 @@
             return colors[status] || 'bg-slate-100 text-slate-600 border-slate-200';
         };
 
-export { appData, normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, getLiveStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadSupabaseTables, loadModuleData, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };
+export { normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadSupabaseTables, loadModuleData, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };

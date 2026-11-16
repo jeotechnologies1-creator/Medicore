@@ -1,3 +1,6 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
         // MAIN APP LAYOUT
         // ==========================================
         const getEdgeFunctionErrorMessage = async (error, functionName) => {

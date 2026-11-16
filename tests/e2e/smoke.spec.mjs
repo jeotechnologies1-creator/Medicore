@@ -31,18 +31,29 @@ async function preparePrintHarness(page, auditFails = false) {
     window.print = () => window.__printEvents.push('print');
   });
   await page.goto('/');
+  await page.evaluate(() => {
+    // Test-only access through the bundled module export; patient data is not
+    // exposed on window/globalThis by the application.
+    window.__storeSeedReady = fetch('/.vite/manifest.json').then(async (manifestResponse) => {
+      const manifest = await manifestResponse.json();
+      const entry = manifest['src/js/store.js'] || Object.values(manifest).find((candidate) => candidate.src === 'src/js/store.js');
+      if (!entry?.file) throw new Error('The bundled app store module is absent from the Vite manifest.');
+      const { getAppData } = await import(`/${entry.file}`);
+      const patientId = '20000000-0000-4000-8000-000000000001';
+      const facilityId = 'a1000000-0000-4000-8000-000000000001';
+      getAppData().patients = [{
+        id: patientId,
+        home_facility_id: facilityId,
+        firstName: 'Synthetic',
+        lastName: 'Print Patient',
+        patientNumber: 'PRINT-TEST-ONLY',
+        medicalRecordNumber: 'MRN-TEST-ONLY',
+        dateOfBirth: '1990-01-01'
+      }];
+    });
+  });
+  await page.evaluate(async () => window.__storeSeedReady);
   await page.evaluate((failAudit) => {
-    const patientId = '20000000-0000-4000-8000-000000000001';
-    const facilityId = 'a1000000-0000-4000-8000-000000000001';
-    window.appData.patients = [{
-      id: patientId,
-      home_facility_id: facilityId,
-      firstName: 'Synthetic',
-      lastName: 'Print Patient',
-      patientNumber: 'PRINT-TEST-ONLY',
-      medicalRecordNumber: 'MRN-TEST-ONLY',
-      dateOfBirth: '1990-01-01'
-    }];
     window.OneMedSupabase = {
       getClient: () => ({
         rpc: async (name) => {
@@ -123,6 +134,8 @@ test('login enforces MFA enrollment before granting app access', async ({ page }
 
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('navigation')).toBeVisible();
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   const dashboardA11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(dashboardA11y.violations, JSON.stringify(dashboardA11y.violations.map(({ id, impact, nodes }) => ({ id, impact, count: nodes.length })), null, 2)).toEqual([]);
 
@@ -130,7 +143,6 @@ test('login enforces MFA enrollment before granting app access', async ({ page }
   const patientsA11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(patientsA11y.violations, JSON.stringify(patientsA11y.violations.map(({ id, impact, nodes }) => ({ id, impact, count: nodes.length })), null, 2)).toEqual([]);
   await page.getByRole('button', { name: 'Register Patient' }).first().click();
-  const patient = `CI Patient ${Date.now()}`;
   await page.getByLabel('Registering facility').selectOption('a1000000-0000-4000-8000-000000000001');
   await page.getByLabel('First Name').fill('CI');
   await page.getByLabel('Last Name').fill(`Patient${Date.now()}`);
@@ -150,4 +162,24 @@ test('login enforces MFA enrollment before granting app access', async ({ page }
   await page.getByLabel('Appointment Type').selectOption('consultation');
   await page.getByRole('button', { name: 'Schedule', exact: true }).click();
   await expect(page.getByText(patientName, { exact: true })).toBeVisible();
+
+  const routes = [
+    ['dashboard', 'Dashboard'], ['patients', 'Patients'], ['records', 'Health Information Management (HIM)'],
+    ['appointments', 'Appointments'], ['doctors', 'Doctors'], ['laboratory', 'Laboratory'], ['radiology', 'Radiology'],
+    ['clinical_workflows', 'Clinical Workflows'], ['clinical_decision_support', 'Clinical Support'], ['operations', 'Operations'],
+    ['procurement', 'Procurement'], ['referrals', 'Referrals'], ['workforce', 'Workforce'], ['pharmacy', 'Pharmacy'],
+    ['billing', 'Billing'], ['insurance', 'Insurance'], ['payments', 'Payments'], ['documents', 'Documents'],
+    ['compliance', 'Compliance'], ['admissions', 'Admissions'], ['surgeries', 'Surgeries'], ['clinical_safety', 'Clinical Safety'],
+    ['inventory', 'Inventory'], ['hr', 'HR & Staff'], ['offices', 'Medical Offices'], ['organization', 'Organization'],
+    ['reports', 'Reports'], ['audit', 'Audit Logs'], ['settings', 'Settings']
+  ];
+  expect(await page.evaluate(() => 'appData' in globalThis)).toBe(false);
+  for (const [route, label] of routes) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.locator('.header-page-title')).toHaveText(route.replaceAll('_', ' '));
+    await expect(page.getByTestId('route-module-loading')).toHaveCount(0);
+    await expect(page.getByText('This module could not be loaded. Reload the page and try again.')).toHaveCount(0);
+    await expect(page.locator('#main-content')).not.toBeEmpty();
+  }
+  expect(pageErrors).toEqual([]);
 });

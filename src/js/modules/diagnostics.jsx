@@ -1,3 +1,6 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
         // ==========================================
         const AppointmentsModule = () => {
             const { user } = useAuth();
@@ -6,7 +9,7 @@
             const [selectedDate, setSelectedDate] = useState(formatFacilityDate());
             const [showNewAppointment, setShowNewAppointment] = useState(false);
             const [saveError, setSaveError] = useState('');
-            const [appointments, setAppointments] = useState(getLiveStore().appointments || []);
+            const [appointments, setAppointments] = useState(getAppData().appointments || []);
             const [appointmentForm, setAppointmentForm] = useState({
                 patientId: '',
                 doctorId: '',
@@ -181,7 +184,7 @@
                     >
                         <div className="space-y-4">
                             {saveError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>}
-                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Department" value={appointmentForm.department} onChange={(e) => setAppointmentForm(prev => ({ ...prev, department: e.target.value }))} options={[{ value: '', label: 'Select department...' }, { value: 'medical', label: 'Medical' }, { value: 'surgical', label: 'Surgical' }, { value: 'obstetrics', label: 'Obstetrics' }, { value: 'specialist', label: 'Specialist' }]} />
                             <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(appData.users || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
                             <div className="grid grid-cols-2 gap-4">
@@ -206,7 +209,7 @@
             const [showResultEntry, setShowResultEntry] = useState(false);
             const [showResultDetails, setShowResultDetails] = useState(false);
             const [showNewOrder, setShowNewOrder] = useState(false);
-            const [labOrders, setLabOrders] = useState(getLiveStore().labOrders || []);
+            const [labOrders, setLabOrders] = useState(getAppData().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
             const [resultForm, setResultForm] = useState({ comments: '', values: {} });
             const hasRecordedLabResults = (results) => {
@@ -489,7 +492,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Responsible clinician" value={newOrderForm.responsibleClinicianId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, responsibleClinicianId: e.target.value }))} options={[{ value: '', label: 'Select clinician...' }, ...(appData.users || []).filter((person) => ['doctor', 'specialist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
                             <CodedConceptInput label="Test Type" value={newOrderForm.testType} codeSystem={newOrderForm.testCodeSystem} code={newOrderForm.testCode} display={newOrderForm.testDisplay} onChange={(term) => setNewOrderForm(prev => ({...prev,testType:term.value,testCodeSystem:term.codeSystem,testCode:term.code,testDisplay:term.display}))} />
                             <Input label="Category" value={newOrderForm.category} onChange={(e) => setNewOrderForm(prev => ({ ...prev, category: e.target.value }))} />
@@ -576,7 +579,7 @@
             const [reportStudy, setReportStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [showReportEntry, setShowReportEntry] = useState(false);
-            const [studies, setStudies] = useState(getLiveStore().radiologyOrders || []);
+            const [studies, setStudies] = useState(getAppData().radiologyOrders || []);
             const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             const [reportDraft, setReportDraft] = useState('');
 
@@ -697,7 +700,7 @@
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getLiveStore().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <CodedConceptInput label="Study Type" value={orderForm.studyType} codeSystem={orderForm.studyCodeSystem} code={orderForm.studyCode} display={orderForm.studyDisplay} onChange={(term) => setOrderForm(prev => ({...prev,studyType:term.value,studyCodeSystem:term.codeSystem,studyCode:term.code,studyDisplay:term.display}))} />
                             <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
                             <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />

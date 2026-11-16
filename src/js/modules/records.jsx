@@ -1,3 +1,6 @@
+import { getAppData } from '../store.js';
+const appData = getAppData();
+
 // ==========================================
 // HEALTH INFORMATION MANAGEMENT (HIM) MODULE
 // Read-only chart index for Health Information Management staff.

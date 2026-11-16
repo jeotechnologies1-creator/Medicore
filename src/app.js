@@ -1,3 +1,6 @@
+import { getAppData } from './js/store.js';
+const appData = getAppData();
+
         const UnauthorizedModule = () => {
             const { user } = useAuth();
             return (
@@ -23,6 +26,8 @@
         const App = () => {
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeModule, setActiveModule] = useState('dashboard');
+            const [loadedRoute, setLoadedRoute] = useState('dashboard');
+            const [routeLoadError, setRouteLoadError] = useState(false);
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
             const [sidebarOpen, setSidebarOpen] = useState(false);
             const [notifications, setNotifications] = useState(appData.notifications || []);
@@ -74,6 +79,21 @@
                 window.addEventListener('onemed:navigate', handleNavigation);
                 return () => window.removeEventListener('onemed:navigate', handleNavigation);
             }, []);
+
+            useEffect(() => {
+                if (!isAuthenticated) return undefined;
+                let cancelled = false;
+                setRouteLoadError(false);
+                globalThis.loadOneMedRouteModule(activeModule, user?.role).then(() => {
+                    if (!cancelled) setLoadedRoute(activeModule);
+                }).catch(() => {
+                    if (!cancelled) {
+                        setLoadedRoute(activeModule);
+                        setRouteLoadError(true);
+                    }
+                });
+                return () => { cancelled = true; };
+            }, [activeModule, isAuthenticated, user?.role]);
 
             useEffect(() => {
                 const handlePersistenceError = (event) => addToast(event.detail || 'No changes were saved.', 'error');
@@ -284,6 +304,12 @@
                 const resolvedModule = normalizeModuleId(activeModule);
                 if (user && !hasModuleAccess(resolvedModule)) {
                     return <UnauthorizedModule />;
+                }
+                if (loadedRoute !== activeModule) {
+                    return <div className="p-6 text-sm text-slate-600" role="status" data-testid="route-module-loading">Loading module…</div>;
+                }
+                if (routeLoadError) {
+                    return <div className="p-6 text-sm text-red-700" role="alert">This module could not be loaded. Reload the page and try again.</div>;
                 }
                 const moduleView = moduleMap[resolvedModule] ? moduleMap[resolvedModule]() : <DashboardModule />;
                 // Data is loaded after authentication. Recreate the active screen
