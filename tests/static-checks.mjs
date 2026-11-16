@@ -294,6 +294,15 @@ assert.match(roiMigration, /configure_data_subject_deadline[\s\S]*pending_legal_
 assert.match(roiMigration, /p_released_scope <@ r\.requested_scope/, 'Released scope must not exceed the approved request scope.');
 assert.match(roiRollback, /Rollback refused/, 'Rollback must preserve disclosure and verification history.');
 assert.match(roiTests, /no statutory deadline is imposed until configured/, 'pgTAP must protect against hardcoded statutory deadlines.');
+const retentionMigration = await read('supabase/migrations/20261116000068_retention_holds_disposal.sql');
+const retentionRollback = await read('supabase/rollback/20261116000068_retention_holds_disposal.sql');
+const retentionTests = await read('supabase/tests/retention_holds_disposal.test.sql');
+assert.match(retentionMigration, /retention_days drop not null[\s\S]*configure_retention_schedule/, 'Retention periods must be explicitly configured, with no mandatory default duration.');
+assert.match(retentionMigration, /legal_holds h where h\.status='active'[\s\S]*blocked_by_legal_hold/, 'Active legal holds must prevent retention execution.');
+assert.match(retentionMigration, /first_approved_by[\s\S]*second_approved_by[\s\S]*disposal_certificates/, 'Disposal requires two approvers and an immutable certificate.');
+assert.match(retentionMigration, /record_archive_registry[\s\S]*sealed[\s\S]*prevent_clinical_hard_delete/, 'Approved disposal must seal linked data and retain hard-delete guards.');
+assert.match(retentionRollback, /Rollback refused/, 'Retention rollback must preserve approval and certificate evidence.');
+assert.match(retentionTests, /patient hard deletes are blocked[\s\S]*encounter hard deletes are blocked/, 'pgTAP must verify clinical hard-delete protection.');
 const paymentGatewayMigration = await read('supabase/migrations/20261116000064_payment_gateway_vendor_adapters.sql');
 const paymentGatewayRollback = await read('supabase/rollback/20261116000064_payment_gateway_vendor_adapters.sql');
 const gatewayAdapter = await read('supabase/functions/_shared/payment_gateway_adapters.ts');
