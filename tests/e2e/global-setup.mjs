@@ -75,6 +75,19 @@ export default async function globalSetup() {
   if (!clinicianUserId) throw new Error('Could not locate the clinician query response test identity.');
   const { error: clinicianProfileError } = await admin.from('profiles').update({ role: 'doctor', status: 'active', facility_id: 'a1000000-0000-4000-8000-000000000001' }).eq('auth_user_id', clinicianUserId);
   if (clinicianProfileError) throw clinicianProfileError;
+  const reviewerEmail = 'ci-release-reviewer@example.test';
+  const reviewerPassword = 'CI-only-Release-Reviewer-2026!';
+  const { data: reviewerCreated, error: reviewerCreateError } = await admin.auth.admin.createUser({ email: reviewerEmail, password: reviewerPassword, email_confirm: true });
+  if (reviewerCreateError && !/already been registered|already exists/i.test(reviewerCreateError.message)) throw reviewerCreateError;
+  let reviewerUserId = reviewerCreated.user?.id;
+  if (!reviewerUserId) {
+    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) throw error;
+    reviewerUserId = data.users.find((user) => user.email === reviewerEmail)?.id;
+  }
+  if (!reviewerUserId) throw new Error('Could not locate the disclosure second-review test identity.');
+  const { error: reviewerProfileError } = await admin.from('profiles').update({ role: 'super_admin', status: 'active', facility_id: 'a1000000-0000-4000-8000-000000000001' }).eq('auth_user_id', reviewerUserId);
+  if (reviewerProfileError) throw reviewerProfileError;
   process.env.CI_E2E_EMAIL = email;
   process.env.CI_E2E_PASSWORD = password;
   process.env.CI_E2E_SECOND_EMAIL = secondEmail;
@@ -85,4 +98,6 @@ export default async function globalSetup() {
   process.env.CI_E2E_CODING_PASSWORD = codingPassword;
   process.env.CI_E2E_CLINICIAN_EMAIL = clinicianEmail;
   process.env.CI_E2E_CLINICIAN_PASSWORD = clinicianPassword;
+  process.env.CI_E2E_RELEASE_REVIEWER_EMAIL = reviewerEmail;
+  process.env.CI_E2E_RELEASE_REVIEWER_PASSWORD = reviewerPassword;
 }
