@@ -21,22 +21,23 @@ Deno.serve(async (request) => {
     if (new URL(request.url).searchParams.get('alerts') === '1') {
       if (!await constantTimeEqual(request.headers.get('authorization') || '', `Bearer ${serviceKey}`)) return new Response('Unauthorized', { status: 401, headers: cors });
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [jobs, acknowledgements, messages, authEvents, clientErrors, clientAuthAnomalies, edgeErrors, backupSetting] = await Promise.all([
+      const [jobs, acknowledgements, messages, criticalMessages, authEvents, clientErrors, clientAuthAnomalies, edgeErrors, backupSetting] = await Promise.all([
         client.from('fhir_exchange_jobs').select('id', { count: 'exact', head: true }).eq('status','failed'),
         client.from('result_acknowledgements').select('id', { count: 'exact', head: true }).in('status',['unacknowledged','escalated']).or(`due_at.is.null,due_at.lte.${new Date().toISOString()}`),
         client.from('outbound_messages').select('id', { count: 'exact', head: true }).eq('status','failed'),
+        client.from('outbound_messages').select('id', { count: 'exact', head: true }).eq('template','critical_result_acknowledgement').neq('status','sent'),
         client.from('account_admin_audit').select('id', { count: 'exact', head: true }).eq('outcome','failure').gte('created_at',since),
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','client_error').gte('created_at',since),
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','auth_anomaly').gte('created_at',since),
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','edge_error').gte('created_at',since),
         client.from('backup_status').select('last_success_at').eq('singleton',true).maybeSingle(),
       ]);
-      const failed = [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].some((item) => item.error);
-      if (failed) await reportSafeEdgeError('monitoring', [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].find((item) => item.error)?.error);
+      const failed = [jobs,acknowledgements,messages,criticalMessages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].some((item) => item.error);
+      if (failed) await reportSafeEdgeError('monitoring', [jobs,acknowledgements,messages,criticalMessages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].find((item) => item.error)?.error);
       const backupLastSuccess = typeof backupSetting.data?.last_success_at === 'string' ? Date.parse(backupSetting.data.last_success_at) : Number.NaN;
       const backupStale = isBackupStale(backupLastSuccess);
       // Client-reported client_error/auth_anomaly rows are untrusted and are informational only; they must not page by themselves.
-      return Response.json({ status: failed ? 'query_error' : 'ok', alerts: { failed_jobs: jobs.count || 0, unacknowledged_critical_results: acknowledgements.count || 0, failed_outbound_messages: messages.count || 0, backup_stale: backupStale, ...monitoringCounterGroups({ authenticationAnomalies: authEvents.count || 0, edgeFunctionErrors: edgeErrors.count || 0 }, { errors: clientErrors.count || 0, authAnomalies: clientAuthAnomalies.count || 0 }) } }, { status: failed ? 503 : 200, headers: cors });
+      return Response.json({ status: failed ? 'query_error' : 'ok', alerts: { failed_jobs: jobs.count || 0, unacknowledged_critical_results: acknowledgements.count || 0, failed_outbound_messages: messages.count || 0, undelivered_critical_result_messages: criticalMessages.count || 0, backup_stale: backupStale, ...monitoringCounterGroups({ authenticationAnomalies: authEvents.count || 0, edgeFunctionErrors: edgeErrors.count || 0 }, { errors: clientErrors.count || 0, authAnomalies: clientAuthAnomalies.count || 0 }) } }, { status: failed ? 503 : 200, headers: cors });
     }
     try {
       if (!await checkRateLimit(client, request, 'monitoring-health', null, 60, 60)) return new Response('Rate limited', { status: 429, headers: cors });

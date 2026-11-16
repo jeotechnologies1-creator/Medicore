@@ -2,8 +2,40 @@
         // OPERATIONS COMMAND CENTRE
         // ==========================================
         const OperationsModule = () => {
+            const { user } = useAuth();
             const [activeTab, setActiveTab] = useState('flow');
             const [selectedDept, setSelectedDept] = useState('all');
+            const [criticalDelivery, setCriticalDelivery] = useState({ loading: true, error: false, count: 0, rows: [] });
+
+            useEffect(() => {
+                if (user?.role !== 'super_admin') return undefined;
+                let active = true;
+                const refreshCriticalDelivery = async () => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) {
+                        if (active) setCriticalDelivery({ loading: false, error: true, count: 0, rows: [] });
+                        return;
+                    }
+                    const [alerts, deliveries] = await Promise.all([
+                        client.rpc('get_operations_alerts'),
+                        client.rpc('list_critical_result_delivery_status')
+                    ]);
+                    if (!active) return;
+                    if (alerts.error || deliveries.error) {
+                        setCriticalDelivery({ loading: false, error: true, count: 0, rows: [] });
+                        return;
+                    }
+                    setCriticalDelivery({
+                        loading: false,
+                        error: false,
+                        count: Number(alerts.data?.undelivered_critical_result_messages || 0),
+                        rows: Array.isArray(deliveries.data) ? deliveries.data : []
+                    });
+                };
+                refreshCriticalDelivery();
+                const timer = window.setInterval(refreshCriticalDelivery, 60_000);
+                return () => { active = false; window.clearInterval(timer); };
+            }, [user?.role]);
 
             const activeAdmissions = (appData.admissions || []).filter(item => item.status === 'active');
             const managementDepartments = (appData.wards || []).map((ward) => ({
@@ -68,6 +100,38 @@
                         <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
                         <StatCard title="Open appointments" value={(appData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
                     </div>
+
+                    {user?.role === 'super_admin' && (
+                        <Card title="Critical result external notifications">
+                            {criticalDelivery.loading ? (
+                                <p className="text-sm text-slate-500" role="status">Loading delivery status…</p>
+                            ) : criticalDelivery.error ? (
+                                <p className="text-sm text-amber-700" role="status">Delivery status is temporarily unavailable.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <p className={`text-sm ${criticalDelivery.count ? 'font-semibold text-red-700' : 'text-slate-600'}`} role="status">
+                                        {criticalDelivery.count} critical result message{criticalDelivery.count === 1 ? '' : 's'} awaiting delivery or failed.
+                                    </p>
+                                    {criticalDelivery.rows.length > 0 && (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-left text-sm">
+                                                <thead><tr className="border-b border-slate-200 text-slate-500"><th className="py-2 pr-4">Opaque reference</th><th className="py-2 pr-4">Delivery</th><th className="py-2">Status</th></tr></thead>
+                                                <tbody>
+                                                    {criticalDelivery.rows.map((row) => (
+                                                        <tr key={row.reference} className="border-b border-slate-100">
+                                                            <td className="py-2 pr-4 font-mono text-xs">{row.reference}</td>
+                                                            <td className="py-2 pr-4">{row.status_detail}</td>
+                                                            <td className="py-2 capitalize">{row.delivery_status}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </Card>
+                    )}
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
