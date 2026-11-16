@@ -1,0 +1,17 @@
+begin;
+select plan(13);
+select has_table('public','nursing_admission_assessments','admission assessment table exists');
+select has_table('public','nursing_care_interventions','intervention log exists');
+select has_table('public','nursing_fluid_entries','fluid chart exists');
+select has_table('public','nursing_shift_handovers','handover log exists');
+select has_table('public','nursing_amendments','amendment history exists');
+select has_column('public','wards','facility_id','wards support facility scope');
+select has_function('public','acknowledge_nursing_handover',array['uuid'],'incoming nurse acknowledgement is controlled');
+select has_function('public','add_nursing_amendment',array['text','uuid','text','jsonb'],'corrections append to amendment history');
+select has_view('public','nursing_fluid_running_totals','fluid chart exposes running balance');
+select has_view('public','nursing_ward_alerts','unacknowledged handovers are surfaced as alerts');
+select ok((select relrowsecurity from pg_class where oid='public.nursing_shift_handovers'::regclass),'handover data has RLS enabled');
+select ok(not has_table_privilege('authenticated','public.nursing_shift_handovers','UPDATE'),'handover content has no direct update grant');
+select has_trigger('public','nursing_fluid_entries','nursing_fluid_entries_immutable','fluid entries are append-only');
+select * from finish();
+rollback;

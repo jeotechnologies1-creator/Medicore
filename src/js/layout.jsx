@@ -67,6 +67,7 @@
                     ],
                     nurse: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
+                        { id: 'nursing', label: 'Nursing Care', icon: Icons.ClipboardList },
                         { id: 'ward', label: 'Ward Management', icon: Icons.Bed },
                         { id: 'vitals', label: 'Vital Signs', icon: Icons.Activity },
                         { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },

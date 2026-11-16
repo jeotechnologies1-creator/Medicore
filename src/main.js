@@ -91,6 +91,7 @@ const routeModules = {
   hr: ['./js/modules/people.jsx'],
   portal: ['./js/modules/portal.jsx'],
   ward: ['./js/modules/operations.jsx'],
+  nursing: ['./js/modules/clinical.jsx'],
   vitals: ['./js/modules/clinical.jsx'],
   upload: ['./js/modules/clinical.jsx'],
   medications: ['./js/modules/operations.jsx'],

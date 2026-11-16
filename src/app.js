@@ -291,6 +291,7 @@ const appData = getAppData();
                 hr: () => <HRStaffModule />,
                 portal: () => <PatientPortalModule />,
                 ward: () => <AdmissionsModule />,
+                nursing: () => <NursingCareModule />,
                 vitals: () => <VitalsModule />,
                 upload: () => <DocumentsModule />,
                 medications: () => <PharmacyModule initialTab="prescriptions" />,

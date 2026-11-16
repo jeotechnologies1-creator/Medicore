@@ -1,0 +1,16 @@
+begin;
+drop view if exists public.nursing_ward_alerts;
+drop view if exists public.nursing_fluid_running_totals;
+drop function if exists public.add_nursing_amendment(text,uuid,text,jsonb);
+drop function if exists public.acknowledge_nursing_handover(uuid);
+drop table if exists public.nursing_amendments;
+drop table if exists public.nursing_shift_handovers;
+drop table if exists public.nursing_fluid_entries;
+drop table if exists public.nursing_care_interventions;
+drop table if exists public.nursing_admission_assessments;
+drop function if exists public.guard_nursing_handover_ack();
+drop function if exists public.validate_nursing_context();
+drop index if exists public.wards_facility_idx;
+alter table public.wards drop column if exists facility_id;
+notify pgrst,'reload schema';
+commit;

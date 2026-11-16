@@ -463,6 +463,7 @@
             pharmacy: ['prescriptions', 'pharmacy_inventory', 'patients', 'profiles'], billing: ['billing', 'payment_submissions', 'patients'], payments: ['billing', 'payment_submissions', 'patients'],
             admissions: ['admissions', 'wards', 'beds', 'patients', 'profiles'], surgeries: ['surgeries', 'patients', 'profiles'], clinical_safety: ['clinical_alerts', 'vital_signs', 'patients', 'profiles'],
             vitals: ['vital_signs', 'patients', 'profiles'], medications: ['prescriptions', 'medication_orders', 'medication_administrations', 'patients'],
+            nursing: ['admissions', 'wards', 'patients', 'encounters', 'profiles'],
             documents: ['patient_documents', 'patients'], upload: ['patient_documents', 'patients'], audit: ['audit_logs', 'profiles'], reports: ['patients', 'appointments', 'lab_orders', 'billing'],
             offices: ['medical_offices', 'office_staff', 'profiles'], organization: ['profiles'], settings: ['profiles'], portal: [], messages: [], lab_results: [],
             immunizations: ['immunizations', 'patients'], results: ['lab_orders', 'patients'], ward: ['admissions', 'wards', 'beds', 'patients']
@@ -503,7 +504,7 @@
         const moduleTables = {
             patients: ['patients'], records: ['patients'], laboratory: ['lab_orders'], radiology: ['radiology_orders'], pharmacy: ['prescriptions','pharmacy_inventory'],
             billing: ['billing','payment_submissions'], payments: ['payment_submissions'], admissions: ['admissions'], surgeries: ['surgeries'],
-            clinical_safety: ['clinical_alerts','vital_signs'], vitals: ['vital_signs'], consultations: ['consultations','encounters'],
+            clinical_safety: ['clinical_alerts','vital_signs'], vitals: ['vital_signs'], nursing: ['admissions','wards','encounters','profiles'], consultations: ['consultations','encounters'],
             appointments: ['appointments'], documents: ['patient_documents'], upload: ['patient_documents'], audit: ['audit_logs'], reports: ['billing','appointments','lab_orders'],
             people: ['profiles','medical_offices','office_staff'], hr: ['profiles'], staff: ['profiles'], offices: ['medical_offices','office_staff'], organization: ['profiles'], settings: ['profiles'],
             doctors: ['profiles','appointments','patients'], clinical_workflows: ['encounters','consultations','clinical_tasks','patients'],
