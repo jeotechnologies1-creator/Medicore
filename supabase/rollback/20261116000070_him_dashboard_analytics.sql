@@ -1,0 +1,10 @@
+begin;
+set local lock_timeout='2s';
+set local statement_timeout='60s';
+drop function if exists public.get_him_dashboard_analytics(uuid,date,date);
+drop index if exists public.diagnosis_codes_facility_encounter_idx;
+drop index if exists public.admissions_patient_discharge_date_idx;
+drop index if exists public.admissions_patient_admission_date_idx;
+drop index if exists public.encounters_patient_started_idx;
+notify pgrst,'reload schema';
+commit;

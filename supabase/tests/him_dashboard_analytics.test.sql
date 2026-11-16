@@ -1,0 +1,12 @@
+begin;
+select plan(8);
+select has_function('public','get_him_dashboard_analytics',array['uuid','date','date'],'HIM dashboard analytics accepts a facility and date range');
+select ok(has_function_privilege('authenticated','public.get_him_dashboard_analytics(uuid,date,date)','EXECUTE'),'authenticated staff can call aggregate RPC');
+select ok(not has_function_privilege('anon','public.get_him_dashboard_analytics(uuid,date,date)','EXECUTE'),'anonymous clients cannot call aggregate RPC');
+select has_index('public','encounters','encounters_patient_started_idx','visit time range has a supporting index');
+select has_index('public','admissions','admissions_patient_admission_date_idx','admission date aggregation has a supporting index');
+select has_index('public','admissions','admissions_patient_discharge_date_idx','discharge date aggregation has a supporting index');
+select has_index('public','encounter_diagnosis_codes','diagnosis_codes_facility_encounter_idx','coded diagnosis aggregation has a supporting index');
+select is(pg_get_function_result('public.get_him_dashboard_analytics(uuid,date,date)'::regprocedure),'jsonb','RPC returns one aggregate JSON object and no patient-level row set');
+select * from finish();
+rollback;

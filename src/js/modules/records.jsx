@@ -42,6 +42,11 @@ const RecordsModule = () => {
     const [fileRegisterLoading, setFileRegisterLoading] = useState(true);
     const [fileRegisterError, setFileRegisterError] = useState('');
     const [himSummary, setHimSummary] = useState(null);
+    const analyticsToday = new Date().toISOString().slice(0, 10);
+    const [analyticsRange, setAnalyticsRange] = useState({ start: `${analyticsToday.slice(0, 4)}-${analyticsToday.slice(5, 7)}-01`, end: analyticsToday });
+    const [himAnalytics, setHimAnalytics] = useState(null);
+    const [himAnalyticsError, setHimAnalyticsError] = useState('');
+    const [himAnalyticsLoading, setHimAnalyticsLoading] = useState(false);
     const [himPatients, setHimPatients] = useState(appData.patients || []);
     const [patientDirectoryLoading, setPatientDirectoryLoading] = useState(false);
     const [patientDirectoryError, setPatientDirectoryError] = useState('');
@@ -66,6 +71,23 @@ const RecordsModule = () => {
         else setMergeHistory(data || []);
     };
     useEffect(() => { refreshMergeHistory(); }, [user?.id, user?.role]);
+
+    useEffect(() => {
+        if (!['super_admin', 'records_officer'].includes(user?.role) || !user?.facility_id) return undefined;
+        const client = window.OneMedSupabase?.getClient?.();
+        if (!client) return undefined;
+        let active = true;
+        setHimAnalyticsLoading(true);
+        client.rpc('get_him_dashboard_analytics', {
+            p_facility_id: user.facility_id, p_start_date: analyticsRange.start, p_end_date: analyticsRange.end
+        }).then(({ data, error }) => {
+            if (!active) return;
+            if (error) { setHimAnalyticsError(error.message || 'HIM analytics could not be loaded.'); setHimAnalytics(null); }
+            else { setHimAnalytics(data || null); setHimAnalyticsError(''); }
+            setHimAnalyticsLoading(false);
+        });
+        return () => { active = false; };
+    }, [user?.id, user?.role, user?.facility_id, analyticsRange.start, analyticsRange.end]);
 
     const updatePrivacyRequest = async (request, status) => {
         const client = window.OneMedSupabase?.getClient?.();
@@ -491,6 +513,20 @@ const RecordsModule = () => {
                     ['Files indexed', himSummary?.files_total], ['Files available', himSummary?.files_available], ['In circulation', himSummary?.files_circulating], ['Awaiting release', himSummary?.files_requested], ['Overdue', himSummary?.files_overdue], ['Missing', himSummary?.files_missing], ['Requests today', himSummary?.requests_today], ['Retrieved today', himSummary?.files_retrieved_today], ['Returned today', himSummary?.files_returned_today]
                 ].map(([label, value]) => <Card key={label}><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-900">{value == null ? '—' : Number(value).toLocaleString()}</p></Card>)}
             </div>}
+            {['super_admin', 'records_officer'].includes(user?.role) && <Card title="HIM activity dashboard" subtitle="Facility-scoped aggregates for the selected period. Patient-level data is not included." action={<div className="flex items-end gap-2"><Input label="From" type="date" value={analyticsRange.start} onChange={(event) => setAnalyticsRange((current) => ({ ...current, start: event.target.value }))} /><Input label="To" type="date" value={analyticsRange.end} onChange={(event) => setAnalyticsRange((current) => ({ ...current, end: event.target.value }))} /></div>}>
+                {himAnalyticsError && <p role="alert" className="mb-3 text-sm text-red-700">Analytics unavailable: {himAnalyticsError}</p>}
+                {himAnalyticsLoading && <p className="py-3 text-sm text-slate-500">Loading facility aggregates…</p>}
+                {himAnalytics && <>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                        {[["Visits", himAnalytics.visits], ["Admissions", himAnalytics.admissions], ["Discharges", himAnalytics.discharges], ["Verified deaths", himAnalytics.verified_deaths], ["Verified births", himAnalytics.verified_births]].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="text-xl font-semibold text-slate-900">{Number(value || 0).toLocaleString()}</p></div>)}
+                    </div>
+                    <div className="mt-5 grid gap-5 xl:grid-cols-3">
+                        <section><h3 className="mb-2 text-sm font-semibold text-slate-800">Record completeness</h3><p className="text-sm text-slate-600">Encounters with coded diagnosis: {himAnalytics.record_completeness?.diagnosis_completion_percent ?? '—'}% ({himAnalytics.record_completeness?.encounters_with_diagnosis ?? 0}/{himAnalytics.record_completeness?.encounter_count ?? 0})</p><p className="mt-1 text-sm text-slate-600">Discharges with signed summary: {himAnalytics.record_completeness?.signed_summary_percent ?? '—'}% ({himAnalytics.record_completeness?.discharges_with_signed_summary ?? 0}/{himAnalytics.record_completeness?.discharge_count ?? 0})</p></section>
+                        <section><h3 className="mb-2 text-sm font-semibold text-slate-800">Top coded diagnoses</h3>{himAnalytics.top_diagnoses?.length ? <ul className="space-y-1 text-sm text-slate-600">{himAnalytics.top_diagnoses.map((item) => <li key={`${item.code_system}:${item.code}`} className="flex justify-between gap-2"><span>{item.display} <span className="text-xs text-slate-400">{item.code_system} · {item.code}</span></span><strong>{item.count}</strong></li>)}</ul> : <p className="text-sm text-slate-500">No coded diagnoses in this period.</p>}</section>
+                        <section><h3 className="mb-2 text-sm font-semibold text-slate-800">Department performance</h3>{himAnalytics.department_performance?.length ? <ul className="space-y-1 text-sm text-slate-600">{himAnalytics.department_performance.map((item) => <li key={item.department} className="flex justify-between gap-2"><span>{item.department}</span><span>Visits {item.visits} · Admits {item.admissions} · Discharges {item.discharges}</span></li>)}</ul> : <p className="text-sm text-slate-500">No department activity in this period.</p>}</section>
+                    </div>
+                </>}
+            </Card>}
             {['super_admin','records_officer'].includes(user?.role) && <Card title="Data-subject request queue" subtitle="Requests show facility-configured provisional due dates; legal deadlines require local counsel confirmation." action={<Button size="sm" variant="ghost" onClick={refreshPrivacyRequests}>Refresh</Button>}>
                 {privacyRequestError && <p role="alert" className="mb-3 text-sm text-red-700">{privacyRequestError}</p>}
                 {privacyRequests.length ? <div className="space-y-3">{privacyRequests.map((request) => <div key={request.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 p-3"><div className="min-w-[16rem] flex-1"><p className="font-medium capitalize">{request.request_type} request · {request.status.replaceAll('_',' ')}</p><p className="mt-1 text-sm text-slate-600">{request.description}</p><p className="mt-1 text-xs text-slate-500">Received {formatDateTime(request.received_at)} · due {formatDateTime(request.due_at)} · patient {request.patient_id || 'not linked'}</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => updatePrivacyRequest(request,'in_progress')}>Start review</Button><Button size="sm" variant="primary" onClick={() => updatePrivacyRequest(request,'completed')}>Complete</Button></div></div>)}</div> : <p className="text-sm text-slate-500">No open data-subject requests.</p>}
