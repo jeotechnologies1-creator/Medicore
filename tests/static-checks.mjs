@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+const listFiles = async (directory) => {
+    const entries = await readdir(new URL(`../${directory}/`, import.meta.url), { withFileTypes: true });
+    const nested = await Promise.all(entries.map((entry) => {
+        const path = `${directory}/${entry.name}`;
+        return entry.isDirectory() ? listFiles(path) : [path];
+    }));
+    return nested.flat();
+};
 const ciWorkflow = await read('.github/workflows/ci.yml');
 const specialistAuthoring = await read('supabase/migrations/20261103000025_specialist_clinical_authoring.sql');
 const clinicalRetention = await read('supabase/migrations/20261103000026_clinical_record_retention.sql');
@@ -53,9 +61,14 @@ const [app, core, auth, portal, supabaseClient, schema, diagnostics, quality, ha
 const criticalLabMigration = await read('supabase/migrations/20261112000032_critical_lab_in_app_alerts.sql');
 const patientIdentityMigration = await read('supabase/migrations/20261112000047_patient_identity_merge_workflow.sql');
 const auditPrivacyMigration = await read('supabase/migrations/20261112000044_server_audit_privacy.sql');
+const sourceFiles = await listFiles('src');
+const sourceText = (await Promise.all(sourceFiles.filter((path) => /\.(?:js|jsx|ts|tsx|html)$/.test(path)).map(read))).join('\n');
 assert.match(criticalLabMigration, /set local lock_timeout\s*=\s*'2s'/, 'Critical lab migration must bound lock acquisition.');
 assert.match(ciWorkflow, /SUPABASE_AUTH_CAPTCHA_SECRET: 1x0000000000000000000000000000000AA/, 'CI must use Cloudflare’s test-only CAPTCHA secret for local authentication.');
 assert.match(ciWorkflow, /VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA/, 'CI must provide the matching Cloudflare test widget key to browser tests.');
+assert.doesNotMatch(sourceText, /\bdocument\s*\.\s*write\s*\(/i, 'Application source must not write printable HTML into a popup.');
+assert.doesNotMatch(sourceText, /<script\b(?![^>]*\bsrc\s*=)[^>]*>/i, 'Application source must not create inline scripts.');
+assert.doesNotMatch(sourceText, /\bon[a-z]+(?:[A-Z][a-zA-Z]*)?\s*=\s*(['"])[^'"\r\n]*?\1/, 'Application source must not use string-based inline event handlers.');
 
 assert.doesNotMatch(app, /setInterval\s*\(\s*(?:syncLiveData|loadSupabaseTables)/, 'The app must not poll or refresh records in the background.');
 assert.match(app, /persistNotificationReadState/, 'Notification read changes must be persisted.');

@@ -25,6 +25,89 @@ function totp(secret) {
   return String(code).padStart(6, '0');
 }
 
+async function preparePrintHarness(page, auditFails = false) {
+  await page.addInitScript(() => {
+    window.__printEvents = [];
+    window.print = () => window.__printEvents.push('print');
+  });
+  await page.goto('/');
+  await page.evaluate((failAudit) => {
+    const patientId = '20000000-0000-4000-8000-000000000001';
+    const facilityId = 'a1000000-0000-4000-8000-000000000001';
+    window.appData.patients = [{
+      id: patientId,
+      home_facility_id: facilityId,
+      firstName: 'Synthetic',
+      lastName: 'Print Patient',
+      patientNumber: 'PRINT-TEST-ONLY',
+      medicalRecordNumber: 'MRN-TEST-ONLY',
+      dateOfBirth: '1990-01-01'
+    }];
+    window.OneMedSupabase = {
+      getClient: () => ({
+        rpc: async (name) => {
+          window.__printEvents.push(name);
+          return failAudit ? { data: null, error: new Error('Synthetic audit failure') } : { data: '30000000-0000-4000-8000-000000000001', error: null };
+        },
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { name: 'Synthetic Test Facility', code: 'PRINT-TEST', address: 'Test Address', state: 'Test State', phone: '0000000000', email: 'test@example.invalid' },
+                error: null
+              })
+            })
+          })
+        })
+      })
+    };
+  }, auditFails);
+}
+
+test('audited document printing renders text safely and audits before printing', async ({ page }) => {
+  await preparePrintHarness(page);
+  const events = await page.evaluate(async () => {
+    await window.printEMRDocument({
+      type: 'lab_report',
+      id: '40000000-0000-4000-8000-000000000001',
+      patientId: '20000000-0000-4000-8000-000000000001',
+      title: 'Synthetic laboratory print test',
+      author: 'CI Test Author',
+      fields: [['Result note', '<img src=x onerror=alert(1)>']]
+    });
+    return window.__printEvents;
+  });
+
+  const printView = page.getByTestId('print-document-view');
+  await expect(printView).toContainText('Synthetic Test Facility');
+  await expect(printView).toContainText('Synthetic Print Patient');
+  await expect(printView).toContainText('<img src=x onerror=alert(1)>');
+  await expect(printView.locator('img, script')).toHaveCount(0);
+  expect(events).toEqual(['record_document_print', 'print']);
+});
+
+test('document printing does not open the print dialog when auditing fails', async ({ page }) => {
+  await preparePrintHarness(page, true);
+  const result = await page.evaluate(async () => {
+    try {
+      await window.printEMRDocument({
+        type: 'lab_report',
+        id: '40000000-0000-4000-8000-000000000001',
+        patientId: '20000000-0000-4000-8000-000000000001',
+        title: 'Synthetic failed audit test',
+        fields: []
+      });
+      return { rejected: false, events: window.__printEvents };
+    } catch {
+      return { rejected: true, events: window.__printEvents };
+    }
+  });
+
+  expect(result.rejected).toBe(true);
+  expect(result.events).toEqual(['record_document_print']);
+  await expect(page.getByTestId('print-document-view')).toHaveCount(0);
+});
+
 test('login enforces MFA enrollment before granting app access', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Email').fill(process.env.CI_E2E_EMAIL);
