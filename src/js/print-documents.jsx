@@ -16,7 +16,7 @@ const PrintDocumentView = ({ document, onClose, onReady }) => {
         onReady();
     }, [document, onReady]);
 
-    const { facility, patient, title, fields, author, printedAt } = document;
+    const { facility, patient, title, fields, author, printedAt, type } = document;
     const patientName = `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
     const facilityAddress = [facility?.address, facility?.state, facility?.phone, facility?.email].filter(Boolean).join(' · ');
 
@@ -25,7 +25,7 @@ const PrintDocumentView = ({ document, onClose, onReady }) => {
             <div className="print-document-toolbar">
                 <button type="button" onClick={onClose}>Return to OneMed</button>
             </div>
-            <article className="print-document" data-testid="print-document-view" aria-label="Printable document">
+            <article className={`print-document${type === 'specimen_label' ? ' print-document--specimen-label' : ''}`} data-testid="print-document-view" aria-label="Printable document">
                 <header className="print-facility-header">
                     <h1>{facility?.name || 'Medical Facility'}</h1>
                     {facilityAddress && <p>{facilityAddress}</p>}
@@ -63,11 +63,9 @@ const printDocument = async ({ type, id, patientId, title, fields = [], author =
     const patient = (getAppData().patients || []).find((row) => row.id === patientId);
     if (!client || !patient) throw new Error('Patient or database connection is unavailable.');
 
-    const { error: auditError } = await client.rpc('record_document_print', {
-        p_document_type: type,
-        p_document_id: id,
-        p_patient_id: patientId
-    });
+    const { error: auditError } = type === 'specimen_label'
+        ? await client.rpc('record_specimen_label_print', { p_lab_order_id: id, p_patient_id: patientId })
+        : await client.rpc('record_document_print', { p_document_type: type, p_document_id: id, p_patient_id: patientId });
     if (auditError) throw auditError;
 
     const { data: facility } = await client.from('facilities')
@@ -80,7 +78,7 @@ const printDocument = async ({ type, id, patientId, title, fields = [], author =
 
     await new Promise((resolve) => {
         const printedAt = new Date().toLocaleString();
-        const printableDocument = { facility, patient, title, fields, author, printedAt };
+        const printableDocument = { type, facility, patient, title, fields, author, printedAt };
         const close = () => printRoot.render(null);
         const ready = () => resolve();
         printRoot.render(<PrintDocumentView document={printableDocument} onClose={close} onReady={ready} />);

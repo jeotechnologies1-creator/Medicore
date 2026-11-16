@@ -75,7 +75,13 @@
             orderedDate: row.ordered_date || row.orderedDate,
             resultDate: row.result_date || row.resultDate || null,
             results: row.results || null,
-            technicianId: row.technician_id || row.technicianId
+            technicianId: row.technician_id || row.technicianId,
+            facility_id: row.facility_id || row.facilityId,
+            accession_number: row.accession_number || row.accessionNumber,
+            specimen_status: row.specimen_status || row.specimenStatus || 'awaiting_collection',
+            specimen_rejection_reason: row.specimen_rejection_reason || row.specimenRejectionReason,
+            result_status: row.result_status || row.resultStatus,
+            corrected_result_reason: row.corrected_result_reason || row.correctedResultReason
         }));
 
         const normalizeRadiologyOrders = (rows = []) => rows.map((row) => ({
@@ -90,7 +96,11 @@
             orderedDate: row.ordered_date || row.orderedDate,
             scheduledDate: row.scheduled_date || row.scheduledDate,
             report: row.report || '',
-            radiologistId: row.radiologist_id || row.radiologistId
+            radiologistId: row.radiologist_id || row.radiologistId,
+            report_state: row.report_state || row.reportState || 'preliminary',
+            report_status: row.report_status || row.reportStatus,
+            critical_finding: row.critical_finding ?? row.criticalFinding ?? false,
+            finding_flag: row.finding_flag || row.findingFlag
         }));
 
         const normalizePrescriptions = (rows = []) => rows.map((row) => ({

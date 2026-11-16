@@ -583,13 +583,24 @@
 .print-document-metadata { margin-top: 1.5rem; }
 .print-signatures { display: flex; justify-content: space-between; gap: 2rem; margin-top: 5rem; }
 .print-signature-line { width: 42%; padding-top: .5rem; border-top: 1px solid #334155; }
+.print-document--specimen-label { page: specimen-label; }
 
 @media print {
     @page { margin: 14mm; }
+    @page specimen-label { size: 4in 2.25in; margin: .12in; }
     html, body { min-height: 0 !important; margin: 0 !important; background: #fff !important; }
     #root { display: none !important; }
     #onemed-print-root { display: block !important; position: static !important; }
     .print-document-shell { position: static; overflow: visible; padding: 0; background: #fff; }
     .print-document-toolbar { display: none !important; }
     .print-document { width: auto; max-width: none; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+    .print-document--specimen-label { width: 3.76in; min-height: 2in; padding: .08in; font-size: 8pt; line-height: 1.25; page: specimen-label; }
+    .print-document--specimen-label .print-facility-header { margin-bottom: .08in; padding-bottom: .05in; border-bottom-width: 1px; }
+    .print-document--specimen-label .print-facility-header h1 { font-size: 10pt; }
+    .print-document--specimen-label .print-facility-header p,
+    .print-document--specimen-label .print-document-metadata,
+    .print-document--specimen-label .print-signatures { display: none !important; }
+    .print-document--specimen-label > h2 { margin: 0 0 .06in; font-size: 9pt; }
+    .print-document--specimen-label .print-patient-block { margin: .06in 0; padding: .06in; }
+    .print-document--specimen-label .print-document-fields { grid-template-columns: 1fr 1fr; gap: .05in .12in; }
 }

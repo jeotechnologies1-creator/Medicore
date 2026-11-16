@@ -211,7 +211,9 @@ const appData = getAppData();
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [labOrders, setLabOrders] = useState(getAppData().labOrders || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
-            const [resultForm, setResultForm] = useState({ comments: '', values: {} });
+            const [resultForm, setResultForm] = useState({ comments: '', values: {}, correctionReason: '' });
+            const [qcForm, setQcForm] = useState({ analyteCode: '', codeSystem: '', minimum: '', maximum: '', observedValue: '' });
+            const [qcMessage, setQcMessage] = useState('');
             const hasRecordedLabResults = (results) => {
                 if (typeof results === 'string') return results.trim().length > 0;
                 if (Array.isArray(results)) return results.length > 0;
@@ -225,6 +227,7 @@ const appData = getAppData();
             const tabs = [
                 { id: 'orders', label: 'Lab Orders' },
                 { id: 'results', label: 'Results' },
+                { id: 'qc', label: 'Quality Control' },
                 { id: 'statistics', label: 'Statistics' },
             ];
 
@@ -283,10 +286,12 @@ const appData = getAppData();
                 if (!Object.values(resultForm.values || {}).some((entry) => String(entry?.value ?? '').trim())) {
                     return notifyPersistenceFailure('record laboratory results', new Error('Enter at least one result value before saving.'));
                 }
+                const isCorrection = ['final', 'corrected'].includes(selectedOrder.result_status);
+                if (isCorrection && !resultForm.correctionReason.trim()) return notifyPersistenceFailure('correct laboratory results', new Error('Enter a reason for correcting the released result.'));
                 const nextOrder = {
                     ...selectedOrder,
                     status: 'processing',
-                    result_status: 'preliminary',
+                    result_status: isCorrection ? 'corrected' : 'preliminary',
                     resultDate: formatFacilityDate(),
                     results: {
                         comments: resultForm.comments.trim() || null,
@@ -298,27 +303,57 @@ const appData = getAppData();
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('record laboratory results');
-                const { data, error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: 'preliminary', result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id).select().single();
+                const { data, error } = await client.from('lab_orders').update({ status: nextOrder.status, result_status: nextOrder.result_status, ...(isCorrection ? { result_verified_by: user?.id || null, result_verified_at: new Date().toISOString() } : {}), corrected_result_reason: isCorrection ? resultForm.correctionReason.trim() : null, result_date: nextOrder.resultDate, results: nextOrder.results }).eq('id', selectedOrder.id).select().single();
                 if (error) return notifyPersistenceFailure('record laboratory results', error);
                 const savedOrder = normalizeLabOrders([data])[0];
                 const next = labOrders.map(order => order.id === selectedOrder.id ? savedOrder : order);
                 persistStoreTable('labOrders', next);
                 setLabOrders(next);
                 setShowResultEntry(false);
-                setResultForm({ comments: '', values: {} });
+                setResultForm({ comments: '', values: {}, correctionReason: '' });
             };
 
             const collectSpecimen = async (order) => {
-                const { data, error } = await window.OneMedSupabase.getClient().from('lab_orders').update({ status: 'processing', specimen_collected_at: new Date().toISOString() }).eq('id', order.id).eq('status', 'pending').select().single();
-                if (error || !data) return notifyPersistenceFailure('record specimen collection', error || new Error('This order is no longer pending.'));
-                const mapped = normalizeLabOrders([data])[0]; const next = labOrders.map((item) => item.id === order.id ? mapped : item);
-                setLabOrders(next); persistStoreTable('labOrders', next);
+                const { error } = await window.OneMedSupabase.getClient().rpc('collect_lab_specimen', { p_lab_order_id: order.id });
+                if (error) return notifyPersistenceFailure('record specimen collection', error);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 
             const verifyLabResult = async (order) => {
                 const { error } = await window.OneMedSupabase.getClient().from('lab_orders').update({ status: order.status === 'critical' ? 'critical' : 'completed', result_status: 'final', result_verified_by: user?.id || null, result_verified_at: new Date().toISOString() }).eq('id', order.id);
                 if (error) return notifyPersistenceFailure('verify laboratory result', error);
                 window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
+            const printSpecimenLabel = async (order) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return notifyPersistenceFailure('print specimen label');
+                const { data, error } = await client.from('lab_specimen_labels').select('*').eq('lab_order_id', order.id).single();
+                if (error || !data) return notifyPersistenceFailure('print specimen label', error || new Error('Accession label is unavailable.'));
+                window.printEMRDocument({ type: 'specimen_label', id: order.id, patientId: order.patientId, title: 'Specimen accession label', fields: [['Accession number', data.accession_number], ['Test', data.test_type], ['Category', data.category], ['Ordered', data.ordered_date], ['Specimen status', data.specimen_status]] }).catch((printError) => notifyPersistenceFailure('print specimen label', printError));
+            };
+
+            const rejectSpecimen = async (order) => {
+                const reason = window.prompt('Reason for specimen rejection:');
+                if (!reason?.trim()) return;
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('reject_lab_specimen', { p_lab_order_id: order.id, p_reason: reason.trim() });
+                if (error) return notifyPersistenceFailure('reject laboratory specimen', error);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
+            const saveQcRule = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setQcMessage('Laboratory database is unavailable.');
+                const facilityId = user?.facility_id || user?.facilityId;
+                const { error } = await client.rpc('configure_lab_qc_rule', { p_facility_id: facilityId, p_analyte_code: qcForm.analyteCode, p_code_system: qcForm.codeSystem, p_acceptance_rule: { minimum: qcForm.minimum, maximum: qcForm.maximum } });
+                setQcMessage(error?.message || 'QC acceptance rule saved.');
+            };
+
+            const recordQcRun = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setQcMessage('Laboratory database is unavailable.');
+                const { data, error } = await client.rpc('record_lab_qc_run', { p_facility_id: user?.facility_id || user?.facilityId, p_analyte_code: qcForm.analyteCode, p_code_system: qcForm.codeSystem, p_observed_value: qcForm.observedValue === '' ? null : Number(qcForm.observedValue) });
+                setQcMessage(error?.message || `QC run recorded (${data}).`);
             };
 
             return (
@@ -365,10 +400,12 @@ const appData = getAppData();
                                 data={labOrders}
                                 actions={(row) => (
                                     <>
-                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'lab_report', id: row.id, patientId: row.patientId, title: `Laboratory report · ${row.testType}`, author: appData.users.find((entry) => entry.id === row.result_verified_by || entry.id === row.technicianId)?.name, fields: [['Test', row.testType], ['Category', row.category], ['Ordered', row.orderedDate], ['Result date', row.resultDate], ['Status', row.result_status || row.status], ['Results', row.results]] }).catch((error) => notifyPersistenceFailure('print lab report', error))}>Print</Button>
+                                        <Button variant="secondary" size="sm" onClick={() => printSpecimenLabel(row)}>Print label</Button>
+                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'lab_report', id: row.id, patientId: row.patientId, title: `Laboratory report · ${row.testType}`, author: appData.users.find((entry) => entry.id === row.result_verified_by || entry.id === row.technicianId)?.name, fields: [['Accession', row.accession_number], ['Test', row.testType], ['Category', row.category], ['Ordered', row.orderedDate], ['Result date', row.resultDate], ['Status', row.result_status || row.status], ['Results', row.results]] }).catch((error) => notifyPersistenceFailure('print lab report', error))}>Print report</Button>
+                                        {row.specimen_status !== 'rejected' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="ghost" size="sm" onClick={() => rejectSpecimen(row)}>Reject specimen</Button>}
                                         {row.status === 'pending' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => collectSpecimen(row)}>Specimen collected</Button>}
                                         {!['completed', 'critical'].includes(row.status) && (
-                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', values: {} }); setShowResultEntry(true); }}>Enter Results</Button>
+                                            <Button variant="primary" size="sm" onClick={() => { setSelectedOrder(row); setResultForm({ comments: '', values: {}, correctionReason: '' }); setShowResultEntry(true); }}>Enter Results</Button>
                                         )}
                                         <Button variant="ghost" size="sm" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>
                                     </>
@@ -399,7 +436,7 @@ const appData = getAppData();
                                 ]}
                                 data={labOrders.filter((row) => hasRecordedLabResults(row.results))}
                                 emptyMessage="No laboratory results have been entered yet. Enter results from a lab order, then return here."
-                                actions={(row) => <div className="flex gap-2"><Button size="sm" variant="ghost" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>{row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}</div>}
+                                actions={(row) => <div className="flex gap-2"><Button size="sm" variant="ghost" icon={Icons.Eye} onClick={() => { setSelectedOrder(row); setShowResultDetails(true); }}>View</Button>{row.result_status !== 'final' && ['super_admin','doctor','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={() => verifyLabResult(row)}>Verify result</Button> : null}{['final','corrected'].includes(row.result_status) && ['super_admin','laboratory_scientist'].includes(user?.role) ? <Button size="sm" variant="secondary" onClick={() => { const values = Object.fromEntries((row.results?.values || []).map((entry) => [entry.parameter, { value: entry.value, unit: entry.unit, code: entry.code, codeSystem: entry.code_system, display: entry.display }])); setSelectedOrder(row); setResultForm({ comments: row.results?.comments || '', values, correctionReason: '' }); setShowResultEntry(true); }}>Correct result</Button> : null}</div>}
                             />
                         </Card>
                     )}
@@ -414,6 +451,8 @@ const appData = getAppData();
                             </Card>
                         </div>
                     )}
+
+                    {activeTab === 'qc' && <Card title="Laboratory quality control"><p className="mb-3 text-sm text-slate-600">Configure acceptance criteria approved by your laboratory and record QC runs. Result release is blocked unless the latest QC run for every coded analyte passed.</p><div className="grid gap-3 md:grid-cols-3"><Input label="Analyte code" value={qcForm.analyteCode} onChange={(event)=>setQcForm((value)=>({...value,analyteCode:event.target.value}))}/><Input label="Code system" value={qcForm.codeSystem} onChange={(event)=>setQcForm((value)=>({...value,codeSystem:event.target.value}))}/><Input label="Acceptance minimum" type="number" step="any" value={qcForm.minimum} onChange={(event)=>setQcForm((value)=>({...value,minimum:event.target.value}))}/><Input label="Acceptance maximum" type="number" step="any" value={qcForm.maximum} onChange={(event)=>setQcForm((value)=>({...value,maximum:event.target.value}))}/><Button variant="secondary" onClick={saveQcRule}>Save QC rule</Button></div><div className="mt-4 grid gap-3 md:grid-cols-3"><Input label="QC observed value" type="number" step="any" value={qcForm.observedValue} onChange={(event)=>setQcForm((value)=>({...value,observedValue:event.target.value}))}/><Button variant="primary" onClick={recordQcRun}>Record QC run</Button></div>{qcMessage && <p role="status" className="mt-3 text-sm text-slate-700">{qcMessage}</p>}</Card>}
 
                     <Modal
                         isOpen={showResultEntry}
@@ -450,6 +489,7 @@ const appData = getAppData();
                                     })}
                                 </div>
                                 <p className="text-xs text-slate-500">Flags and reference-range interpretation are calculated by the server from approved coded ranges. Values without a matching coded range remain unclassified.</p>
+                                {['final', 'corrected'].includes(selectedOrder.result_status) && <Input label="Reason for correcting released result" value={resultForm.correctionReason} onChange={(event)=>setResultForm((value)=>({...value,correctionReason:event.target.value}))} />}
                                 <TextArea label="Comments" placeholder="Additional comments..." value={resultForm.comments} onChange={(e) => setResultForm(prev => ({ ...prev, comments: e.target.value }))} />
                             </div>
                         )}
@@ -575,21 +615,25 @@ const appData = getAppData();
         // RADIOLOGY MODULE
         // ==========================================
         const RadiologyModule = () => {
+            const { user } = useAuth();
             const [selectedStudy, setSelectedStudy] = useState(null);
             const [reportStudy, setReportStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [showReportEntry, setShowReportEntry] = useState(false);
             const [studies, setStudies] = useState(getAppData().radiologyOrders || []);
-            const [orderForm, setOrderForm] = useState({ patientId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
+            const [orderForm, setOrderForm] = useState({ patientId: '', radiologistId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             const [reportDraft, setReportDraft] = useState('');
+            const [reportState, setReportState] = useState('final');
+            const [criticalFinding, setCriticalFinding] = useState(false);
 
             const handleCreateStudy = async () => {
-                if (!orderForm.patientId || !orderForm.studyType.trim()) {
-                    return notifyPersistenceFailure('create radiology order', new Error('Select a patient and enter the imaging study type.'));
+                if (!orderForm.patientId || !orderForm.studyType.trim() || !orderForm.radiologistId) {
+                    return notifyPersistenceFailure('create radiology order', new Error('Select a patient, assigned radiologist, and imaging study type.'));
                 }
                 const payload = {
                     patientId: orderForm.patientId,
                     doctorId: null,
+                    radiologistId: orderForm.radiologistId,
                     studyType: orderForm.studyType,
                     codeSystem: orderForm.studyCodeSystem,
                     code: orderForm.studyCode,
@@ -606,7 +650,7 @@ const appData = getAppData();
                 if (!client) return notifyPersistenceFailure('create radiology order');
                 const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('radiology_orders').insert([{
-                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, study_type: payload.studyType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
+                    patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, radiologist_id: payload.radiologistId || null, study_type: payload.studyType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
                     modality: payload.modality, priority: payload.priority, status: payload.status,
                     scheduled_date: payload.scheduledDate || null, report: payload.report || null,
                     ordered_date: payload.orderedDate
@@ -617,7 +661,7 @@ const appData = getAppData();
                 persistStoreTable('radiologyOrders', next);
                 setStudies(next);
                 setShowNewOrder(false);
-                setOrderForm({ patientId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
+                setOrderForm({ patientId: '', radiologistId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             };
 
             const handleReportStudy = async (row) => {
@@ -625,9 +669,10 @@ const appData = getAppData();
                 if (!String(reportDraft).trim()) {
                     return notifyPersistenceFailure('finalize radiology report', new Error('Enter the clinical report before finalizing the study.'));
                 }
-                const updated = { ...row, status: 'reported', report: reportDraft.trim() };
+                const reportText = reportState === 'addendum' ? [row.report, `ADDENDUM: ${reportDraft.trim()}`].filter(Boolean).join('\n\n') : reportDraft.trim();
+                const updated = { ...row, status: reportState === 'preliminary' ? row.status : 'reported', report: reportText, report_state: reportState, report_status: reportState === 'addendum' ? 'amended' : reportState, critical_finding: criticalFinding };
                 if (!client) return notifyPersistenceFailure('finalize radiology report');
-                const { error } = await client.from('radiology_orders').update({ status: 'reported', report_status: 'final', report: updated.report }).eq('id', row.id);
+                const { error } = await client.from('radiology_orders').update({ status: updated.status, report_state: reportState, critical_finding: criticalFinding, report: updated.report }).eq('id', row.id);
                 if (error) return notifyPersistenceFailure('finalize radiology report', error);
                 const next = studies.map((item) => item.id === row.id ? updated : item);
                 persistStoreTable('radiologyOrders', next);
@@ -673,15 +718,16 @@ const appData = getAppData();
                                 { key: 'studyType', title: 'Study' },
                                 { key: 'modality', title: 'Modality' },
                                 { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'stat' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority}</Badge> },
-                                { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'reported' ? 'success' : row.status === 'completed' ? 'info' : 'warning'}>{row.status}</Badge> },
+                                { key: 'status', title: 'Report state', render: (row) => <div className="flex gap-1"><Badge variant={row.report_state === 'final' ? 'success' : row.report_state === 'addendum' ? 'warning' : 'info'}>{row.report_state || 'preliminary'}</Badge>{row.critical_finding && <Badge variant="danger">Critical</Badge>}</div> },
                                 { key: 'scheduledDate', title: 'Scheduled', render: (row) => formatDate(row.scheduledDate) }
                             ]}
                             data={studies}
                             actions={(row) => (
                                 <>
                                     <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'radiology_report', id: row.id, patientId: row.patientId, title: `Radiology report · ${row.studyType}`, author: appData.users.find((entry) => entry.id === row.radiologistId || entry.id === row.doctorId)?.name, fields: [['Study', row.studyType], ['Modality', row.modality], ['Ordered', row.orderedDate], ['Status', row.report_status || row.status], ['Report', row.report]] }).catch((error) => notifyPersistenceFailure('print radiology report', error))}>Print</Button>
-                                    <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View Images</Button>
-                                    {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(row.report || ''); setShowReportEntry(true); }}>Report</Button>}
+                                    <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View study</Button>
+                                    {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(row.report || ''); setReportState('final'); setCriticalFinding(Boolean(row.critical_finding)); setShowReportEntry(true); }}>Report</Button>}
+                                    {row.status === 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(''); setReportState('addendum'); setCriticalFinding(Boolean(row.critical_finding)); setShowReportEntry(true); }}>Addendum</Button>}
                                 </>
                             )}
                         />
@@ -701,6 +747,7 @@ const appData = getAppData();
                     >
                         <div className="space-y-4">
                             <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Assigned radiologist" value={orderForm.radiologistId} onChange={(e) => setOrderForm(prev => ({ ...prev, radiologistId: e.target.value }))} options={[{ value: '', label: 'Select radiologist...' }, ...(appData.users || []).filter((person) => ['radiographer', 'radiologist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
                             <CodedConceptInput label="Study Type" value={orderForm.studyType} codeSystem={orderForm.studyCodeSystem} code={orderForm.studyCode} display={orderForm.studyDisplay} onChange={(term) => setOrderForm(prev => ({...prev,studyType:term.value,studyCodeSystem:term.codeSystem,studyCode:term.code,studyDisplay:term.display}))} />
                             <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
                             <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
@@ -712,11 +759,11 @@ const appData = getAppData();
                     <Modal
                         isOpen={showReportEntry}
                         onClose={() => { setShowReportEntry(false); setReportStudy(null); }}
-                        title={'Finalize Report — ' + (reportStudy?.studyType || '')}
+                        title={(reportState === 'addendum' ? 'Addendum — ' : 'Finalize Report — ') + (reportStudy?.studyType || '')}
                         size="md"
-                        footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => { setShowReportEntry(false); setReportStudy(null); }}>Cancel</Button><Button variant="primary" icon={Icons.Save} onClick={() => reportStudy && handleReportStudy(reportStudy)}>Finalize report</Button></div>}
+                        footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => { setShowReportEntry(false); setReportStudy(null); }}>Cancel</Button><Button variant="primary" icon={Icons.Save} onClick={() => reportStudy && handleReportStudy(reportStudy)}>{reportState === 'addendum' ? 'Append addendum' : 'Save report'}</Button></div>}
                     >
-                        <TextArea label="Radiologist report" rows={8} value={reportDraft} onChange={(e) => setReportDraft(e.target.value)} placeholder="Findings, impression, and recommended follow-up..." />
+                        <div className="space-y-3"><Select label="Report state" value={reportState} onChange={(event)=>setReportState(event.target.value)} options={[{value:'preliminary',label:'Preliminary'},{value:'final',label:'Final'},{value:'addendum',label:'Addendum'}]}/><TextArea label={reportState === 'addendum' ? 'Addendum text' : 'Radiologist report'} rows={8} value={reportDraft} onChange={(e) => setReportDraft(e.target.value)} placeholder="Findings, impression, and recommended follow-up..."/><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={criticalFinding} onChange={(event)=>setCriticalFinding(event.target.checked)}/> Critical finding</label><p className="text-xs text-slate-500">Critical reports enter the existing acknowledgement and escalation workflow. Critical status is verified by the server against the assigned radiologist.</p></div>
                     </Modal>
 
                     <Modal
@@ -731,8 +778,8 @@ const appData = getAppData();
                                     <div className="aspect-square bg-slate-900 rounded-xl flex items-center justify-center">
                                         <div className="text-center text-slate-400">
                                             <Icons.Image size={48} className="mx-auto mb-2" />
-                                            <p className="text-sm">No imaging files are linked to this study.</p>
-                                            <p className="text-xs">Upload integration is required to view images here.</p>
+                                            <p className="text-sm">PACS/DICOM link placeholder</p>
+                                            <p className="text-xs">A future integration can link imaging studies here. No PACS or DICOM connection is active.</p>
                                         </div>
                                     </div>
                                     <div className="space-y-4">
