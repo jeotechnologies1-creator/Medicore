@@ -283,6 +283,7 @@ const appData = getAppData();
                 admissions: () => <AdmissionsModule />,
                 surgeries: () => <SurgeriesModule />,
                 clinical_safety: () => <ClinicalSafetyModule />,
+                blood_bank: () => <BloodBankModule />,
                 reports: () => <ReportsModule />,
                 audit: () => <AuditModule />,
                 settings: () => <SettingsModule />,

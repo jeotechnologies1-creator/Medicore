@@ -6,7 +6,7 @@
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
-            'nursing', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'
+            'nursing', 'blood_bank', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'
         ];
 
         const legacyPermissionAliases = {
@@ -30,6 +30,7 @@
             admissions: ['admission', 'ward'],
             surgeries: ['surgery'],
             clinical_safety: ['safety'],
+            blood_bank: ['bloodbank'],
             inventory: ['stock'],
             hr: ['staff', 'human_resources'],
             offices: ['medical_offices', 'office'],
@@ -41,6 +42,7 @@
         // Role-menu shortcuts route into a tab or workflow owned by these modules.
         // Their authorization must be checked against that owning module.
         const routeModulePermissions = {
+            blood_bank: ['laboratory', 'clinical_safety'],
             consultations: ['patients', 'clinical_decision_support'],
             ward: ['admissions', 'operations'],
             vitals: ['clinical_decision_support', 'patients'],
@@ -659,16 +661,16 @@
                 }
 
                 const fallback = {
-                    super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'nursing', 'surgeries', 'clinical_safety', 'inventory', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'],
-                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'admissions', 'clinical_safety'],
-                    nurse: ['dashboard', 'patients', 'ward', 'nursing', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety'],
+                    super_admin: ['dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows', 'pharmacy', 'billing', 'admissions', 'nursing', 'surgeries', 'clinical_safety', 'blood_bank', 'inventory', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'],
+                    doctor: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'admissions', 'clinical_safety', 'blood_bank'],
+                    nurse: ['dashboard', 'patients', 'ward', 'nursing', 'vitals', 'medications', 'clinical_workflows', 'clinical_safety', 'blood_bank'],
                     receptionist: ['dashboard', 'patients', 'appointments'],
                     records_officer: ['dashboard', 'records'],
                     surgeon: ['dashboard', 'patients', 'clinical_workflows', 'surgeries', 'clinical_safety'],
                     specialist: ['dashboard', 'patients', 'appointments', 'consultations', 'laboratory', 'radiology', 'clinical_workflows', 'prescriptions', 'clinical_safety'],
                     theatre_staff: ['dashboard', 'surgeries'],
                     pharmacist: ['dashboard', 'pharmacy', 'inventory', 'prescriptions'],
-                    laboratory_scientist: ['dashboard', 'laboratory', 'results'],
+                    laboratory_scientist: ['dashboard', 'laboratory', 'results', 'blood_bank'],
                     radiographer: ['dashboard', 'radiology', 'upload'],
                     accountant: ['dashboard', 'billing', 'reports'],
                     patient: ['dashboard', 'portal', 'appointments', 'lab_results', 'prescriptions', 'billing', 'messages']

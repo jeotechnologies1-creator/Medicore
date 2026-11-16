@@ -92,6 +92,7 @@ const routeModules = {
   portal: ['./js/modules/portal.jsx'],
   ward: ['./js/modules/operations.jsx'],
   nursing: ['./js/modules/clinical.jsx'],
+  blood_bank: ['./js/modules/blood-bank.jsx'],
   vitals: ['./js/modules/clinical.jsx'],
   upload: ['./js/modules/clinical.jsx'],
   medications: ['./js/modules/operations.jsx'],

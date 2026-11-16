@@ -46,6 +46,7 @@
                         { id: 'admissions', label: 'Admissions', icon: Icons.Bed },
                         { id: 'surgeries', label: 'Surgeries', icon: Icons.Scissors },
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
+                        { id: 'blood_bank', label: 'Blood Bank', icon: Icons.Activity },
                         { id: 'inventory', label: 'Inventory', icon: Icons.Package },
                         { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
                         { id: 'offices', label: 'Medical Offices', icon: Icons.Building2 },
@@ -64,6 +65,7 @@
                         { id: 'prescriptions', label: 'Prescriptions', icon: Icons.Pill },
                         { id: 'admissions', label: 'Admission Requests', icon: Icons.Bed },
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
+                        { id: 'blood_bank', label: 'Blood Bank', icon: Icons.Activity },
                     ],
                     nurse: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
@@ -73,6 +75,7 @@
                         { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },
                         { id: 'medications', label: 'Medications', icon: Icons.Syringe },
                         { id: 'clinical_safety', label: 'Clinical Safety', icon: Icons.Shield },
+                        { id: 'blood_bank', label: 'Blood Bank', icon: Icons.Activity },
                     ],
                     receptionist: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
@@ -104,6 +107,7 @@
                     laboratory_scientist: [
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },
                         { id: 'results', label: 'Results Entry', icon: Icons.ClipboardList },
+                        { id: 'blood_bank', label: 'Blood Bank', icon: Icons.Activity },
                     ],
                     radiographer: [
                         { id: 'radiology', label: 'Imaging Orders', icon: Icons.Image },
