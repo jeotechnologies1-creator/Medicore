@@ -25,6 +25,12 @@ function totp(secret) {
   return String(code).padStart(6, '0');
 }
 
+async function expectNoSeriousA11yViolations(page, context) {
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const serious = results.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical');
+  expect(serious, `${context}: ${JSON.stringify(serious.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })) })), null, 2)}`).toEqual([]);
+}
+
 async function preparePrintHarness(page, auditFails = false) {
   await page.addInitScript(() => {
     window.__printEvents = [];
@@ -143,6 +149,12 @@ test('login enforces MFA enrollment and service price changes require a second a
   const patientsA11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(patientsA11y.violations, JSON.stringify(patientsA11y.violations.map(({ id, impact, nodes }) => ({ id, impact, count: nodes.length })), null, 2)).toEqual([]);
   await page.getByRole('button', { name: 'Register Patient' }).first().click();
+  await expectNoSeriousA11yViolations(page, 'Patient registration dialog');
+  const registrationDialog = page.getByRole('dialog');
+  await page.keyboard.press('Shift+Tab');
+  await expect(registrationDialog.getByRole('button', { name: 'Close dialog' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(registrationDialog.getByLabel('Registering facility')).toBeFocused();
   await page.getByLabel('Registering facility').selectOption('a1000000-0000-4000-8000-000000000001');
   await page.getByLabel('First Name').fill('CI');
   await page.getByLabel('Last Name').fill(`Patient${Date.now()}`);
@@ -155,6 +167,7 @@ test('login enforces MFA enrollment and service price changes require a second a
 
   await page.getByText('Appointments', { exact: true }).first().click();
   await page.getByRole('button', { name: 'New Appointment' }).click();
+  await expectNoSeriousA11yViolations(page, 'New appointment dialog');
   await page.getByLabel('Patient').selectOption({ label: `CI ${patientName}` });
   await page.getByLabel('Department').selectOption('medical');
   await page.getByLabel('Date').fill(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
@@ -180,7 +193,22 @@ test('login enforces MFA enrollment and service price changes require a second a
     await expect(page.getByTestId('route-module-loading')).toHaveCount(0);
     await expect(page.getByText('This module could not be loaded. Reload the page and try again.')).toHaveCount(0);
     await expect(page.locator('#main-content')).not.toBeEmpty();
+    await expectNoSeriousA11yViolations(page, `Top-level route ${route}`);
   }
+  await page.getByRole('button', { name: 'Laboratory', exact: true }).click();
+  await page.getByRole('button', { name: 'New Order', exact: true }).click();
+  await expectNoSeriousA11yViolations(page, 'New laboratory order dialog');
+  const orderDialog = page.getByRole('dialog');
+  await orderDialog.getByRole('button', { name: 'Close dialog' }).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(orderDialog.locator('input,select,textarea,button').filter({ visible: true }).last()).toBeFocused();
+  await orderDialog.getByLabel('Patient').focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(orderDialog.getByLabel('Category')).toBeFocused();
+  await page.keyboard.type('TEST keyboard-only order category');
+  await expect(orderDialog.getByLabel('Category')).toHaveValue('TEST keyboard-only order category');
   await page.getByRole('button', { name: 'Clinical Workflows', exact: true }).click();
   await page.getByLabel('Patient').selectOption({ label: `CI ${patientName}` });
   await page.getByLabel('Presenting complaint / circumstances').fill('TEST synthetic consultation encounter');

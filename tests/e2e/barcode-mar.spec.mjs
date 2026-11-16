@@ -26,7 +26,12 @@ test('MAR barcode fields accept keyboard-wedge scanner input', async ({ page }) 
   await page.getByRole('button',{name:'Clinical Workflows',exact:true}).click();
   await page.getByRole('button',{name:'Medication Administration',exact:true}).click();
   const patientScan=page.getByLabel('Patient wristband scan (USB scanner)');
-  await patientScan.focus(); await page.keyboard.type('TEST-WRISTBAND-123'); await page.keyboard.press('Enter');
+  await patientScan.focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Medication / lot scan (USB scanner)')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(patientScan).toBeFocused();
+  await page.keyboard.type('TEST-WRISTBAND-123'); await page.keyboard.press('Enter');
   await expect(patientScan).toHaveValue('TEST-WRISTBAND-123');
   const medicationScan=page.getByLabel('Medication / lot scan (USB scanner)');
   await medicationScan.focus(); await page.keyboard.type('TEST-LOT-BARCODE-456'); await page.keyboard.press('Enter');

@@ -263,7 +263,9 @@
                     const items = focusable();
                     if (!items.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
                     const first = items[0]; const last = items[items.length - 1];
-                    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                    if (!dialogRef.current?.contains(document.activeElement)) {
+                        event.preventDefault(); (event.shiftKey ? last : first).focus();
+                    } else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
                     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
                 };
                 window.addEventListener('keydown', handleDialogKeys);
