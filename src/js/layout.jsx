@@ -129,7 +129,8 @@
                     ]
                 };
 
-                const role = user?.role || 'patient';
+                const rawRole = String(user?.role || 'patient').trim().toLowerCase().replace(/[\s-]+/g, '_');
+                const role = rawRole === 'health_information_management_officer' ? 'records_officer' : rawRole;
                 const allowed = new Set((roleMenus[role] || []).map((item) => item.id));
                 return [...common, ...(roleMenus[role] || [])].filter((item) =>
                     (item.id === 'dashboard' || allowed.has(item.id)) && hasModuleAccess(item.id)

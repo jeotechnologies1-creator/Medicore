@@ -336,7 +336,12 @@
                 const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
                 if (assuranceError || assurance?.currentLevel !== 'aal2') throw new Error('AAL2 could not be confirmed. Sign in again and retry.');
                 const profile = mfaGate.profile;
-                const safeUser = { ...profile, name: profile.name || profile.full_name || profile.email, role: profile.role, patientId: profile.patientId || profile.patient_id || null };
+                const safeUser = {
+                    ...profile,
+                    name: String(profile.name || profile.full_name || profile.email || '').trim() || 'User',
+                    role: String(profile.role || 'receptionist').trim().toLowerCase().replace(/[\s-]+/g, '_'),
+                    patientId: profile.patientId || profile.patient_id || null
+                };
                 delete safeUser.password;
                 setMfaGate(null);
                 setUser(safeUser);
@@ -500,7 +505,12 @@
                             }
                         }
                         if (active && revision === sessionRevision) setMfaGate(null);
-                        setUser({ ...data, name: data.full_name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null });
+                        setUser({
+                            ...data,
+                            name: String(data.full_name || data.name || data.email || '').trim() || 'User',
+                            role: String(data.role || 'receptionist').trim().toLowerCase().replace(/[\s-]+/g, '_'),
+                            patientId: data.patient_id || null
+                        });
                     }
                 };
                 client.auth.getSession().then(({ data }) => applySession(data.session));
@@ -570,8 +580,8 @@
                         const safeUser = {
                             ...found,
                             id: found.id,
-                            name: found.name || found.full_name || found.email,
-                            role: found.role || 'receptionist',
+                            name: String(found.name || found.full_name || found.email || '').trim() || 'User',
+                            role: String(found.role || 'receptionist').trim().toLowerCase().replace(/[\s-]+/g, '_'),
                             email: found.email,
                             patientId: found.patientId || null
                         };

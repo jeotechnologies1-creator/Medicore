@@ -294,7 +294,12 @@ const OneMedSupabase = (() => {
             if (authError || !authData.user) { globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.(); return null; }
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
             if (!error && data?.status === 'active') {
-                return { ...data, name: data.full_name || data.name || data.email, role: data.role || 'receptionist', patientId: data.patient_id || null };
+                return {
+                    ...data,
+                    name: String(data.full_name || data.name || data.email || '').trim() || normalizedEmail,
+                    role: String(data.role || 'receptionist').trim().toLowerCase().replace(/[\s-]+/g, '_'),
+                    patientId: data.patient_id || null
+                };
             }
             await client.auth.signOut();
             globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
