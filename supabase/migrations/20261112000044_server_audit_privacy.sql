@@ -23,6 +23,12 @@ alter table public.audit_logs add column if not exists previous_hash text;
 alter table public.audit_logs add column if not exists row_hash text;
 create unique index if not exists audit_logs_chain_position_uidx on public.audit_logs(chain_position);
 
+-- This migration may be rerun against a database where an earlier attempt
+-- already installed the append-only trigger. The hash-chain backfill is a
+-- controlled schema migration, so remove that trigger transactionally; it is
+-- recreated below before this transaction commits.
+drop trigger if exists audit_logs_no_mutation on public.audit_logs;
+
 -- Backfill a deterministic chain before enabling append-time hashing.
 do $$
 declare r record; prior text:=''; digest text; content jsonb; pos bigint:=0;

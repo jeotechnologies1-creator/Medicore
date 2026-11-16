@@ -12,29 +12,29 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('super_admin','stock.read','global'),('super_admin','stock.manage','global'),('super_admin','procurement.manage','global'),('super_admin','procurement.approve','global')
 on conflict do nothing;
 
-create table public.store_locations(
+create table if not exists public.store_locations(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  location_code text not null,location_name text not null,active boolean not null default true,
  created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  unique(facility_id,location_code),unique(id,facility_id),check(length(btrim(location_code))>0 and length(btrim(location_name))>0));
-alter table public.pharmacy_inventory add column facility_id uuid references public.facilities(id) on delete restrict;
-create index pharmacy_inventory_facility_idx on public.pharmacy_inventory(facility_id,formulary_item_id,expiry_date) where facility_id is not null;
-create table public.store_stock_items(
+alter table public.pharmacy_inventory add column if not exists facility_id uuid references public.facilities(id) on delete restrict;
+create index if not exists pharmacy_inventory_facility_idx on public.pharmacy_inventory(facility_id,formulary_item_id,expiry_date) where facility_id is not null;
+create table if not exists public.store_stock_items(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  item_code text not null,item_name text not null,unit text not null,pharmacy_inventory_id uuid unique references public.pharmacy_inventory(id) on delete restrict,
  active boolean not null default true,created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  unique(facility_id,item_code),unique(id,facility_id),check(length(btrim(item_code))>0 and length(btrim(item_name))>0 and length(btrim(unit))>0));
-alter table public.pharmacy_inventory add column store_stock_item_id uuid unique references public.store_stock_items(id) on delete restrict;
+alter table public.pharmacy_inventory add column if not exists store_stock_item_id uuid unique references public.store_stock_items(id) on delete restrict;
 
-create table public.stock_balances(
+create table if not exists public.stock_balances(
  stock_item_id uuid not null references public.store_stock_items(id) on delete restrict,
  location_id uuid not null references public.store_locations(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,
  quantity numeric(14,3) not null default 0 check(quantity>=0),updated_at timestamptz not null default now(),
  primary key(stock_item_id,location_id));
-create index stock_balances_facility_location on public.stock_balances(facility_id,location_id,stock_item_id);
+create index if not exists stock_balances_facility_location on public.stock_balances(facility_id,location_id,stock_item_id);
 
-create table public.stock_movements(
+create table if not exists public.stock_movements(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  stock_item_id uuid not null references public.store_stock_items(id) on delete restrict,
  inventory_lot_id uuid references public.pharmacy_inventory(id) on delete restrict,
@@ -47,8 +47,8 @@ create table public.stock_movements(
  actor_id uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  check((movement_type='transfer' and direction is null and source_location_id is not null and destination_location_id is not null and source_location_id<>destination_location_id)
   or (movement_type<>'transfer' and direction is not null and ((direction='in' and destination_location_id is not null and source_location_id is null) or (direction='out' and source_location_id is not null and destination_location_id is null)))));
-create index stock_movements_item_time on public.stock_movements(stock_item_id,created_at desc,id desc);
-create index stock_movements_facility_time on public.stock_movements(facility_id,created_at desc);
+create index if not exists stock_movements_item_time on public.stock_movements(stock_item_id,created_at desc,id desc);
+create index if not exists stock_movements_facility_time on public.stock_movements(facility_id,created_at desc);
 
 create or replace function public.apply_stock_movement() returns trigger language plpgsql security definer set search_path=public as $$
 declare item public.store_stock_items%rowtype; source_balance numeric; dest_balance numeric; loc uuid; prior text;
@@ -86,6 +86,7 @@ begin
  perform set_config('app.stock_projection_writer',coalesce(prior,''),true);
  return new;
 end $$;
+drop trigger if exists apply_stock_movement_after_insert on public.stock_movements;
 create trigger apply_stock_movement_after_insert after insert on public.stock_movements for each row execute function public.apply_stock_movement();
 
 create or replace function public.guard_legacy_pharmacy_stock_change() returns trigger language plpgsql security definer set search_path=public as $$
@@ -113,6 +114,7 @@ begin
  if needed>0 then raise exception 'Insufficient ledger balance for legacy stock decrement.'; end if;
  return new;
 end $$;
+drop trigger if exists pharmacy_stock_ledger_guard on public.pharmacy_inventory;
 create trigger pharmacy_stock_ledger_guard before update of stock_quantity on public.pharmacy_inventory for each row execute function public.guard_legacy_pharmacy_stock_change();
 create or replace function public.guard_pharmacy_stock_mapping() returns trigger language plpgsql as $$
 begin
@@ -120,51 +122,52 @@ begin
   and current_setting('app.stock_projection_writer',true) is distinct from 'on' then raise exception 'Pharmacy stock facility and ledger links must use the stock workflow.'; end if;
  return new;
 end $$;
+drop trigger if exists pharmacy_stock_mapping_guard on public.pharmacy_inventory;
 create trigger pharmacy_stock_mapping_guard before update of facility_id,store_stock_item_id on public.pharmacy_inventory for each row execute function public.guard_pharmacy_stock_mapping();
 
-create table public.purchase_approval_tiers(
+create table if not exists public.purchase_approval_tiers(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  minimum_amount numeric(14,2) not null check(minimum_amount>=0),maximum_amount numeric(14,2) check(maximum_amount is null or maximum_amount>minimum_amount),
  approvals_required integer not null check(approvals_required>0),approver_role text not null,
  configured_by uuid not null references public.profiles(id),configured_at timestamptz not null default now());
-create index purchase_approval_tiers_scope on public.purchase_approval_tiers(facility_id,minimum_amount,maximum_amount);
-create table public.suppliers(
+create index if not exists purchase_approval_tiers_scope on public.purchase_approval_tiers(facility_id,minimum_amount,maximum_amount);
+create table if not exists public.suppliers(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  supplier_name text not null,contact_details jsonb not null default '{}'::jsonb check(jsonb_typeof(contact_details)='object'),active boolean not null default true,
  created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),unique(facility_id,supplier_name));
-create table public.purchase_orders(
+create table if not exists public.purchase_orders(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  supplier_id uuid not null references public.suppliers(id) on delete restrict,order_number text not null,status text not null default 'draft'
  check(status in ('draft','pending_approval','approved','partially_received','received','cancelled')),
  total_amount numeric(14,2) not null check(total_amount>0),created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  submitted_at timestamptz,approved_at timestamptz,unique(facility_id,order_number));
-create table public.purchase_order_items(
+create table if not exists public.purchase_order_items(
  id uuid primary key default gen_random_uuid(),purchase_order_id uuid not null references public.purchase_orders(id) on delete restrict,
  stock_item_id uuid not null references public.store_stock_items(id) on delete restrict,
  description text not null,quantity_ordered numeric(14,3) not null check(quantity_ordered>0 and quantity_ordered=trunc(quantity_ordered)),unit_cost numeric(14,2) not null check(unit_cost>=0),
  created_at timestamptz not null default now());
-create index purchase_order_items_order on public.purchase_order_items(purchase_order_id);
-create table public.purchase_order_approvals(
+create index if not exists purchase_order_items_order on public.purchase_order_items(purchase_order_id);
+create table if not exists public.purchase_order_approvals(
  id uuid primary key default gen_random_uuid(),purchase_order_id uuid not null references public.purchase_orders(id) on delete restrict,
  approver_id uuid not null references public.profiles(id),decision text not null check(decision in ('approved','rejected')),
  note text,decided_at timestamptz not null default now(),unique(purchase_order_id,approver_id));
-create table public.goods_received_notes(
+create table if not exists public.goods_received_notes(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  purchase_order_id uuid not null references public.purchase_orders(id) on delete restrict,received_by uuid not null references public.profiles(id),received_at timestamptz not null default now(),supplier_delivery_reference text);
-create table public.goods_received_note_items(
+create table if not exists public.goods_received_note_items(
  id uuid primary key default gen_random_uuid(),goods_received_note_id uuid not null references public.goods_received_notes(id) on delete restrict,
  purchase_order_item_id uuid not null references public.purchase_order_items(id) on delete restrict,
  quantity_received numeric(14,3) not null check(quantity_received>0 and quantity_received=trunc(quantity_received)),location_id uuid not null references public.store_locations(id) on delete restrict,
  stock_movement_id uuid not null unique references public.stock_movements(id) on delete restrict,created_at timestamptz not null default now());
-create table public.supplier_returns(
+create table if not exists public.supplier_returns(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  supplier_id uuid not null references public.suppliers(id) on delete restrict,return_reference text not null,reason text not null,
  recorded_by uuid not null references public.profiles(id),recorded_at timestamptz not null default now(),unique(facility_id,return_reference));
-create table public.supplier_return_items(
+create table if not exists public.supplier_return_items(
  id uuid primary key default gen_random_uuid(),supplier_return_id uuid not null references public.supplier_returns(id) on delete restrict,
  goods_received_note_item_id uuid not null references public.goods_received_note_items(id) on delete restrict,
  quantity numeric(14,3) not null check(quantity>0 and quantity=trunc(quantity)),stock_movement_id uuid not null unique references public.stock_movements(id) on delete restrict);
-create table public.supplier_performance_records(
+create table if not exists public.supplier_performance_records(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  supplier_id uuid not null references public.suppliers(id) on delete restrict,purchase_order_id uuid references public.purchase_orders(id) on delete restrict,
  evaluated_by uuid not null references public.profiles(id),delivery_score numeric(5,2) check(delivery_score between 0 and 100),
@@ -371,15 +374,30 @@ end $$;
 
 do $$ declare t text; begin foreach t in array array['store_locations','store_stock_items','stock_balances','stock_movements','purchase_approval_tiers','suppliers','purchase_orders','purchase_order_items','purchase_order_approvals','goods_received_notes','goods_received_note_items','supplier_returns','supplier_return_items','supplier_performance_records'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert on public.%I to service_role',t);
- if t in ('store_locations','store_stock_items','stock_balances','stock_movements') then execute format('create policy stock_facility_read on public.%I for select to authenticated using(public.has_org_permission(''stock.read'',facility_id,null))',t);
- elsif t in ('purchase_approval_tiers','suppliers','purchase_orders','goods_received_notes','supplier_returns','supplier_performance_records') then execute format('create policy procurement_facility_read on public.%I for select to authenticated using(public.has_org_permission(''procurement.manage'',facility_id,null) or public.has_org_permission(''procurement.approve'',facility_id,null))',t);
- elsif t in ('purchase_order_items','purchase_order_approvals') then execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.purchase_orders p where p.id=%I.purchase_order_id and (public.has_org_permission(''procurement.manage'',p.facility_id,null) or public.has_org_permission(''procurement.approve'',p.facility_id,null))))',t,t);
- elsif t='goods_received_note_items' then execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.goods_received_notes n join public.purchase_orders p on p.id=n.purchase_order_id where n.id=%I.goods_received_note_id and (public.has_org_permission(''procurement.manage'',p.facility_id,null) or public.has_org_permission(''procurement.approve'',p.facility_id,null))))',t,t);
- else execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.supplier_returns r where r.id=%I.supplier_return_id and (public.has_org_permission(''procurement.manage'',r.facility_id,null) or public.has_org_permission(''procurement.approve'',r.facility_id,null))))',t,t); end if;
+ if t in ('store_locations','store_stock_items','stock_balances','stock_movements') then
+  execute format('drop policy if exists stock_facility_read on public.%I',t);
+  execute format('create policy stock_facility_read on public.%I for select to authenticated using(public.has_org_permission(''stock.read'',facility_id,null))',t);
+ elsif t in ('purchase_approval_tiers','suppliers','purchase_orders','goods_received_notes','supplier_returns','supplier_performance_records') then
+  execute format('drop policy if exists procurement_facility_read on public.%I',t);
+  execute format('create policy procurement_facility_read on public.%I for select to authenticated using(public.has_org_permission(''procurement.manage'',facility_id,null) or public.has_org_permission(''procurement.approve'',facility_id,null))',t);
+ elsif t in ('purchase_order_items','purchase_order_approvals') then
+  execute format('drop policy if exists procurement_child_read on public.%I',t);
+  execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.purchase_orders p where p.id=%I.purchase_order_id and (public.has_org_permission(''procurement.manage'',p.facility_id,null) or public.has_org_permission(''procurement.approve'',p.facility_id,null))))',t,t);
+ elsif t='goods_received_note_items' then
+  execute format('drop policy if exists procurement_child_read on public.%I',t);
+  execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.goods_received_notes n join public.purchase_orders p on p.id=n.purchase_order_id where n.id=%I.goods_received_note_id and (public.has_org_permission(''procurement.manage'',p.facility_id,null) or public.has_org_permission(''procurement.approve'',p.facility_id,null))))',t,t);
+ else
+  execute format('drop policy if exists procurement_child_read on public.%I',t);
+  execute format('create policy procurement_child_read on public.%I for select to authenticated using(exists(select 1 from public.supplier_returns r where r.id=%I.supplier_return_id and (public.has_org_permission(''procurement.manage'',r.facility_id,null) or public.has_org_permission(''procurement.approve'',r.facility_id,null))))',t,t);
+ end if;
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop trigger if exists stock_movements_immutable on public.stock_movements;
 create trigger stock_movements_immutable before update or delete on public.stock_movements for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists supplier_return_items_immutable on public.supplier_return_items;
 create trigger supplier_return_items_immutable before update or delete on public.supplier_return_items for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists purchase_approval_immutable on public.purchase_order_approvals;
 create trigger purchase_approval_immutable before update or delete on public.purchase_order_approvals for each row execute function public.prevent_consultation_history_mutation();
 
 revoke all on function public.apply_stock_movement(),public.guard_legacy_pharmacy_stock_change(),public.guard_pharmacy_stock_mapping(),public.configure_purchase_approval_tier(uuid,numeric,numeric,integer,text),public.create_store_location(uuid,text,text),public.create_store_stock_item(uuid,text,text,text),

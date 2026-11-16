@@ -2,11 +2,11 @@ begin;
 set local lock_timeout='2s';
 set local statement_timeout='60s';
 
-alter table public.payment_provider_transactions add column provider_reference text;
-alter table public.payment_provider_transactions add column provider_transaction_id text;
-alter table public.payment_provider_transactions add column provider_external_reference text;
+alter table public.payment_provider_transactions add column if not exists provider_reference text;
+alter table public.payment_provider_transactions add column if not exists provider_transaction_id text;
+alter table public.payment_provider_transactions add column if not exists provider_external_reference text;
 
-create table public.gateway_refund_requests (
+create table if not exists public.gateway_refund_requests (
  id uuid primary key default gen_random_uuid(), payment_reversal_id uuid not null unique references public.payment_reversals(id) on delete restrict,
  connection_id uuid not null references public.integration_connections(id) on delete restrict,
  payment_provider_transaction_id uuid not null references public.payment_provider_transactions(id) on delete restrict,
@@ -17,14 +17,16 @@ create table public.gateway_refund_requests (
  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
  unique(connection_id,refund_reference), unique(connection_id,provider_refund_id)
 );
-create index gateway_refund_requests_status_idx on public.gateway_refund_requests(connection_id,status,created_at desc);
+create index if not exists gateway_refund_requests_status_idx on public.gateway_refund_requests(connection_id,status,created_at desc);
 alter table public.gateway_refund_requests enable row level security;
 revoke all on public.gateway_refund_requests from public,anon,authenticated;
 grant select on public.gateway_refund_requests to authenticated;
 grant select,insert,update on public.gateway_refund_requests to service_role;
+drop policy if exists gateway_refunds_finance_read on public.gateway_refund_requests;
 create policy gateway_refunds_finance_read on public.gateway_refund_requests for select to authenticated using (
  exists(select 1 from public.payment_provider_transactions t where t.id=payment_provider_transaction_id and public.has_finance_department_permission(t.patient_id,'payment.record'))
 );
+drop trigger if exists audit_gateway_refund_requests on public.gateway_refund_requests;
 create trigger audit_gateway_refund_requests after insert or update on public.gateway_refund_requests for each row execute function public.audit_row_change();
 
 create or replace function public.queue_gateway_refund() returns trigger language plpgsql security definer set search_path=public as $$
@@ -41,6 +43,7 @@ begin
    'provider_transaction_id',gateway.provider_transaction_id,'amount',new.amount,'currency',gateway.currency,'idempotency_key','payment-refund:'||refund_id::text));
  return new;
 end $$;
+drop trigger if exists queue_gateway_refund_after_approval on public.payment_reversals;
 create trigger queue_gateway_refund_after_approval after insert on public.payment_reversals for each row execute function public.queue_gateway_refund();
 
 create or replace function public.sync_gateway_outbox_response() returns trigger language plpgsql security definer set search_path=public as $$
@@ -60,6 +63,7 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists sync_gateway_outbox_response on public.integration_outbox;
 create trigger sync_gateway_outbox_response after update of status on public.integration_outbox for each row execute function public.sync_gateway_outbox_response();
 
 create or replace function public.process_payment_refund_event(p_connection_id uuid,p_event_id text,payload jsonb)

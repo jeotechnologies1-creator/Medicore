@@ -91,6 +91,13 @@ create table if not exists public.profile_permission_assignments (
 );
 create index if not exists profile_permission_active_idx on public.profile_permission_assignments(profile_id,permission_key,valid_from,expires_at);
 
+-- A later server-audit migration may already have installed the generic
+-- audit_row_change trigger on these key-based tables. Older versions of that
+-- function read NEW.id directly, which fails because neither table has an id
+-- column. The organization-specific audit triggers are installed below.
+drop trigger if exists audit_permission_catalog on public.permission_catalog;
+drop trigger if exists audit_role_permission_grants on public.role_permission_grants;
+
 insert into public.permission_catalog(permission_key,description,sensitive) values
  ('patient.read','Read patient records',true),('patient.create','Register patients',true),('patient.update','Update demographics',true),('patient.merge','Merge patient identities',true),
  ('encounter.read','Read encounters',true),('encounter.create','Open encounters',true),('encounter.update','Document encounters',true),('encounter.sign','Sign encounters',true),('encounter.amend','Amend signed records',true),
@@ -212,7 +219,7 @@ create or replace function public.audit_organization_change() returns trigger la
 declare actor_profile uuid; entity_id text; operation text;
 begin
   select id into actor_profile from public.profiles where auth_user_id=auth.uid() limit 1;
-  entity_id := coalesce(to_jsonb(new)->>'id',to_jsonb(old)->>'id');
+  entity_id := coalesce(to_jsonb(new)->>'id',to_jsonb(old)->>'id',to_jsonb(new)->>'permission_key',to_jsonb(old)->>'permission_key');
   operation := case when tg_op='INSERT' then 'created' when tg_op='UPDATE' then 'updated' else 'deleted' end;
   insert into public.audit_logs(user_id,action,entity_type,entity_id,severity)
   values(actor_profile,'organization.'||operation,tg_table_name,entity_id,'info');
@@ -220,7 +227,7 @@ begin
 end;
 $$;
 do $$ declare target_table text; begin
-  foreach target_table in array array['organization_units','job_positions','staff_organization_memberships','profile_permission_assignments','role_permission_grants'] loop
+  foreach target_table in array array['organization_units','job_positions','staff_organization_memberships','profile_permission_assignments','permission_catalog','role_permission_grants'] loop
     execute format('drop trigger if exists audit_%I on public.%I',target_table,target_table);
     execute format('create trigger audit_%I after insert or update or delete on public.%I for each row execute function public.audit_organization_change()',target_table,target_table);
   end loop;

@@ -56,9 +56,20 @@ alter table public.vital_signs add column if not exists news2_score integer;
 alter table public.vital_signs add column if not exists pews_score integer;
 alter table public.vital_signs add column if not exists score_system text;
 alter table public.vital_signs add column if not exists score_status text not null default 'incomplete';
-alter table public.vital_signs add constraint vital_signs_age_band_check check(age_band is null or age_band in ('neonate','infant','child','adolescent','adult'));
-alter table public.vital_signs add constraint vital_signs_score_system_check check(score_system is null or score_system in ('news2','pews'));
-alter table public.vital_signs add constraint vital_signs_score_status_check check(score_status in ('incomplete','calculated','pending_clinical_approval'));
+do $$ begin
+  if not exists(select 1 from pg_constraint where conrelid='public.vital_signs'::regclass and conname='vital_signs_age_band_check') then
+    alter table public.vital_signs add constraint vital_signs_age_band_check
+      check(age_band is null or age_band in ('neonate','infant','child','adolescent','adult'));
+  end if;
+  if not exists(select 1 from pg_constraint where conrelid='public.vital_signs'::regclass and conname='vital_signs_score_system_check') then
+    alter table public.vital_signs add constraint vital_signs_score_system_check
+      check(score_system is null or score_system in ('news2','pews'));
+  end if;
+  if not exists(select 1 from pg_constraint where conrelid='public.vital_signs'::regclass and conname='vital_signs_score_status_check') then
+    alter table public.vital_signs add constraint vital_signs_score_status_check
+      check(score_status in ('incomplete','calculated','pending_clinical_approval'));
+  end if;
+end $$;
 
 create or replace function public.calculate_news2(p_observation jsonb)
 returns integer language plpgsql immutable set search_path=public as $$

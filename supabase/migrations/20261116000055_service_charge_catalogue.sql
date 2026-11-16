@@ -67,12 +67,16 @@ revoke all on public.service_charge_catalogue,public.service_charge_prices,publi
 grant select on public.service_charge_catalogue,public.service_charge_prices,public.invoice_line_items,public.invoice_credit_notes to authenticated;
 grant select,insert,update,delete on public.service_charge_catalogue,public.service_charge_prices,public.invoice_line_items,public.invoice_credit_notes to service_role;
 
+drop policy if exists "finance reads same facility catalogue" on public.service_charge_catalogue;
 create policy "finance reads same facility catalogue" on public.service_charge_catalogue for select to authenticated
   using(public.can_access_financial_record(facility_id,null,'payment.record',false));
+drop policy if exists "finance reads same facility prices" on public.service_charge_prices;
 create policy "finance reads same facility prices" on public.service_charge_prices for select to authenticated
   using(exists(select 1 from public.service_charge_catalogue c where c.id=catalogue_item_id and public.can_access_financial_record(c.facility_id,null,'payment.record',false)));
+drop policy if exists "finance reads facility invoice lines" on public.invoice_line_items;
 create policy "finance reads facility invoice lines" on public.invoice_line_items for select to authenticated
   using(exists(select 1 from public.billing b where b.id=billing_id and public.can_access_financial_record(b.facility_id,b.patient_id,'payment.record',true)));
+drop policy if exists "finance reads facility credit notes" on public.invoice_credit_notes;
 create policy "finance reads facility credit notes" on public.invoice_credit_notes for select to authenticated
   using(exists(select 1 from public.billing b where b.id=billing_id and public.can_access_financial_record(b.facility_id,b.patient_id,'payment.record',true)));
 
@@ -88,12 +92,15 @@ begin
   return new;
 end $$;
 revoke all on function public.guard_service_charge_price_history() from public,anon,authenticated;
+drop trigger if exists guard_service_charge_price_history on public.service_charge_prices;
 create trigger guard_service_charge_price_history before update or delete on public.service_charge_prices for each row execute function public.guard_service_charge_price_history();
 
 create or replace function public.guard_invoice_financial_history() returns trigger language plpgsql as $$
 begin raise exception 'Invoice line items and credit notes are append-only.'; end $$;
 revoke all on function public.guard_invoice_financial_history() from public,anon,authenticated;
+drop trigger if exists invoice_line_items_immutable on public.invoice_line_items;
 create trigger invoice_line_items_immutable before update or delete on public.invoice_line_items for each row execute function public.guard_invoice_financial_history();
+drop trigger if exists invoice_credit_notes_immutable on public.invoice_credit_notes;
 create trigger invoice_credit_notes_immutable before update or delete on public.invoice_credit_notes for each row execute function public.guard_invoice_financial_history();
 
 create or replace function public.guard_invoice_snapshot() returns trigger language plpgsql as $$

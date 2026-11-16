@@ -16,13 +16,13 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('safety_officer','incident.report','facility'),('super_admin','incident.safety.read','global'),('super_admin','infection.surveillance.read','global'),('super_admin','infection.surveillance.manage','global'),('super_admin','incident.report','global')
 on conflict do nothing;
 
-create table public.incident_severity_scales(
+create table if not exists public.incident_severity_scales(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  severity_key text not null,display_label text not null,rank_order integer not null check(rank_order>0),active boolean not null default true,
  configured_by uuid not null references public.profiles(id),configured_at timestamptz not null default now(),
  unique(facility_id,severity_key),unique(facility_id,rank_order),check(length(btrim(severity_key))>0 and length(btrim(display_label))>0));
 
-create table public.safety_incidents(
+create table if not exists public.safety_incidents(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  severity_id uuid not null references public.incident_severity_scales(id) on delete restrict,
  incident_type text not null check(length(btrim(incident_type))>0),title text not null,description text not null,
@@ -32,21 +32,21 @@ create table public.safety_incidents(
  closed_at timestamptz,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  check(length(btrim(title))>0 and length(btrim(description))>0 and length(btrim(location))>0),
  check((status='closed')=(closed_at is not null)));
-create index safety_incidents_queue on public.safety_incidents(facility_id,status,reported_at desc);
-create index safety_incidents_patient on public.safety_incidents(patient_id,occurred_at desc) where patient_id is not null;
+create index if not exists safety_incidents_queue on public.safety_incidents(facility_id,status,reported_at desc);
+create index if not exists safety_incidents_patient on public.safety_incidents(patient_id,occurred_at desc) where patient_id is not null;
 
 -- Reporter identity is deliberately stored apart from the incident record. The
 -- incident RLS policy can show the reporter their report without exposing this
 -- identity mapping to administrators or other report readers.
-create table public.safety_incident_reporter_identity(
+create table if not exists public.safety_incident_reporter_identity(
  incident_id uuid primary key references public.safety_incidents(id) on delete restrict,
  reporter_profile_id uuid not null references public.profiles(id) on delete restrict,recorded_at timestamptz not null default now());
-create table public.safety_incident_investigations(
+create table if not exists public.safety_incident_investigations(
  id uuid primary key default gen_random_uuid(),incident_id uuid not null unique references public.safety_incidents(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,investigator_id uuid not null references public.profiles(id),
  findings text not null,root_cause text,investigated_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  check(length(btrim(findings))>0));
-create table public.safety_incident_actions(
+create table if not exists public.safety_incident_actions(
  id uuid primary key default gen_random_uuid(),incident_id uuid not null references public.safety_incidents(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,action_type text not null check(action_type in ('corrective','preventive')),
  description text not null,owner_profile_id uuid not null references public.profiles(id),due_date date not null,
@@ -55,19 +55,19 @@ create table public.safety_incident_actions(
  created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  check(length(btrim(description))>0),check((status in ('completed','verified') and completed_at is not null and completed_by is not null) or status not in ('completed','verified')),
  check((status='verified' and verified_at is not null and verified_by is not null) or (status<>'verified' and verified_at is null and verified_by is null)));
-create index safety_incident_actions_due on public.safety_incident_actions(facility_id,status,due_date);
-create table public.safety_incident_closures(
+create index if not exists safety_incident_actions_due on public.safety_incident_actions(facility_id,status,due_date);
+create table if not exists public.safety_incident_closures(
  id uuid primary key default gen_random_uuid(),incident_id uuid not null unique references public.safety_incidents(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,closed_by uuid not null references public.profiles(id),
  closure_summary text not null,signed_at timestamptz not null default now(),check(length(btrim(closure_summary))>0));
 
-create table public.infection_surveillance_cases(
+create table if not exists public.infection_surveillance_cases(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  ward_id uuid not null references public.wards(id) on delete restrict,patient_id uuid references public.patients(id) on delete restrict,
  case_category text not null check(length(btrim(case_category))>0),classification text not null check(length(btrim(classification))>0),
  onset_date date not null,reported_date date not null default current_date,status text not null default 'active' check(status in ('active','resolved','ruled_out')),
  recorded_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),updated_at timestamptz not null default now());
-create index infection_surveillance_ward_date on public.infection_surveillance_cases(facility_id,ward_id,onset_date,status);
+create index if not exists infection_surveillance_ward_date on public.infection_surveillance_cases(facility_id,ward_id,onset_date,status);
 
 create or replace function public.is_safety_incident_reporter(p_incident_id uuid) returns boolean
 language sql stable security definer set search_path=public as $$
@@ -76,14 +76,22 @@ $$;
 
 do $$ declare t text; begin foreach t in array array['incident_severity_scales','safety_incidents','safety_incident_reporter_identity','safety_incident_investigations','safety_incident_actions','safety_incident_closures','infection_surveillance_cases'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert,update on public.%I to service_role',t);
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop policy if exists incident_severity_read on public.incident_severity_scales;
 create policy incident_severity_read on public.incident_severity_scales for select to authenticated using(public.has_org_permission('incident.safety.read',facility_id,null));
+drop policy if exists safety_incidents_restricted_read on public.safety_incidents;
 create policy safety_incidents_restricted_read on public.safety_incidents for select to authenticated using(public.has_org_permission('incident.safety.read',facility_id,null) or public.is_safety_incident_reporter(id));
+drop policy if exists incident_identity_safety_only on public.safety_incident_reporter_identity;
 create policy incident_identity_safety_only on public.safety_incident_reporter_identity for select to authenticated using(public.has_any_role(array['safety_officer']) and exists(select 1 from public.safety_incidents i where i.id=incident_id and public.has_org_permission('incident.safety.read',i.facility_id,null)));
+drop policy if exists incident_investigation_safety_only on public.safety_incident_investigations;
 create policy incident_investigation_safety_only on public.safety_incident_investigations for select to authenticated using(public.has_org_permission('incident.safety.read',facility_id,null));
+drop policy if exists incident_actions_safety_only on public.safety_incident_actions;
 create policy incident_actions_safety_only on public.safety_incident_actions for select to authenticated using(public.has_org_permission('incident.safety.read',facility_id,null));
+drop policy if exists incident_closures_safety_only on public.safety_incident_closures;
 create policy incident_closures_safety_only on public.safety_incident_closures for select to authenticated using(public.has_org_permission('incident.safety.read',facility_id,null));
+drop policy if exists infection_cases_safety_read on public.infection_surveillance_cases;
 create policy infection_cases_safety_read on public.infection_surveillance_cases for select to authenticated using(public.has_org_permission('infection.surveillance.read',facility_id,null));
 
 create or replace function public.configure_incident_severity(p_facility_id uuid,p_key text,p_label text,p_rank integer,p_active boolean default true) returns uuid
@@ -159,6 +167,7 @@ end $$;
 
 revoke all on function public.is_safety_incident_reporter(uuid),public.configure_incident_severity(uuid,text,text,integer,boolean),public.report_safety_incident(uuid,text,text,text,text,timestamptz,text,uuid),public.investigate_safety_incident(uuid,text,text),public.add_safety_incident_action(uuid,text,text,uuid,date),public.update_safety_incident_action(uuid,text),public.close_safety_incident(uuid,text),public.record_infection_surveillance_case(uuid,uuid,uuid,text,text,date,text),public.get_ward_infection_trends(uuid,date,date) from public,anon;
 grant execute on function public.is_safety_incident_reporter(uuid),public.configure_incident_severity(uuid,text,text,integer,boolean),public.report_safety_incident(uuid,text,text,text,text,timestamptz,text,uuid),public.investigate_safety_incident(uuid,text,text),public.add_safety_incident_action(uuid,text,text,uuid,date),public.update_safety_incident_action(uuid,text),public.close_safety_incident(uuid,text),public.record_infection_surveillance_case(uuid,uuid,uuid,text,text,date,text),public.get_ward_infection_trends(uuid,date,date) to authenticated;
+drop trigger if exists safety_incident_closure_immutable on public.safety_incident_closures;
 create trigger safety_incident_closure_immutable before update or delete on public.safety_incident_closures for each row execute function public.prevent_consultation_history_mutation();
 notify pgrst,'reload schema';
 commit;

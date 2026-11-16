@@ -4,10 +4,10 @@ set local statement_timeout='60s';
 
 -- Evolve the existing privacy retention schedule into a facility-scoped,
 -- versioned policy. A missing day count means the schedule is not usable.
-alter table public.retention_schedule add column facility_id uuid references public.facilities(id) on delete restrict;
-alter table public.retention_schedule add column version integer not null default 1 check(version>0);
-alter table public.retention_schedule add column active boolean not null default true;
-alter table public.retention_schedule add column configured_by uuid references public.profiles(id);
+alter table public.retention_schedule add column if not exists facility_id uuid references public.facilities(id) on delete restrict;
+alter table public.retention_schedule add column if not exists version integer not null default 1 check(version>0);
+alter table public.retention_schedule add column if not exists active boolean not null default true;
+alter table public.retention_schedule add column if not exists configured_by uuid references public.profiles(id);
 alter table public.retention_schedule alter column retention_days drop not null;
 do $$ declare c record; begin
  for c in select conname from pg_constraint where conrelid='public.retention_schedule'::regclass and contype='c' and pg_get_constraintdef(oid) ilike '%retention_days%' loop
@@ -17,23 +17,25 @@ do $$ declare c record; begin
   execute format('alter table public.retention_schedule drop constraint %I',c.conname);
  end loop;
 end $$;
+alter table public.retention_schedule drop constraint if exists retention_schedule_days_valid;
 alter table public.retention_schedule add constraint retention_schedule_days_valid check(retention_days is null or retention_days>0);
-create unique index retention_schedule_version_scope on public.retention_schedule(coalesce(facility_id,'00000000-0000-0000-0000-000000000000'::uuid),record_category,version);
-create unique index retention_schedule_active_scope on public.retention_schedule(coalesce(facility_id,'00000000-0000-0000-0000-000000000000'::uuid),record_category) where active;
+create unique index if not exists retention_schedule_version_scope on public.retention_schedule(coalesce(facility_id,'00000000-0000-0000-0000-000000000000'::uuid),record_category,version);
+create unique index if not exists retention_schedule_active_scope on public.retention_schedule(coalesce(facility_id,'00000000-0000-0000-0000-000000000000'::uuid),record_category) where active;
 
-alter table public.legal_holds add column facility_id uuid references public.facilities(id) on delete restrict;
-alter table public.legal_holds add column case_reference text;
-alter table public.legal_holds add column authority_basis text;
-create unique index legal_hold_case_reference_unique on public.legal_holds(facility_id,case_reference) where case_reference is not null;
+alter table public.legal_holds add column if not exists facility_id uuid references public.facilities(id) on delete restrict;
+alter table public.legal_holds add column if not exists case_reference text;
+alter table public.legal_holds add column if not exists authority_basis text;
+create unique index if not exists legal_hold_case_reference_unique on public.legal_holds(facility_id,case_reference) where case_reference is not null;
 
-alter table public.retention_action_requests add column facility_id uuid references public.facilities(id) on delete restrict;
-alter table public.retention_action_requests add column schedule_id uuid references public.retention_schedule(id) on delete restrict;
-alter table public.retention_action_requests add column schedule_version integer;
-alter table public.retention_action_requests add column record_fingerprint text;
-alter table public.retention_action_requests add column first_approved_by uuid references public.profiles(id);
-alter table public.retention_action_requests add column first_approved_at timestamptz;
-alter table public.retention_action_requests add column second_approved_by uuid references public.profiles(id);
-alter table public.retention_action_requests add column second_approved_at timestamptz;
+alter table public.retention_action_requests add column if not exists facility_id uuid references public.facilities(id) on delete restrict;
+alter table public.retention_action_requests add column if not exists schedule_id uuid references public.retention_schedule(id) on delete restrict;
+alter table public.retention_action_requests add column if not exists schedule_version integer;
+alter table public.retention_action_requests add column if not exists record_fingerprint text;
+alter table public.retention_action_requests add column if not exists first_approved_by uuid references public.profiles(id);
+alter table public.retention_action_requests add column if not exists first_approved_at timestamptz;
+alter table public.retention_action_requests add column if not exists second_approved_by uuid references public.profiles(id);
+alter table public.retention_action_requests add column if not exists second_approved_at timestamptz;
+alter table public.retention_action_requests drop constraint if exists retention_action_request_second_approver_distinct;
 alter table public.retention_action_requests add constraint retention_action_request_second_approver_distinct
  check(second_approved_by is null or (second_approved_by<>requested_by and second_approved_by is distinct from first_approved_by));
 alter table public.retention_action_requests drop constraint if exists retention_action_requests_status_check;
@@ -41,16 +43,16 @@ alter table public.retention_action_requests add constraint retention_action_req
  check(status in ('pending','first_approved','approved','rejected','blocked_by_legal_hold','executed'));
 alter table public.retention_action_requests alter column disposition set default 'pending';
 
-create table public.record_archive_registry (
+create table if not exists public.record_archive_registry (
  record_category text not null, record_id text not null, facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid references public.patients(id) on delete restrict, archive_state text not null check(archive_state in ('archived','sealed')),
  action_request_id uuid not null unique references public.retention_action_requests(id) on delete restrict,
  record_fingerprint text not null, state_note text, recorded_by uuid not null references public.profiles(id), recorded_at timestamptz not null default now(),
  primary key(record_category,record_id)
 );
-create index record_archive_facility_state on public.record_archive_registry(facility_id,archive_state,recorded_at desc);
+create index if not exists record_archive_facility_state on public.record_archive_registry(facility_id,archive_state,recorded_at desc);
 
-create table public.disposal_certificates (
+create table if not exists public.disposal_certificates (
  id uuid primary key default gen_random_uuid(), action_request_id uuid not null unique references public.retention_action_requests(id) on delete restrict,
  record_category text not null, record_id text not null, facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid references public.patients(id) on delete restrict, schedule_id uuid not null references public.retention_schedule(id) on delete restrict,
@@ -68,14 +70,19 @@ alter table public.disposal_certificates enable row level security;
 revoke all on public.record_archive_registry,public.disposal_certificates from public,anon,authenticated;
 grant select on public.record_archive_registry,public.disposal_certificates to authenticated;
 grant select,insert on public.record_archive_registry,public.disposal_certificates to service_role;
+drop policy if exists retention_archive_read on public.record_archive_registry;
 create policy retention_archive_read on public.record_archive_registry for select to authenticated using (
  public.has_any_role(array['super_admin','records_officer']) and public.has_org_permission('patient.read',facility_id,null)
 );
+drop policy if exists disposal_certificate_read on public.disposal_certificates;
 create policy disposal_certificate_read on public.disposal_certificates for select to authenticated using (
  public.has_any_role(array['super_admin','records_officer']) and public.has_org_permission('patient.read',facility_id,null)
 );
+drop trigger if exists audit_record_archive_registry on public.record_archive_registry;
 create trigger audit_record_archive_registry after insert on public.record_archive_registry for each row execute function public.audit_row_change();
+drop trigger if exists audit_disposal_certificates on public.disposal_certificates;
 create trigger audit_disposal_certificates after insert on public.disposal_certificates for each row execute function public.audit_row_change();
+drop trigger if exists disposal_certificates_immutable on public.disposal_certificates;
 create trigger disposal_certificates_immutable before update or delete on public.disposal_certificates for each row execute function public.prevent_consultation_history_mutation();
 
 create or replace function public.configure_retention_schedule(p_facility_id uuid,p_record_category text,p_retention_days integer,p_retention_basis text)

@@ -10,10 +10,10 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('records_officer','downtime.reconcile','facility'),('safety_officer','downtime.reconcile','facility'),('super_admin','downtime.enter','global'),('super_admin','downtime.reconcile','global')
 on conflict do nothing;
 
-create table public.downtime_id_sequences(
+create table if not exists public.downtime_id_sequences(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  downtime_date date not null,last_sequence bigint not null default 0 check(last_sequence>=0),updated_at timestamptz not null default now(),unique(facility_id,downtime_date));
-create table public.downtime_reconciliation_entries(
+create table if not exists public.downtime_reconciliation_entries(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  downtime_id text not null,patient_id uuid references public.patients(id) on delete restrict,patient_reference text not null,
  form_type text not null,department text not null,paper_author text not null,event_at timestamptz not null,
@@ -25,16 +25,16 @@ create table public.downtime_reconciliation_entries(
  unique(facility_id,downtime_id),check(length(btrim(patient_reference))>0 and length(btrim(form_type))>0 and length(btrim(department))>0 and length(btrim(paper_author))>0),
  check((status in ('checked','discrepancy','reconciled') and checked_by is not null and checked_at is not null) or (status='entered' and checked_by is null and checked_at is null)),
  check(checked_by is null or checked_by<>entered_by));
-create index downtime_reconciliation_queue on public.downtime_reconciliation_entries(facility_id,status,event_at,entered_at);
-create index downtime_reconciliation_id_lookup on public.downtime_reconciliation_entries(facility_id,downtime_id);
-create table public.downtime_reconciliation_discrepancies(
+create index if not exists downtime_reconciliation_queue on public.downtime_reconciliation_entries(facility_id,status,event_at,entered_at);
+create index if not exists downtime_reconciliation_id_lookup on public.downtime_reconciliation_entries(facility_id,downtime_id);
+create table if not exists public.downtime_reconciliation_discrepancies(
  id uuid primary key default gen_random_uuid(),entry_id uuid not null references public.downtime_reconciliation_entries(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,reported_by uuid not null references public.profiles(id),
  discrepancy text not null check(length(btrim(discrepancy))>0),status text not null default 'open' check(status in ('open','resolved')),
  resolution text,resolved_by uuid references public.profiles(id),resolved_at timestamptz,created_at timestamptz not null default now(),
  check((status='open' and resolved_by is null and resolved_at is null) or (status='resolved' and resolved_by is not null and resolved_at is not null and resolution is not null)));
-create index downtime_discrepancy_queue on public.downtime_reconciliation_discrepancies(facility_id,status,created_at);
-create table public.downtime_reconciliation_signatures(
+create index if not exists downtime_discrepancy_queue on public.downtime_reconciliation_discrepancies(facility_id,status,created_at);
+create table if not exists public.downtime_reconciliation_signatures(
  id uuid primary key default gen_random_uuid(),entry_id uuid not null unique references public.downtime_reconciliation_entries(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,entered_by uuid not null references public.profiles(id),
  checked_by uuid not null references public.profiles(id),checked_at timestamptz not null default now(),checker_statement text not null,
@@ -42,12 +42,18 @@ create table public.downtime_reconciliation_signatures(
 
 do $$ declare t text; begin foreach t in array array['downtime_id_sequences','downtime_reconciliation_entries','downtime_reconciliation_discrepancies','downtime_reconciliation_signatures'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert,update on public.%I to service_role',t);
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop policy if exists downtime_sequence_read on public.downtime_id_sequences;
 create policy downtime_sequence_read on public.downtime_id_sequences for select to authenticated using(public.has_org_permission('downtime.enter',facility_id,null) or public.has_org_permission('downtime.reconcile',facility_id,null));
+drop policy if exists downtime_entry_read on public.downtime_reconciliation_entries;
 create policy downtime_entry_read on public.downtime_reconciliation_entries for select to authenticated using(public.has_org_permission('downtime.enter',facility_id,null) or public.has_org_permission('downtime.reconcile',facility_id,null));
+drop policy if exists downtime_discrepancy_read on public.downtime_reconciliation_discrepancies;
 create policy downtime_discrepancy_read on public.downtime_reconciliation_discrepancies for select to authenticated using(public.has_org_permission('downtime.reconcile',facility_id,null));
+drop policy if exists downtime_signature_read on public.downtime_reconciliation_signatures;
 create policy downtime_signature_read on public.downtime_reconciliation_signatures for select to authenticated using(public.has_org_permission('downtime.reconcile',facility_id,null) or entered_by=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active'));
+drop trigger if exists downtime_signatures_immutable on public.downtime_reconciliation_signatures;
 create trigger downtime_signatures_immutable before update or delete on public.downtime_reconciliation_signatures for each row execute function public.prevent_consultation_history_mutation();
 
 create or replace function public.next_downtime_id(p_facility_id uuid,p_downtime_date date default current_date) returns text

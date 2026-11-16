@@ -4,23 +4,23 @@ set local statement_timeout='60s';
 
 -- Vendor neutral payer configuration. Secrets and endpoint routing remain in the
 -- existing integration connection and Edge secret configuration.
-create table public.payer_plans (
+create table if not exists public.payer_plans (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  payer_code text not null check(payer_code ~ '^[a-z0-9][a-z0-9_-]{1,49}$'), plan_code text not null,
  display_name text not null check(length(btrim(display_name))>0), required_claim_fields text[] not null default array['claim_number','billing_id','membership_id','amount_claimed']::text[],
  active boolean not null default true, configured_by uuid not null references public.profiles(id), created_at timestamptz not null default now(),
  unique(facility_id,payer_code,plan_code), check(required_claim_fields <@ array['claim_number','billing_id','membership_id','amount_claimed','diagnosis_code','service_date']::text[])
 );
-alter table public.insurance_memberships add column payer_plan_id uuid references public.payer_plans(id) on delete restrict;
-alter table public.insurance_eligibility_checks add column request jsonb not null default '{}'::jsonb check(jsonb_typeof(request)='object');
-alter table public.insurance_eligibility_checks add column response jsonb not null default '{}'::jsonb check(jsonb_typeof(response)='object');
-alter table public.insurance_eligibility_checks add column expires_at timestamptz;
-alter table public.insurance_eligibility_checks add column connection_id uuid references public.integration_connections(id) on delete restrict;
-alter table public.insurance_eligibility_checks add column updated_at timestamptz not null default now();
+alter table public.insurance_memberships add column if not exists payer_plan_id uuid references public.payer_plans(id) on delete restrict;
+alter table public.insurance_eligibility_checks add column if not exists request jsonb not null default '{}'::jsonb check(jsonb_typeof(request)='object');
+alter table public.insurance_eligibility_checks add column if not exists response jsonb not null default '{}'::jsonb check(jsonb_typeof(response)='object');
+alter table public.insurance_eligibility_checks add column if not exists expires_at timestamptz;
+alter table public.insurance_eligibility_checks add column if not exists connection_id uuid references public.integration_connections(id) on delete restrict;
+alter table public.insurance_eligibility_checks add column if not exists updated_at timestamptz not null default now();
 alter table public.insurance_eligibility_checks drop constraint if exists insurance_eligibility_checks_status_check;
 alter table public.insurance_eligibility_checks add constraint insurance_eligibility_checks_status_check check(status in ('pending_manual','pending','eligible','ineligible','authorization_required','error','expired'));
 
-create table public.preauthorization_requests (
+create table if not exists public.preauthorization_requests (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, membership_id uuid not null references public.insurance_memberships(id) on delete restrict,
  encounter_id uuid references public.encounters(id) on delete restrict, payer_plan_id uuid references public.payer_plans(id) on delete restrict,
@@ -29,32 +29,34 @@ create table public.preauthorization_requests (
  status text not null default 'draft' check(status in ('draft','queued','submitted','approved','denied','more_information','cancelled','expired')),
  external_reference text, denial_reason text, expires_at timestamptz, requested_by uuid not null references public.profiles(id), created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
-create table public.claim_batches (
+create table if not exists public.claim_batches (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  payer_plan_id uuid not null references public.payer_plans(id) on delete restrict, status text not null default 'draft' check(status in ('draft','submitted','partial','completed','cancelled')),
  created_by uuid not null references public.profiles(id), submitted_at timestamptz, created_at timestamptz not null default now()
 );
-create table public.claim_batch_items (
+create table if not exists public.claim_batch_items (
  batch_id uuid not null references public.claim_batches(id) on delete restrict, claim_id uuid not null references public.insurance_claims(id) on delete restrict,
  validation_errors jsonb not null default '[]'::jsonb check(jsonb_typeof(validation_errors)='array'), created_at timestamptz not null default now(), primary key(batch_id,claim_id), unique(claim_id)
 );
-alter table public.insurance_claims add column diagnosis_code text;
-alter table public.insurance_claims add column service_date date;
-alter table public.insurance_claims add column denial_reason text;
-alter table public.insurance_claims add column resubmission_of_id uuid references public.insurance_claims(id) on delete restrict;
-alter table public.insurance_claims add column batch_id uuid references public.claim_batches(id) on delete restrict;
+alter table public.insurance_claims add column if not exists diagnosis_code text;
+alter table public.insurance_claims add column if not exists service_date date;
+alter table public.insurance_claims add column if not exists denial_reason text;
+alter table public.insurance_claims add column if not exists resubmission_of_id uuid references public.insurance_claims(id) on delete restrict;
+alter table public.insurance_claims add column if not exists batch_id uuid references public.claim_batches(id) on delete restrict;
 
 drop policy if exists "insurance staff manage eligibility checks" on public.insurance_eligibility_checks;
+drop policy if exists payer_facility_eligibility_read on public.insurance_eligibility_checks;
 create policy payer_facility_eligibility_read on public.insurance_eligibility_checks for select to authenticated using (
  exists(select 1 from public.insurance_memberships m where m.id=membership_id and public.has_finance_department_permission(m.patient_id,'insurance.submit'))
 );
+drop policy if exists payer_facility_eligibility_insert on public.insurance_eligibility_checks;
 create policy payer_facility_eligibility_insert on public.insurance_eligibility_checks for insert to authenticated with check (
  exists(select 1 from public.insurance_memberships m where m.id=membership_id and public.has_finance_department_permission(m.patient_id,'insurance.submit'))
 );
 
-create index payer_plans_facility_idx on public.payer_plans(facility_id,payer_code,active);
-create index preauth_facility_status_idx on public.preauthorization_requests(facility_id,status,created_at desc);
-create index claim_batches_facility_status_idx on public.claim_batches(facility_id,status,created_at desc);
+create index if not exists payer_plans_facility_idx on public.payer_plans(facility_id,payer_code,active);
+create index if not exists preauth_facility_status_idx on public.preauthorization_requests(facility_id,status,created_at desc);
+create index if not exists claim_batches_facility_status_idx on public.claim_batches(facility_id,status,created_at desc);
 
 create or replace function public.configure_payer_plan(p_facility_id uuid,p_payer_code text,p_plan_code text,p_display_name text,p_required_fields text[] default array['claim_number','billing_id','membership_id','amount_claimed']::text[])
 returns uuid language plpgsql security definer set search_path=public as $$
@@ -133,6 +135,7 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists insurance_claim_batch_status on public.insurance_claims;
 create trigger insurance_claim_batch_status after update of status on public.insurance_claims for each row when (old.status is distinct from new.status) execute function public.sync_claim_batch_status();
 
 create or replace function public.submit_claim_batch(p_batch_id uuid,p_connection_id uuid)
@@ -195,6 +198,7 @@ begin
  if tg_table_name='preauthorization_requests' and old.status is distinct from new.status and current_setting('app.payer_workflow_writer',true) is distinct from 'on' then raise exception 'Pre-authorization status changes require the workflow.'; end if;
  return new;
 end $$;
+drop trigger if exists preauthorization_status_guard on public.preauthorization_requests;
 create trigger preauthorization_status_guard before update on public.preauthorization_requests for each row execute function public.payer_workflow_event_guard();
 create or replace function public.sync_payer_outbox_delivery() returns trigger language plpgsql security definer set search_path=public as $$
 begin
@@ -204,20 +208,31 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists payer_outbox_delivery on public.integration_outbox;
 create trigger payer_outbox_delivery after update of status on public.integration_outbox for each row execute function public.sync_payer_outbox_delivery();
 
 do $$ declare t text; begin foreach t in array array['payer_plans','claim_batches','claim_batch_items'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert,update on public.%I to service_role',t);
- if t='payer_plans' then execute format('create policy payer_config_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',facility_id,null))',t);
- elsif t='claim_batches' then execute format('create policy payer_batch_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',facility_id,null))',t);
- else execute format('create policy payer_child_read on public.%I for select to authenticated using (exists(select 1 from public.claim_batches b where b.id=%I.batch_id and (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',b.facility_id,null))))',t,t); end if;
+ if t='payer_plans' then
+  execute format('drop policy if exists payer_config_read on public.%I',t);
+  execute format('create policy payer_config_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',facility_id,null))',t);
+ elsif t='claim_batches' then
+  execute format('drop policy if exists payer_batch_read on public.%I',t);
+  execute format('create policy payer_batch_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',facility_id,null))',t);
+ else
+  execute format('drop policy if exists payer_child_read on public.%I',t);
+  execute format('create policy payer_child_read on public.%I for select to authenticated using (exists(select 1 from public.claim_batches b where b.id=%I.batch_id and (public.has_any_role(array[''super_admin'']) or public.has_org_permission(''insurance.submit'',b.facility_id,null))))',t,t);
+ end if;
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update or delete on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
 alter table public.preauthorization_requests enable row level security;
 revoke all on public.preauthorization_requests from public,anon,authenticated;
 grant select on public.preauthorization_requests to authenticated;
 grant select,insert,update on public.preauthorization_requests to service_role;
+drop policy if exists preauthorization_read on public.preauthorization_requests;
 create policy preauthorization_read on public.preauthorization_requests for select to authenticated using (public.can_access_financial_record(facility_id,patient_id,'insurance.submit',false));
+drop trigger if exists audit_preauthorization_requests on public.preauthorization_requests;
 create trigger audit_preauthorization_requests after insert or update or delete on public.preauthorization_requests for each row execute function public.audit_row_change();
 revoke all on function public.configure_payer_plan(uuid,text,text,text,text[]),public.request_payer_eligibility(uuid,text,uuid,uuid),public.request_preauthorization(uuid,text,numeric,jsonb,uuid,uuid),public.create_claim_batch(uuid,uuid[]),public.submit_claim_batch(uuid,uuid),public.resubmit_denied_claim(uuid,text),public.process_payer_workflow_event(uuid,text,text,jsonb),public.sync_claim_batch_status(),public.sync_payer_outbox_delivery() from public,anon,authenticated;
 grant execute on function public.configure_payer_plan(uuid,text,text,text,text[]),public.request_payer_eligibility(uuid,text,uuid,uuid),public.request_preauthorization(uuid,text,numeric,jsonb,uuid,uuid),public.create_claim_batch(uuid,uuid[]),public.submit_claim_batch(uuid,uuid),public.resubmit_denied_claim(uuid,text) to authenticated;

@@ -12,12 +12,12 @@ alter table public.medication_administrations
  add column if not exists witnessed_by uuid references public.profiles(id) on delete restrict,
  add column if not exists override_reason text;
 
-create table public.mar_facility_settings(
+create table if not exists public.mar_facility_settings(
  facility_id uuid primary key references public.facilities(id) on delete cascade,
  early_window interval not null check(early_window>=interval '0'),
  late_window interval not null check(late_window>=interval '0'),
  updated_at timestamptz not null default now());
-create table public.mar_scheduled_doses(
+create table if not exists public.mar_scheduled_doses(
  id uuid primary key default gen_random_uuid(), patient_id uuid not null references public.patients(id) on delete restrict,
  prescription_id uuid not null references public.prescriptions(id) on delete restrict,
  prescription_item_id uuid not null references public.prescription_items(id) on delete restrict,
@@ -28,15 +28,16 @@ create table public.mar_scheduled_doses(
  status text not null default 'scheduled' check(status in ('scheduled','administered','missed','held','refused')),
  recorded_by uuid references public.profiles(id) on delete restrict, recorded_at timestamptz, status_reason text,
  created_at timestamptz not null default now(), check((status='scheduled' and recorded_at is null and recorded_by is null) or (status<>'scheduled' and recorded_at is not null and recorded_by is not null)));
-create table public.mar_witness_credentials(
+create table if not exists public.mar_witness_credentials(
  profile_id uuid primary key references public.profiles(id) on delete cascade, pin_hash text not null, updated_at timestamptz not null default now());
 alter table public.medication_administrations drop constraint if exists medication_administrations_scheduled_dose_fk;
 alter table public.medication_administrations add constraint medication_administrations_scheduled_dose_fk foreign key(scheduled_dose_id) references public.mar_scheduled_doses(id) on delete restrict;
-create index mar_scheduled_doses_due_idx on public.mar_scheduled_doses(patient_id,scheduled_at) where status='scheduled';
-create unique index medication_administrations_scheduled_dose_uidx on public.medication_administrations(scheduled_dose_id) where scheduled_dose_id is not null;
+create index if not exists mar_scheduled_doses_due_idx on public.mar_scheduled_doses(patient_id,scheduled_at) where status='scheduled';
+create unique index if not exists medication_administrations_scheduled_dose_uidx on public.medication_administrations(scheduled_dose_id) where scheduled_dose_id is not null;
 
 create or replace function public.prevent_mar_administration_mutation() returns trigger language plpgsql as $$
 begin raise exception 'Medication administration records are immutable.'; end $$;
+drop trigger if exists medication_administrations_mar_immutable on public.medication_administrations;
 create trigger medication_administrations_mar_immutable before update or delete on public.medication_administrations for each row execute function public.prevent_mar_administration_mutation();
 
 alter table public.mar_facility_settings enable row level security;
@@ -46,7 +47,9 @@ revoke all on public.mar_facility_settings,public.mar_scheduled_doses,public.mar
 grant select on public.mar_facility_settings,public.mar_scheduled_doses to authenticated;
 grant all on public.mar_facility_settings to service_role;
 grant select,insert on public.mar_scheduled_doses to service_role;
+drop policy if exists mar_settings_read on public.mar_facility_settings;
 create policy mar_settings_read on public.mar_facility_settings for select to authenticated using(public.has_org_permission('medication.administer',facility_id,null));
+drop policy if exists mar_doses_read on public.mar_scheduled_doses;
 create policy mar_doses_read on public.mar_scheduled_doses for select to authenticated using(public.has_clinical_department_permission(patient_id,'Ward / Nursing','medication.administer',false));
 
 create or replace function public.configure_mar_time_window(p_facility_id uuid,p_early_minutes integer,p_late_minutes integer) returns void language plpgsql security definer set search_path=public as $$
@@ -76,6 +79,7 @@ begin
     and new.recorded_by is not null and new.recorded_at is not null then return new; end if;
  raise exception 'Scheduled medication dose records are controlled by MAR workflows.';
 end $$;
+drop trigger if exists mar_scheduled_doses_immutable on public.mar_scheduled_doses;
 create trigger mar_scheduled_doses_immutable before update or delete on public.mar_scheduled_doses for each row execute function public.prevent_mar_dose_mutation();
 
 create or replace function public.set_mar_witness_pin(p_pin text) returns void language plpgsql security definer set search_path=public as $$

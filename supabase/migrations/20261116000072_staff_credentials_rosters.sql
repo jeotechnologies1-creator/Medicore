@@ -16,41 +16,41 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('super_admin','staff.credentials.read','global'),('super_admin','staff.credentials.manage','global'),('super_admin','staff.leave.manage','global'),('super_admin','staff.roster.manage','global')
 on conflict do nothing;
 
-create table public.staff_credentials(
+create table if not exists public.staff_credentials(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  profile_id uuid not null references public.profiles(id) on delete restrict,credential_body text not null check(length(btrim(credential_body))>0),
  credential_number text not null check(length(btrim(credential_number))>0),issued_on date not null,expires_on date not null,
  status text not null default 'active' check(status in ('active','revoked','superseded')), notes text,
  recorded_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  check(expires_on>=issued_on),unique(facility_id,profile_id,credential_body,credential_number));
-create index staff_credentials_expiry on public.staff_credentials(facility_id,expires_on) where status='active';
-create index staff_credentials_profile on public.staff_credentials(profile_id,facility_id);
+create index if not exists staff_credentials_expiry on public.staff_credentials(facility_id,expires_on) where status='active';
+create index if not exists staff_credentials_profile on public.staff_credentials(profile_id,facility_id);
 
-create table public.credential_signoff_rules(
+create table if not exists public.credential_signoff_rules(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  clinical_role text not null,credential_body text not null check(length(btrim(credential_body))>0),blocks_signoff boolean not null default false,
  configured_by uuid not null references public.profiles(id),configured_at timestamptz not null default now(),
  unique(facility_id,clinical_role,credential_body));
-create table public.staff_credential_alerts(
+create table if not exists public.staff_credential_alerts(
  id uuid primary key default gen_random_uuid(),credential_id uuid not null references public.staff_credentials(id) on delete restrict,
  days_ahead integer not null check(days_ahead>=0),recipient_profile_id uuid not null references public.profiles(id),notification_id uuid references public.notifications(id),created_at timestamptz not null default now(),
  unique(credential_id,days_ahead,recipient_profile_id));
 
-create table public.staff_leave_requests(
+create table if not exists public.staff_leave_requests(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  profile_id uuid not null references public.profiles(id) on delete restrict,leave_type text not null check(length(btrim(leave_type))>0),
  starts_on date not null,ends_on date not null,reason text not null check(length(btrim(reason))>0),
  status text not null default 'pending' check(status in ('pending','approved','rejected','cancelled')),
  requested_at timestamptz not null default now(),reviewed_by uuid references public.profiles(id),reviewed_at timestamptz,review_note text,
  check(ends_on>=starts_on),check((status in ('approved','rejected') and reviewed_by is not null and reviewed_at is not null) or status not in ('approved','rejected')));
-create index staff_leave_facility_dates on public.staff_leave_requests(facility_id,status,starts_on,ends_on);
-create table public.duty_rosters(
+create index if not exists staff_leave_facility_dates on public.staff_leave_requests(facility_id,status,starts_on,ends_on);
+create table if not exists public.duty_rosters(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  department text not null check(length(btrim(department))>0),ward_id uuid references public.wards(id) on delete restrict,
  profile_id uuid not null references public.profiles(id) on delete restrict,starts_at timestamptz not null,ends_at timestamptz not null,
  duty_role text not null check(length(btrim(duty_role))>0),notes text,created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),
  check(ends_at>starts_at));
-create index duty_rosters_facility_time on public.duty_rosters(facility_id,starts_at,ends_at,department);
+create index if not exists duty_rosters_facility_time on public.duty_rosters(facility_id,starts_at,ends_at,department);
 
 alter table public.staff_credentials enable row level security;
 alter table public.credential_signoff_rules enable row level security;
@@ -60,12 +60,17 @@ alter table public.duty_rosters enable row level security;
 revoke all on public.staff_credentials,public.credential_signoff_rules,public.staff_credential_alerts,public.staff_leave_requests,public.duty_rosters from public,anon,authenticated;
 grant select on public.staff_credentials,public.credential_signoff_rules,public.staff_credential_alerts,public.staff_leave_requests,public.duty_rosters to authenticated;
 grant select,insert,update on public.staff_credentials,public.credential_signoff_rules,public.staff_credential_alerts,public.staff_leave_requests,public.duty_rosters to service_role;
+drop policy if exists staff_credentials_hr_read on public.staff_credentials;
 create policy staff_credentials_hr_read on public.staff_credentials for select to authenticated using(public.has_org_permission('staff.credentials.read',facility_id,null) or profile_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active'));
+drop policy if exists credential_signoff_hr_read on public.credential_signoff_rules;
 create policy credential_signoff_hr_read on public.credential_signoff_rules for select to authenticated using(public.has_org_permission('staff.credentials.manage',facility_id,null));
+drop policy if exists credential_alerts_hr_read on public.staff_credential_alerts;
 create policy credential_alerts_hr_read on public.staff_credential_alerts for select to authenticated using(recipient_profile_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active') or exists(select 1 from public.staff_credentials c where c.id=credential_id and public.has_org_permission('staff.credentials.manage',c.facility_id,null)));
+drop policy if exists staff_leave_hr_read on public.staff_leave_requests;
 create policy staff_leave_hr_read on public.staff_leave_requests for select to authenticated using(public.has_org_permission('staff.leave.manage',facility_id,null) or profile_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text='active'));
+drop policy if exists duty_rosters_hr_read on public.duty_rosters;
 create policy duty_rosters_hr_read on public.duty_rosters for select to authenticated using(public.has_org_permission('staff.roster.manage',facility_id,null));
-do $$ declare t text; begin foreach t in array array['staff_credentials','credential_signoff_rules','staff_credential_alerts','staff_leave_requests','duty_rosters'] loop execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t); end loop; end $$;
+do $$ declare t text; begin foreach t in array array['staff_credentials','credential_signoff_rules','staff_credential_alerts','staff_leave_requests','duty_rosters'] loop execute format('drop trigger if exists audit_%I on public.%I',t,t); execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t); end loop; end $$;
 
 create or replace function public.record_staff_credential(p_facility_id uuid,p_profile_id uuid,p_body text,p_number text,p_issued_on date,p_expires_on date,p_notes text default null) returns uuid
 language plpgsql security definer set search_path=public as $$ declare actor uuid; result uuid; begin
@@ -123,7 +128,9 @@ create or replace function public.guard_staff_clinical_signoff() returns trigger
  if exists(select 1 from public.credential_signoff_rules r where r.facility_id=facility and r.clinical_role=(select role::text from public.profiles where id=person) and r.blocks_signoff and not exists(select 1 from public.staff_credentials c where c.facility_id=facility and c.profile_id=person and c.credential_body=r.credential_body and c.status='active' and c.expires_on>=current_date)) then raise exception 'Clinical sign-off blocked because a required credential is missing or expired.'; end if;
  return new;
 end $$;
+drop trigger if exists consultation_credential_signoff on public.consultation_signatures;
 create trigger consultation_credential_signoff before insert on public.consultation_signatures for each row execute function public.guard_staff_clinical_signoff();
+drop trigger if exists discharge_credential_signoff on public.admission_discharge_signatures;
 create trigger discharge_credential_signoff before insert on public.admission_discharge_signatures for each row execute function public.guard_staff_clinical_signoff();
 
 revoke all on function public.record_staff_credential(uuid,uuid,text,text,date,date,text),public.configure_credential_signoff_rule(uuid,text,text,boolean),public.notify_expiring_staff_credentials(uuid,integer),public.submit_staff_leave_request(uuid,text,date,date,text),public.review_staff_leave_request(uuid,text,text),public.create_duty_roster(uuid,uuid,text,uuid,timestamptz,timestamptz,text,text),public.guard_staff_clinical_signoff() from public,anon,authenticated;

@@ -29,8 +29,10 @@ alter table public.consultation_addenda enable row level security;
 revoke all on public.consultation_signatures,public.consultation_addenda from public,anon;
 grant select on public.consultation_signatures,public.consultation_addenda to authenticated;
 grant select,insert on public.consultation_signatures,public.consultation_addenda to service_role;
+drop policy if exists "clinical staff read consultation signatures" on public.consultation_signatures;
 create policy "clinical staff read consultation signatures" on public.consultation_signatures for select to authenticated
   using(exists(select 1 from public.consultations c where c.id=consultation_id and public.has_clinical_department_permission(c.patient_id,'Medical','encounter.update',false)));
+drop policy if exists "clinical staff read consultation addenda" on public.consultation_addenda;
 create policy "clinical staff read consultation addenda" on public.consultation_addenda for select to authenticated
   using(exists(select 1 from public.consultations c where c.id=consultation_id and public.has_clinical_department_permission(c.patient_id,'Medical','encounter.update',false)));
 
@@ -61,7 +63,9 @@ create trigger guard_signed_consultation before insert or update or delete on pu
 create or replace function public.prevent_consultation_history_mutation() returns trigger language plpgsql as $$
 begin raise exception 'Consultation signatures and addenda are append-only.'; end $$;
 revoke all on function public.prevent_consultation_history_mutation() from public,anon,authenticated;
+drop trigger if exists consultation_signatures_immutable on public.consultation_signatures;
 create trigger consultation_signatures_immutable before update or delete on public.consultation_signatures for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists consultation_addenda_immutable on public.consultation_addenda;
 create trigger consultation_addenda_immutable before update or delete on public.consultation_addenda for each row execute function public.prevent_consultation_history_mutation();
 
 create or replace function public.sign_consultation(p_consultation_id uuid) returns uuid language plpgsql security definer set search_path=public as $$

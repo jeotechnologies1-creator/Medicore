@@ -9,7 +9,7 @@ alter table public.disclosure_register add column if not exists requester_relati
 alter table public.disclosure_register add column if not exists released_scope text[];
 alter table public.disclosure_register add column if not exists redaction_notes text;
 
-create table public.release_information_requests (
+create table if not exists public.release_information_requests (
  id uuid primary key default gen_random_uuid(), patient_id uuid not null references public.patients(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,
  requester_name text not null check(length(btrim(requester_name))>0), requester_contact text,
@@ -29,20 +29,21 @@ create table public.release_information_requests (
  check((released_by is null)=(released_at is null)),
  check((denied_by is null)=(denied_at is null))
 );
+alter table public.disclosure_register drop constraint if exists disclosure_register_release_request_fkey;
 alter table public.disclosure_register add constraint disclosure_register_release_request_fkey
  foreign key(release_request_id) references public.release_information_requests(id) on delete restrict;
-create unique index release_information_disclosure_unique on public.disclosure_register(release_request_id) where release_request_id is not null;
-create index release_information_queue_idx on public.release_information_requests(facility_id,status,received_at desc);
-create index release_information_patient_idx on public.release_information_requests(patient_id,received_at desc);
+create unique index if not exists release_information_disclosure_unique on public.disclosure_register(release_request_id) where release_request_id is not null;
+create index if not exists release_information_queue_idx on public.release_information_requests(facility_id,status,received_at desc);
+create index if not exists release_information_patient_idx on public.release_information_requests(patient_id,received_at desc);
 
-create table public.data_subject_deadline_policies (
+create table if not exists public.data_subject_deadline_policies (
  id uuid primary key default gen_random_uuid(), facility_id uuid references public.facilities(id) on delete restrict,
  request_type text not null check(request_type in ('access','correction','restriction')),
  due_days integer check(due_days is null or due_days>0), deadline_basis text not null check(length(btrim(deadline_basis))>0),
  active boolean not null default true, configured_by uuid not null references public.profiles(id), configured_at timestamptz not null default now(),
  unique nulls not distinct(facility_id,request_type)
 );
-create index data_subject_deadline_policy_scope on public.data_subject_deadline_policies(facility_id,request_type) where active;
+create index if not exists data_subject_deadline_policy_scope on public.data_subject_deadline_policies(facility_id,request_type) where active;
 alter table public.data_subject_requests alter column due_at drop not null;
 alter table public.data_subject_requests alter column due_date_basis set default 'pending_legal_review';
 alter table public.data_subject_requests add column if not exists facility_id uuid references public.facilities(id) on delete restrict;
@@ -58,13 +59,17 @@ alter table public.data_subject_deadline_policies enable row level security;
 revoke all on public.release_information_requests,public.data_subject_deadline_policies from public,anon,authenticated;
 grant select on public.release_information_requests,public.data_subject_deadline_policies to authenticated;
 grant select,insert,update on public.release_information_requests,public.data_subject_deadline_policies to service_role;
+drop policy if exists release_information_read on public.release_information_requests;
 create policy release_information_read on public.release_information_requests for select to authenticated using (
  public.has_any_role(array['super_admin','records_officer']) and public.has_patient_facility_access(patient_id)
 );
+drop policy if exists data_subject_deadline_policy_read on public.data_subject_deadline_policies;
 create policy data_subject_deadline_policy_read on public.data_subject_deadline_policies for select to authenticated using (
  public.has_any_role(array['super_admin','records_officer']) and (facility_id is null or public.has_org_permission('patient.read',facility_id,null))
 );
+drop trigger if exists audit_release_information_requests on public.release_information_requests;
 create trigger audit_release_information_requests after insert or update on public.release_information_requests for each row execute function public.audit_row_change();
+drop trigger if exists audit_data_subject_deadline_policies on public.data_subject_deadline_policies;
 create trigger audit_data_subject_deadline_policies after insert or update on public.data_subject_deadline_policies for each row execute function public.audit_row_change();
 
 create or replace function public.guard_data_subject_request_verification() returns trigger language plpgsql as $$
@@ -74,6 +79,7 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists data_subject_request_verification_guard on public.data_subject_requests;
 create trigger data_subject_request_verification_guard before update on public.data_subject_requests for each row execute function public.guard_data_subject_request_verification();
 
 create or replace function public.intake_release_information_request(p_patient_id uuid,p_requester_name text,p_requester_contact text,p_relationship text,p_purpose text,p_scope text[],p_sensitive boolean default false)

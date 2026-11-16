@@ -15,25 +15,25 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('super_admin','asset.read','global'),('super_admin','asset.manage','global'),('super_admin','asset.maintenance.manage','global')
 on conflict do nothing;
 
-create table public.facility_assets(
+create table if not exists public.facility_assets(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  asset_tag text not null,asset_name text not null,category text,location text not null,custodian_id uuid references public.profiles(id) on delete restrict,
  status text not null default 'active' check(status in ('active','maintenance','unavailable','retired')),
  critical_equipment boolean not null default false,manufacturer text,model text,serial_number text,acquired_on date,
  created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  unique(facility_id,asset_tag),check(length(btrim(asset_tag))>0 and length(btrim(asset_name))>0 and length(btrim(location))>0));
-create index facility_assets_status on public.facility_assets(facility_id,status,critical_equipment);
-create index facility_assets_custodian on public.facility_assets(facility_id,custodian_id);
+create index if not exists facility_assets_status on public.facility_assets(facility_id,status,critical_equipment);
+create index if not exists facility_assets_custodian on public.facility_assets(facility_id,custodian_id);
 
-create table public.asset_maintenance_schedules(
+create table if not exists public.asset_maintenance_schedules(
  id uuid primary key default gen_random_uuid(),asset_id uuid not null references public.facility_assets(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict,maintenance_name text not null,interval_days integer not null check(interval_days>0),
  last_completed_on date,next_due_on date not null,active boolean not null default true,instructions text,
  configured_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  check(length(btrim(maintenance_name))>0));
-create index asset_maintenance_due on public.asset_maintenance_schedules(facility_id,next_due_on) where active;
+create index if not exists asset_maintenance_due on public.asset_maintenance_schedules(facility_id,next_due_on) where active;
 
-create table public.asset_work_orders(
+create table if not exists public.asset_work_orders(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  asset_id uuid not null references public.facility_assets(id) on delete restrict,schedule_id uuid references public.asset_maintenance_schedules(id) on delete restrict,
  title text not null,description text,priority text not null default 'normal' check(priority in ('low','normal','high','urgent')),
@@ -42,27 +42,38 @@ create table public.asset_work_orders(
  opened_at timestamptz not null default now(),started_at timestamptz,completed_at timestamptz,downtime_started_at timestamptz,downtime_ended_at timestamptz,
  resolution text,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),
  check(length(btrim(title))>0),check(downtime_ended_at is null or downtime_started_at is not null and downtime_ended_at>=downtime_started_at));
-create index asset_work_orders_queue on public.asset_work_orders(facility_id,status,priority,opened_at desc);
-create index asset_work_orders_asset on public.asset_work_orders(asset_id,opened_at desc);
-create table public.asset_work_order_parts(
+create index if not exists asset_work_orders_queue on public.asset_work_orders(facility_id,status,priority,opened_at desc);
+create index if not exists asset_work_orders_asset on public.asset_work_orders(asset_id,opened_at desc);
+create table if not exists public.asset_work_order_parts(
  id uuid primary key default gen_random_uuid(),work_order_id uuid not null references public.asset_work_orders(id) on delete restrict,
  stock_item_id uuid references public.store_stock_items(id) on delete restrict,part_description text not null,quantity numeric(14,3) not null check(quantity>0),
  recorded_by uuid not null references public.profiles(id),recorded_at timestamptz not null default now(),stock_movement_id uuid references public.stock_movements(id) on delete restrict,
  check(length(btrim(part_description))>0));
-create index asset_work_order_parts_order on public.asset_work_order_parts(work_order_id,recorded_at);
-create table public.asset_maintenance_alerts(
+create index if not exists asset_work_order_parts_order on public.asset_work_order_parts(work_order_id,recorded_at);
+create table if not exists public.asset_maintenance_alerts(
  id uuid primary key default gen_random_uuid(),schedule_id uuid not null references public.asset_maintenance_schedules(id) on delete restrict,
  days_ahead integer not null check(days_ahead>=0),recipient_profile_id uuid not null references public.profiles(id),notification_id uuid references public.notifications(id),created_at timestamptz not null default now(),
  unique(schedule_id,days_ahead,recipient_profile_id));
 
 do $$ declare t text; begin foreach t in array array['facility_assets','asset_maintenance_schedules','asset_work_orders','asset_work_order_parts','asset_maintenance_alerts'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert,update on public.%I to service_role',t);
- if t='facility_assets' then execute format('create policy asset_facility_read on public.%I for select to authenticated using(public.has_org_permission(''asset.read'',facility_id,null))',t);
- elsif t in ('asset_maintenance_schedules','asset_work_orders') then execute format('create policy asset_child_read on public.%I for select to authenticated using(public.has_org_permission(''asset.read'',facility_id,null))',t);
- elsif t='asset_work_order_parts' then execute format('create policy asset_parts_read on public.%I for select to authenticated using(exists(select 1 from public.asset_work_orders w where w.id=%I.work_order_id and public.has_org_permission(''asset.read'',w.facility_id,null)))',t,t);
- else execute format('create policy asset_alert_read on public.%I for select to authenticated using(recipient_profile_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text=''active'') or exists(select 1 from public.asset_maintenance_schedules s where s.id=schedule_id and public.has_org_permission(''asset.maintenance.manage'',s.facility_id,null)))',t); end if;
+ if t='facility_assets' then
+  execute format('drop policy if exists asset_facility_read on public.%I',t);
+  execute format('create policy asset_facility_read on public.%I for select to authenticated using(public.has_org_permission(''asset.read'',facility_id,null))',t);
+ elsif t in ('asset_maintenance_schedules','asset_work_orders') then
+  execute format('drop policy if exists asset_child_read on public.%I',t);
+  execute format('create policy asset_child_read on public.%I for select to authenticated using(public.has_org_permission(''asset.read'',facility_id,null))',t);
+ elsif t='asset_work_order_parts' then
+  execute format('drop policy if exists asset_parts_read on public.%I',t);
+  execute format('create policy asset_parts_read on public.%I for select to authenticated using(exists(select 1 from public.asset_work_orders w where w.id=%I.work_order_id and public.has_org_permission(''asset.read'',w.facility_id,null)))',t,t);
+ else
+  execute format('drop policy if exists asset_alert_read on public.%I',t);
+  execute format('create policy asset_alert_read on public.%I for select to authenticated using(recipient_profile_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text=''active'') or exists(select 1 from public.asset_maintenance_schedules s where s.id=schedule_id and public.has_org_permission(''asset.maintenance.manage'',s.facility_id,null)))',t);
+ end if;
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop trigger if exists asset_work_order_parts_immutable on public.asset_work_order_parts;
 create trigger asset_work_order_parts_immutable before update or delete on public.asset_work_order_parts for each row execute function public.prevent_consultation_history_mutation();
 
 create or replace function public.create_facility_asset(p_facility_id uuid,p_asset_tag text,p_asset_name text,p_location text,p_custodian_id uuid default null,p_critical boolean default false,p_category text default null,p_manufacturer text default null,p_model text default null,p_serial_number text default null,p_acquired_on date default null) returns uuid

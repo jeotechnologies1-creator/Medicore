@@ -13,43 +13,43 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('doctor','bloodbank.crossmatch','department'),('doctor','bloodbank.transfuse','department'),
  ('nurse','bloodbank.crossmatch','department'),('nurse','bloodbank.transfuse','department') on conflict do nothing;
 
-create table public.blood_bank_clinical_owners(
+create table if not exists public.blood_bank_clinical_owners(
  facility_id uuid primary key references public.facilities(id) on delete restrict,
  profile_id uuid not null references public.profiles(id) on delete restrict,
  assigned_by uuid not null references public.profiles(id) on delete restrict,assigned_at timestamptz not null default now());
-create table public.blood_bank_witness_credentials(
+create table if not exists public.blood_bank_witness_credentials(
  profile_id uuid primary key references public.profiles(id) on delete cascade,
  pin_hash text not null,updated_at timestamptz not null default now());
 
-create table public.blood_donors(
+create table if not exists public.blood_donors(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  donor_number text not null,patient_id uuid references public.patients(id) on delete restrict,
  created_by uuid not null references public.profiles(id) on delete restrict,created_at timestamptz not null default now(),
  unique(facility_id,donor_number));
-create table public.blood_units(
+create table if not exists public.blood_units(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  donor_id uuid not null references public.blood_donors(id) on delete restrict,unit_number text not null,
  component_type text not null check(length(btrim(component_type))>0),blood_group text not null check(length(btrim(blood_group))>0),
  expires_at timestamptz not null,created_by uuid not null references public.profiles(id) on delete restrict,created_at timestamptz not null default now(),
  unique(facility_id,unit_number));
-create table public.blood_compatibility_rules(
+create table if not exists public.blood_compatibility_rules(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  rule_version integer not null check(rule_version>0),component_type text not null,donor_group text not null,recipient_group text not null,
  compatible boolean not null,clinical_owner_id uuid not null references public.profiles(id) on delete restrict,
  reviewed_at timestamptz not null default now(),created_at timestamptz not null default now(),
  unique(facility_id,rule_version,component_type,donor_group,recipient_group));
-create table public.blood_crossmatch_requests(
+create table if not exists public.blood_crossmatch_requests(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict,encounter_id uuid not null references public.encounters(id) on delete restrict,
  component_type text not null,recipient_group text not null,requested_by uuid not null references public.profiles(id) on delete restrict,
  requested_at timestamptz not null default now(),created_at timestamptz not null default now());
-create table public.blood_crossmatch_results(
+create table if not exists public.blood_crossmatch_results(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  request_id uuid not null references public.blood_crossmatch_requests(id) on delete restrict,
  unit_id uuid not null references public.blood_units(id) on delete restrict,compatible boolean not null,result text not null,
  rule_version integer not null,performed_by uuid not null references public.profiles(id) on delete restrict,
  performed_at timestamptz not null default now(),created_at timestamptz not null default now());
-create table public.blood_unit_events(
+create table if not exists public.blood_unit_events(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  unit_id uuid not null references public.blood_units(id) on delete restrict,
  event_type text not null check(event_type in ('received','available','quarantined','issued','returned','verified','transfusion_started','transfused','discarded','recalled')),
@@ -57,35 +57,37 @@ create table public.blood_unit_events(
  request_id uuid references public.blood_crossmatch_requests(id) on delete restrict,
  patient_id uuid references public.patients(id) on delete restrict,
  cold_chain_accepted boolean,reason text,created_at timestamptz not null default now());
-create table public.transfusion_records(
+create table if not exists public.transfusion_records(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  request_id uuid not null references public.blood_crossmatch_requests(id) on delete restrict,
  unit_id uuid not null references public.blood_units(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict,encounter_id uuid not null references public.encounters(id) on delete restrict,
  verified_by uuid not null references public.profiles(id) on delete restrict,second_verified_by uuid not null references public.profiles(id) on delete restrict,
  started_at timestamptz not null default now(),created_at timestamptz not null default now(),check(verified_by<>second_verified_by),unique(request_id,unit_id));
-create table public.transfusion_observations(
+create table if not exists public.transfusion_observations(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  transfusion_id uuid not null references public.transfusion_records(id) on delete restrict,
  phase text not null check(phase in ('before','during','after')),observed_at timestamptz not null default now(),
  vitals jsonb not null check(jsonb_typeof(vitals)='object'),notes text,recorded_by uuid not null references public.profiles(id) on delete restrict,created_at timestamptz not null default now());
-create table public.transfusion_reactions(
+create table if not exists public.transfusion_reactions(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  transfusion_id uuid not null references public.transfusion_records(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict,unit_id uuid not null references public.blood_units(id) on delete restrict,
  reported_by uuid not null references public.profiles(id) on delete restrict,reported_at timestamptz not null default now(),
  description text not null check(length(btrim(description))>0),actions jsonb not null default '{}'::jsonb check(jsonb_typeof(actions)='object'),created_at timestamptz not null default now());
 
-create index blood_units_expiry_idx on public.blood_units(facility_id,expires_at);
-create index blood_unit_events_trace_idx on public.blood_unit_events(unit_id,event_at,id);
-create index blood_crossmatch_patient_idx on public.blood_crossmatch_requests(patient_id,requested_at desc);
-create index transfusion_patient_idx on public.transfusion_records(patient_id,started_at desc);
+create index if not exists blood_units_expiry_idx on public.blood_units(facility_id,expires_at);
+create index if not exists blood_unit_events_trace_idx on public.blood_unit_events(unit_id,event_at,id);
+create index if not exists blood_crossmatch_patient_idx on public.blood_crossmatch_requests(patient_id,requested_at desc);
+create index if not exists transfusion_patient_idx on public.transfusion_records(patient_id,started_at desc);
 
 alter table public.blood_bank_clinical_owners enable row level security;
 revoke all on public.blood_bank_clinical_owners from public,anon,authenticated;
 grant select on public.blood_bank_clinical_owners to authenticated;
 grant select,insert,update on public.blood_bank_clinical_owners to service_role;
+drop policy if exists blood_owner_read on public.blood_bank_clinical_owners;
 create policy blood_owner_read on public.blood_bank_clinical_owners for select to authenticated using(public.has_org_permission('bloodbank.manage',facility_id,null) or public.has_org_permission('bloodbank.rules.review',facility_id,null));
+drop trigger if exists audit_blood_bank_clinical_owners on public.blood_bank_clinical_owners;
 create trigger audit_blood_bank_clinical_owners after insert or update on public.blood_bank_clinical_owners for each row execute function public.audit_row_change();
 alter table public.blood_bank_witness_credentials enable row level security;
 revoke all on public.blood_bank_witness_credentials from public,anon,authenticated;
@@ -96,12 +98,15 @@ do $$ declare t text; begin foreach t in array array['blood_donors','blood_units
  execute format('revoke all on public.%I from public,anon',t);
  execute format('grant select on public.%I to authenticated',t);
  execute format('grant select,insert on public.%I to service_role',t);
+ execute format('drop policy if exists blood_read on public.%I',t);
  if t='transfusion_observations' then
   execute format('create policy blood_read on public.%I for select to authenticated using (exists(select 1 from public.transfusion_records tr where tr.id=transfusion_id and public.has_clinical_department_permission(tr.patient_id,''Ward / Nursing'',''bloodbank.transfuse'',false)))',t);
  else
   execute format('create policy blood_read on public.%I for select to authenticated using (public.has_org_permission(''bloodbank.manage'',facility_id,null) or public.has_org_permission(''bloodbank.crossmatch'',facility_id,null) or public.has_org_permission(''bloodbank.transfuse'',facility_id,null))',t);
  end if;
+ execute format('drop trigger if exists %I on public.%I',t||'_immutable',t);
  execute format('create trigger %I before update or delete on public.%I for each row execute function public.prevent_consultation_history_mutation()',t||'_immutable',t);
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert on public.%I for each row execute function public.audit_row_change()',t,t);
 end loop; end $$;
 revoke all on public.blood_donors,public.blood_units,public.blood_compatibility_rules,public.blood_crossmatch_requests,public.blood_crossmatch_results,public.blood_unit_events,public.transfusion_records,public.transfusion_observations,public.transfusion_reactions from authenticated;

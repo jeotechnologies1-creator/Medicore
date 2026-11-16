@@ -17,7 +17,7 @@ on conflict do nothing;
 -- The source_event_id is an opaque Task 15 integration reference because no
 -- maternity event table exists in this migration chain yet. Emergency deaths
 -- link directly to an encounter and are verified against its BID assessment.
-create table public.birth_registrations (
+create table if not exists public.birth_registrations (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  child_patient_id uuid references public.patients(id) on delete restrict,
  mother_patient_id uuid references public.patients(id) on delete restrict,
@@ -35,10 +35,10 @@ create table public.birth_registrations (
        (verification_status<>'verified' and verified_by is null and verified_at is null)),
  unique(facility_id,source_system,maternity_source_event_id,birth_order)
 );
-create index birth_registry_facility_date on public.birth_registrations(facility_id,occurred_at desc);
-create index birth_registry_mother on public.birth_registrations(mother_patient_id,occurred_at desc);
+create index if not exists birth_registry_facility_date on public.birth_registrations(facility_id,occurred_at desc);
+create index if not exists birth_registry_mother on public.birth_registrations(mother_patient_id,occurred_at desc);
 
-create table public.death_registrations (
+create table if not exists public.death_registrations (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid references public.patients(id) on delete restrict, encounter_id uuid references public.encounters(id) on delete restrict,
  source_system text not null default 'manual', source_event_id uuid, occurred_at timestamptz not null,
@@ -50,9 +50,9 @@ create table public.death_registrations (
        (verification_status<>'verified' and verified_by is null and verified_at is null)),
  unique(facility_id,source_system,source_event_id)
 );
-create index death_registry_facility_date on public.death_registrations(facility_id,occurred_at desc);
+create index if not exists death_registry_facility_date on public.death_registrations(facility_id,occurred_at desc);
 
-create table public.statutory_report_definitions (
+create table if not exists public.statutory_report_definitions (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  report_key text not null check(report_key ~ '^[a-z0-9][a-z0-9_.-]{1,79}$'), report_name text not null,
  version integer not null check(version>0), definition jsonb not null check(jsonb_typeof(definition)='object'),
@@ -60,15 +60,15 @@ create table public.statutory_report_definitions (
  configured_by uuid not null references public.profiles(id), created_at timestamptz not null default now(),
  unique(facility_id,report_key,version)
 );
-create unique index statutory_report_one_active on public.statutory_report_definitions(facility_id,report_key) where active;
-create table public.statutory_report_suppression_rules (
+create unique index if not exists statutory_report_one_active on public.statutory_report_definitions(facility_id,report_key) where active;
+create table if not exists public.statutory_report_suppression_rules (
  facility_id uuid primary key references public.facilities(id) on delete restrict,
  minimum_cell_count integer check(minimum_cell_count is null or minimum_cell_count>0),
  policy_basis text, configured_by uuid references public.profiles(id), configured_at timestamptz,
  check((minimum_cell_count is null and configured_by is null and configured_at is null) or
        (minimum_cell_count is not null and length(btrim(coalesce(policy_basis,'')))>0 and configured_by is not null and configured_at is not null))
 );
-create table public.statutory_report_exports (
+create table if not exists public.statutory_report_exports (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  report_definition_id uuid not null references public.statutory_report_definitions(id) on delete restrict,
  report_version integer not null, period_start date not null, period_end date not null,
@@ -87,16 +87,27 @@ revoke all on public.birth_registrations,public.death_registrations,public.statu
 grant select on public.birth_registrations,public.death_registrations,public.statutory_report_definitions,public.statutory_report_suppression_rules,public.statutory_report_exports to authenticated;
 grant select,insert,update on public.birth_registrations,public.death_registrations,public.statutory_report_definitions,public.statutory_report_suppression_rules to service_role;
 grant select,insert on public.statutory_report_exports to service_role;
+drop policy if exists birth_registry_read on public.birth_registrations;
 create policy birth_registry_read on public.birth_registrations for select to authenticated using(public.has_org_permission('vital_registry.read',facility_id,null));
+drop policy if exists death_registry_read on public.death_registrations;
 create policy death_registry_read on public.death_registrations for select to authenticated using(public.has_org_permission('vital_registry.read',facility_id,null));
+drop policy if exists statutory_definition_read on public.statutory_report_definitions;
 create policy statutory_definition_read on public.statutory_report_definitions for select to authenticated using(public.has_org_permission('statutory_report.read',facility_id,null));
+drop policy if exists statutory_suppression_read on public.statutory_report_suppression_rules;
 create policy statutory_suppression_read on public.statutory_report_suppression_rules for select to authenticated using(public.has_org_permission('statutory_report.read',facility_id,null));
+drop policy if exists statutory_export_read on public.statutory_report_exports;
 create policy statutory_export_read on public.statutory_report_exports for select to authenticated using(public.has_org_permission('statutory_report.read',facility_id,null));
+drop trigger if exists audit_birth_registrations on public.birth_registrations;
 create trigger audit_birth_registrations after insert or update on public.birth_registrations for each row execute function public.audit_row_change();
+drop trigger if exists audit_death_registrations on public.death_registrations;
 create trigger audit_death_registrations after insert or update on public.death_registrations for each row execute function public.audit_row_change();
+drop trigger if exists audit_statutory_report_definitions on public.statutory_report_definitions;
 create trigger audit_statutory_report_definitions after insert or update on public.statutory_report_definitions for each row execute function public.audit_row_change();
+drop trigger if exists audit_statutory_report_suppression_rules on public.statutory_report_suppression_rules;
 create trigger audit_statutory_report_suppression_rules after insert or update on public.statutory_report_suppression_rules for each row execute function public.audit_row_change();
+drop trigger if exists audit_statutory_report_exports on public.statutory_report_exports;
 create trigger audit_statutory_report_exports after insert on public.statutory_report_exports for each row execute function public.audit_row_change();
+drop trigger if exists statutory_report_export_immutable on public.statutory_report_exports;
 create trigger statutory_report_export_immutable before update or delete on public.statutory_report_exports for each row execute function public.prevent_consultation_history_mutation();
 
 create or replace function public.register_birth(p_facility_id uuid,p_child_patient_id uuid,p_mother_patient_id uuid,p_mother_encounter_id uuid,

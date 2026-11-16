@@ -15,44 +15,44 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('surgeon','surgery.anaesthesia.record','department'),('theatre_staff','surgery.anaesthesia.record','department')
 on conflict do nothing;
 
-create table public.surgical_checklist_templates(
+create table if not exists public.surgical_checklist_templates(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  phase text not null check(phase in ('pre_induction','time_out','sign_out')),
  template_version integer not null default 1 check(template_version>0),items jsonb not null default '[]'::jsonb check(jsonb_typeof(items)='array'),
  updated_by uuid not null references public.profiles(id) on delete restrict,updated_at timestamptz not null default now(),
  unique(facility_id,phase));
-create table public.surgical_checklist_instances(
+create table if not exists public.surgical_checklist_instances(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  phase text not null check(phase in ('pre_induction','time_out','sign_out')),
  template_version integer not null,template_items jsonb not null check(jsonb_typeof(template_items)='array'),
  created_by uuid not null references public.profiles(id) on delete restrict,created_at timestamptz not null default now(),
  unique(surgery_id,phase,template_version));
-create table public.surgical_checklist_answers(
+create table if not exists public.surgical_checklist_answers(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  instance_id uuid not null references public.surgical_checklist_instances(id) on delete restrict,
  item_key text not null,confirmed boolean not null,note text,
  recorded_by uuid not null references public.profiles(id) on delete restrict,recorded_at timestamptz not null default now(),created_at timestamptz not null default now());
-create index surgical_checklist_answers_latest_idx on public.surgical_checklist_answers(instance_id,item_key,recorded_at desc,id desc);
-create table public.surgical_checklist_completions(
+create index if not exists surgical_checklist_answers_latest_idx on public.surgical_checklist_answers(instance_id,item_key,recorded_at desc,id desc);
+create table if not exists public.surgical_checklist_completions(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  instance_id uuid not null unique references public.surgical_checklist_instances(id) on delete restrict,
  completed_by uuid not null references public.profiles(id) on delete restrict,completed_at timestamptz not null default now());
-create table public.surgery_anaesthesia_events(
+create table if not exists public.surgery_anaesthesia_events(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  event_type text not null check(event_type in ('pre_assessment','agent_dose','intraoperative_observation','recovery_handover')),
  free_text text,agent_name text,dose numeric(12,4),dose_unit text,route text,administered_at timestamptz,
  details jsonb not null check(jsonb_typeof(details)='object'),recorded_by uuid not null references public.profiles(id) on delete restrict,
  recorded_at timestamptz not null default now(),created_at timestamptz not null default now());
-create table public.surgery_recovery_observations(
+create table if not exists public.surgery_recovery_observations(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  observations jsonb not null check(jsonb_typeof(observations)='object'),recorded_by uuid not null references public.profiles(id) on delete restrict,
  observed_at timestamptz not null default now(),created_at timestamptz not null default now());
-create table public.surgery_consumable_reconciliations(
+create table if not exists public.surgery_consumable_reconciliations(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  surgery_id uuid not null references public.surgeries(id) on delete restrict,
  item text not null check(length(btrim(item))>0),expected_count integer not null check(expected_count>=0),counted_count integer not null check(counted_count>=0),
@@ -60,10 +60,10 @@ create table public.surgery_consumable_reconciliations(
  recorded_at timestamptz not null default now(),created_at timestamptz not null default now(),
  check(expected_count=counted_count or nullif(btrim(discrepancy_reason),'') is not null));
 
-create index surgical_checklist_instance_surgery_idx on public.surgical_checklist_instances(surgery_id,phase,created_at desc);
-create index surgery_anaesthesia_surgery_idx on public.surgery_anaesthesia_events(surgery_id,recorded_at,id);
-create index surgery_recovery_surgery_idx on public.surgery_recovery_observations(surgery_id,observed_at,id);
-create index surgery_consumables_surgery_idx on public.surgery_consumable_reconciliations(surgery_id,recorded_at,id);
+create index if not exists surgical_checklist_instance_surgery_idx on public.surgical_checklist_instances(surgery_id,phase,created_at desc);
+create index if not exists surgery_anaesthesia_surgery_idx on public.surgery_anaesthesia_events(surgery_id,recorded_at,id);
+create index if not exists surgery_recovery_surgery_idx on public.surgery_recovery_observations(surgery_id,observed_at,id);
+create index if not exists surgery_consumables_surgery_idx on public.surgery_consumable_reconciliations(surgery_id,recorded_at,id);
 
 create or replace function public.can_access_surgery(p_surgery_id uuid,p_permission text default 'surgery.manage') returns boolean
 language plpgsql stable security definer set search_path=public as $$
@@ -80,16 +80,21 @@ do $$ declare t text; begin foreach t in array array['surgical_checklist_instanc
  execute format('revoke all on public.%I from public,anon,authenticated',t);
  execute format('grant select on public.%I to authenticated',t);
  execute format('grant select,insert on public.%I to service_role',t);
+ execute format('drop policy if exists surgery_records_read on public.%I',t);
  execute format('create policy surgery_records_read on public.%I for select to authenticated using(public.has_org_permission(''surgery.manage'',facility_id,null) and public.can_access_surgery(surgery_id,''surgery.manage''))',t);
+ execute format('drop trigger if exists %I on public.%I',t||'_immutable',t);
  execute format('create trigger %I before update or delete on public.%I for each row execute function public.prevent_consultation_history_mutation()',t||'_immutable',t);
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert on public.%I for each row execute function public.audit_row_change()',t,t);
 end loop; end $$;
 alter table public.surgical_checklist_templates enable row level security;
 revoke all on public.surgical_checklist_templates from public,anon,authenticated;
 grant select on public.surgical_checklist_templates to authenticated;
 grant select,insert,update on public.surgical_checklist_templates to service_role;
+drop policy if exists surgical_checklist_templates_read on public.surgical_checklist_templates;
 create policy surgical_checklist_templates_read on public.surgical_checklist_templates for select to authenticated
  using(public.has_org_permission('surgery.manage',facility_id,null));
+drop trigger if exists audit_surgical_checklist_templates on public.surgical_checklist_templates;
 create trigger audit_surgical_checklist_templates after insert or update on public.surgical_checklist_templates for each row execute function public.audit_row_change();
 
 create or replace function public.set_surgical_checklist_template(p_facility_id uuid,p_phase text,p_items jsonb) returns integer

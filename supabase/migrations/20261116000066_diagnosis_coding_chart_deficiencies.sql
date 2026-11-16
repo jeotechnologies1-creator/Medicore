@@ -12,7 +12,7 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('records_officer','chart.audit.manage','facility'),('doctor','coding.read','facility')
 on conflict do nothing;
 
-create table public.encounter_diagnosis_codes (
+create table if not exists public.encounter_diagnosis_codes (
  id uuid primary key default gen_random_uuid(), encounter_id uuid not null references public.encounters(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, facility_id uuid not null references public.facilities(id) on delete restrict,
  code_system text not null, code text not null, display_snapshot text not null,
@@ -22,10 +22,10 @@ create table public.encounter_diagnosis_codes (
  unique(encounter_id,code_system,code),
  foreign key(code_system,code) references public.concepts(system,code) on update cascade on delete restrict
 );
-create unique index encounter_diagnosis_one_primary on public.encounter_diagnosis_codes(encounter_id) where primary_diagnosis;
-create index encounter_diagnosis_patient_idx on public.encounter_diagnosis_codes(facility_id,patient_id,encounter_id);
+create unique index if not exists encounter_diagnosis_one_primary on public.encounter_diagnosis_codes(encounter_id) where primary_diagnosis;
+create index if not exists encounter_diagnosis_patient_idx on public.encounter_diagnosis_codes(facility_id,patient_id,encounter_id);
 
-create table public.coding_clinician_queries (
+create table if not exists public.coding_clinician_queries (
  id uuid primary key default gen_random_uuid(), encounter_id uuid not null references public.encounters(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, facility_id uuid not null references public.facilities(id) on delete restrict,
  diagnosis_code_id uuid references public.encounter_diagnosis_codes(id) on delete restrict,
@@ -35,18 +35,18 @@ create table public.coding_clinician_queries (
  responded_by uuid references public.profiles(id), closed_at timestamptz, closed_by uuid references public.profiles(id),
  check((status='open' and response is null and responded_at is null) or (status in ('responded','closed') and response is not null and responded_at is not null))
 );
-create index coding_queries_clinician_status on public.coding_clinician_queries(clinician_id,status,asked_at desc);
+create index if not exists coding_queries_clinician_status on public.coding_clinician_queries(clinician_id,status,asked_at desc);
 
-create table public.chart_audit_templates (
+create table if not exists public.chart_audit_templates (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  template_name text not null check(length(btrim(template_name))>0), version integer not null check(version>0),
  items jsonb not null check(jsonb_typeof(items)='array'), active boolean not null default true,
  configured_by uuid not null references public.profiles(id), created_at timestamptz not null default now(),
  unique(facility_id,template_name,version)
 );
-create unique index chart_audit_template_active_version on public.chart_audit_templates(facility_id,template_name) where active;
+create unique index if not exists chart_audit_template_active_version on public.chart_audit_templates(facility_id,template_name) where active;
 
-create table public.chart_deficiencies (
+create table if not exists public.chart_deficiencies (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, encounter_id uuid not null references public.encounters(id) on delete restrict,
  template_id uuid references public.chart_audit_templates(id) on delete restrict, template_version integer,
@@ -57,8 +57,8 @@ create table public.chart_deficiencies (
  recorded_by uuid not null references public.profiles(id), created_at timestamptz not null default now(),
  check((status='open' and resolved_at is null and resolved_by is null) or (status in ('resolved','waived') and resolved_at is not null and resolved_by is not null))
 );
-create index chart_deficiencies_dept_status on public.chart_deficiencies(facility_id,department,status,due_date);
-create index chart_deficiencies_assignee on public.chart_deficiencies(assigned_clinician_id,status,due_date);
+create index if not exists chart_deficiencies_dept_status on public.chart_deficiencies(facility_id,department,status,due_date);
+create index if not exists chart_deficiencies_assignee on public.chart_deficiencies(assigned_clinician_id,status,due_date);
 
 create or replace function public.coding_encounter_context(p_encounter_id uuid)
 returns table(patient_id uuid,facility_id uuid,clinician_id uuid,department text)
@@ -170,7 +170,7 @@ begin
  update public.chart_deficiencies set status='resolved',resolution=btrim(p_resolution),resolved_at=now(),resolved_by=actor where id=d.id;
 end $$;
 
-create view public.discharged_encounter_coding_worklist with (security_barrier=true) as
+create or replace view public.discharged_encounter_coding_worklist with (security_barrier=true) as
 select a.id admission_id,e.id encounter_id,e.patient_id,coalesce(p.home_facility_id,w.facility_id,cl.facility_id) facility_id,
  coalesce(e.attending_clinician_id,a.doctor_id) clinician_id,coalesce(ap.department,cl.department,'Unspecified') department,
  a.discharge_date,a.discharged_at,
@@ -183,14 +183,14 @@ left join public.beds b on b.id=a.bed_id left join public.wards w on w.id=b.ward
 left join public.appointments ap on ap.id=e.appointment_id where a.status='discharged'
 and public.has_org_permission('coding.read',coalesce(p.home_facility_id,w.facility_id,cl.facility_id),null);
 
-create view public.coding_completeness_by_department with (security_barrier=true) as
+create or replace view public.coding_completeness_by_department with (security_barrier=true) as
 select w.facility_id,w.department,count(*)::bigint discharged_encounters,
  count(*) filter(where w.assigned_code_count>0)::bigint coded_encounters,
  count(*) filter(where w.coding_status='query_pending')::bigint encounters_with_open_queries,
  case when count(*)=0 then 100::numeric else round(100.0*count(*) filter(where w.assigned_code_count>0 and w.open_query_count=0)/count(*),2) end completeness_percent
 from public.discharged_encounter_coding_worklist w group by w.facility_id,w.department;
 
-create view public.chart_deficiency_compliance_by_department with (security_barrier=true) as
+create or replace view public.chart_deficiency_compliance_by_department with (security_barrier=true) as
 select d.facility_id,d.department,count(*)::bigint total_deficiencies,
  count(*) filter(where d.status in ('resolved','waived'))::bigint closed_deficiencies,
  count(*) filter(where d.status='open' and d.due_date<current_date)::bigint overdue_deficiencies,
@@ -205,14 +205,19 @@ do $$ declare t text; begin
   execute format('grant select on public.%I to authenticated',t);
   execute format('grant select,insert,update on public.%I to service_role',t);
   if t='encounter_diagnosis_codes' then
+   execute format('drop policy if exists coding_assignments_read on public.%I',t);
    execute format('create policy coding_assignments_read on public.%I for select to authenticated using(public.has_org_permission(''coding.read'',facility_id,null))',t);
   elsif t='coding_clinician_queries' then
+   execute format('drop policy if exists coding_queries_read on public.%I',t);
    execute format('create policy coding_queries_read on public.%I for select to authenticated using(public.has_org_permission(''coding.read'',facility_id,null) or clinician_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text=''active''))',t);
   elsif t='chart_audit_templates' then
+   execute format('drop policy if exists chart_templates_read on public.%I',t);
    execute format('create policy chart_templates_read on public.%I for select to authenticated using(public.has_org_permission(''chart.audit.manage'',facility_id,null))',t);
   else
+   execute format('drop policy if exists chart_deficiencies_read on public.%I',t);
    execute format('create policy chart_deficiencies_read on public.%I for select to authenticated using(public.has_org_permission(''chart.audit.manage'',facility_id,null) or assigned_clinician_id=(select id from public.profiles where auth_user_id=auth.uid() and status::text=''active''))',t);
   end if;
+  execute format('drop trigger if exists audit_%I on public.%I',t,t);
   execute format('create trigger audit_%I after insert or update on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop;
 end $$;

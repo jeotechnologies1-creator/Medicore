@@ -2,30 +2,30 @@ begin;
 set local lock_timeout='2s';
 set local statement_timeout='60s';
 
-create table public.discharge_checklist_templates (
+create table if not exists public.discharge_checklist_templates (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  version integer not null check(version>0), items jsonb not null default '[]'::jsonb check(jsonb_typeof(items)='array'),
  configured_by uuid not null references public.profiles(id), created_at timestamptz not null default now(), unique(facility_id,version));
-create unique index discharge_checklist_template_latest on public.discharge_checklist_templates(facility_id,version desc);
-create table public.discharge_checklists (
+create unique index if not exists discharge_checklist_template_latest on public.discharge_checklist_templates(facility_id,version desc);
+create table if not exists public.discharge_checklists (
  id uuid primary key default gen_random_uuid(), admission_id uuid not null unique references public.admissions(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, facility_id uuid not null references public.facilities(id) on delete restrict,
  items jsonb not null check(jsonb_typeof(items)='array'), template_version integer, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now());
-create table public.discharge_checklist_answers (
+create table if not exists public.discharge_checklist_answers (
  id uuid primary key default gen_random_uuid(), checklist_id uuid not null references public.discharge_checklists(id) on delete restrict,
  item_key text not null, completed boolean not null, note text, recorded_by uuid not null references public.profiles(id), recorded_at timestamptz not null default now());
-create index discharge_checklist_answers_latest on public.discharge_checklist_answers(checklist_id,item_key,recorded_at desc,id desc);
-create table public.discharge_checklist_overrides (
+create index if not exists discharge_checklist_answers_latest on public.discharge_checklist_answers(checklist_id,item_key,recorded_at desc,id desc);
+create table if not exists public.discharge_checklist_overrides (
  id uuid primary key default gen_random_uuid(), admission_id uuid not null references public.admissions(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, facility_id uuid not null references public.facilities(id) on delete restrict,
  reason text not null check(length(btrim(reason))>0), authorized_by uuid not null references public.profiles(id), created_at timestamptz not null default now());
-create table public.admission_discharge_summaries (
+create table if not exists public.admission_discharge_summaries (
  id uuid primary key default gen_random_uuid(), admission_id uuid not null unique references public.admissions(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict, encounter_id uuid references public.encounters(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict, summary jsonb not null check(jsonb_typeof(summary)='object'),
  authored_by uuid not null references public.profiles(id), auth_user_id uuid not null references auth.users(id),
  state text not null default 'draft' check(state in ('draft','signed')), created_at timestamptz not null default now(), signed_at timestamptz);
-create table public.admission_discharge_signatures (
+create table if not exists public.admission_discharge_signatures (
  id uuid primary key default gen_random_uuid(), summary_id uuid not null unique references public.admission_discharge_summaries(id) on delete restrict,
  admission_id uuid not null references public.admissions(id) on delete restrict, patient_id uuid not null references public.patients(id) on delete restrict,
  signed_by uuid not null references public.profiles(id), auth_user_id uuid not null references auth.users(id), signed_at timestamptz not null default now());
@@ -173,15 +173,28 @@ end $$;
 
 do $$ declare t text; begin foreach t in array array['discharge_checklist_templates','discharge_checklists','discharge_checklist_answers','discharge_checklist_overrides','admission_discharge_summaries','admission_discharge_signatures'] loop
  execute format('alter table public.%I enable row level security',t); execute format('revoke all on public.%I from public,anon,authenticated',t); execute format('grant select on public.%I to authenticated',t); execute format('grant select,insert on public.%I to service_role',t);
- if t='discharge_checklist_templates' then execute format('create policy discharge_facility_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'',''doctor'',''nurse'']) and (public.has_any_role(array[''super_admin'']) or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.facility_id=%I.facility_id)))',t,t);
- elsif t='discharge_checklist_answers' then execute format('create policy discharge_patient_read on public.%I for select to authenticated using (exists(select 1 from public.discharge_checklists c where c.id=discharge_checklist_answers.checklist_id and public.has_patient_facility_access(c.patient_id) and public.has_clinical_department_permission(c.patient_id,null,''admission.manage'',false)))',t);
- else execute format('create policy discharge_patient_read on public.%I for select to authenticated using (public.has_patient_facility_access(patient_id) and public.has_clinical_department_permission(patient_id,null,''admission.manage'',false))',t); end if;
+ if t='discharge_checklist_templates' then
+  execute format('drop policy if exists discharge_facility_read on public.%I',t);
+  execute format('create policy discharge_facility_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'',''doctor'',''nurse'']) and (public.has_any_role(array[''super_admin'']) or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.facility_id=%I.facility_id)))',t,t);
+ elsif t='discharge_checklist_answers' then
+  execute format('drop policy if exists discharge_patient_read on public.%I',t);
+  execute format('create policy discharge_patient_read on public.%I for select to authenticated using (exists(select 1 from public.discharge_checklists c where c.id=discharge_checklist_answers.checklist_id and public.has_patient_facility_access(c.patient_id) and public.has_clinical_department_permission(c.patient_id,null,''admission.manage'',false)))',t);
+ else
+  execute format('drop policy if exists discharge_patient_read on public.%I',t);
+  execute format('create policy discharge_patient_read on public.%I for select to authenticated using (public.has_patient_facility_access(patient_id) and public.has_clinical_department_permission(patient_id,null,''admission.manage'',false))',t);
+ end if;
+ execute format('drop trigger if exists audit_%I on public.%I',t,t);
  execute format('create trigger audit_%I after insert on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop; end $$;
+drop trigger if exists discharge_answers_immutable on public.discharge_checklist_answers;
 create trigger discharge_answers_immutable before update or delete on public.discharge_checklist_answers for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists discharge_overrides_immutable on public.discharge_checklist_overrides;
 create trigger discharge_overrides_immutable before update or delete on public.discharge_checklist_overrides for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists discharge_signatures_immutable on public.admission_discharge_signatures;
 create trigger discharge_signatures_immutable before update or delete on public.admission_discharge_signatures for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists discharge_summaries_guard on public.admission_discharge_summaries;
 create trigger discharge_summaries_guard before update or delete on public.admission_discharge_summaries for each row execute function public.guard_admission_discharge_summary();
+drop trigger if exists audit_discharge_summary_update on public.admission_discharge_summaries;
 create trigger audit_discharge_summary_update after update on public.admission_discharge_summaries for each row execute function public.audit_row_change();
 revoke all on function public.configure_discharge_checklist(uuid,jsonb),public.ensure_discharge_checklist(uuid),public.record_discharge_checklist_answer(uuid,text,boolean,text),public.override_discharge_checklist(uuid,text),public.save_admission_discharge_summary(uuid,jsonb),public.sign_admission_discharge_summary(uuid) from public,anon;
 grant execute on function public.configure_discharge_checklist(uuid,jsonb),public.ensure_discharge_checklist(uuid),public.record_discharge_checklist_answer(uuid,text,boolean,text),public.override_discharge_checklist(uuid,text),public.save_admission_discharge_summary(uuid,jsonb),public.sign_admission_discharge_summary(uuid) to authenticated;

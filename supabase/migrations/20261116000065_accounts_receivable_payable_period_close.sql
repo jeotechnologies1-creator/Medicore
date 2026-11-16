@@ -11,7 +11,7 @@ insert into public.role_permission_grants(role,permission_key,scope) values
  ('accountant','accounting.read','facility'),('accountant','accounting.manage','facility'),('accountant','accounting.period.manage','facility')
 on conflict do nothing;
 
-create table public.accounting_periods (
+create table if not exists public.accounting_periods (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  period_name text not null check(length(btrim(period_name))>0), starts_on date not null, ends_on date not null,
  status text not null default 'open' check(status in ('open','closed')),
@@ -20,7 +20,7 @@ create table public.accounting_periods (
  unique(facility_id,period_name), check(ends_on>=starts_on),
  check((status='open' and closed_by is null and closed_at is null) or (status='closed' and closed_by is not null and closed_at is not null))
 );
-create index accounting_periods_scope_dates on public.accounting_periods(facility_id,starts_on,ends_on);
+create index if not exists accounting_periods_scope_dates on public.accounting_periods(facility_id,starts_on,ends_on);
 
 create or replace function public.seed_ap_ledger_for_facility(p_facility_id uuid) returns void language plpgsql security definer set search_path=public as $$
 begin
@@ -34,6 +34,7 @@ end $$;
 do $$ declare f record; begin for f in select id from public.facilities loop perform public.seed_ap_ledger_for_facility(f.id); end loop; end $$;
 create or replace function public.seed_ap_ledger_for_new_facility() returns trigger language plpgsql security definer set search_path=public as $$
 begin perform public.seed_ap_ledger_for_facility(new.id); return new; end $$;
+drop trigger if exists seed_ap_ledger_after_facility on public.facilities;
 create trigger seed_ap_ledger_after_facility after insert on public.facilities for each row execute function public.seed_ap_ledger_for_new_facility();
 
 create or replace function public.guard_accounting_period() returns trigger language plpgsql security definer set search_path=public as $$
@@ -53,7 +54,9 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists accounting_period_guard on public.accounting_periods;
 create trigger accounting_period_guard before insert or update on public.accounting_periods for each row execute function public.guard_accounting_period();
+drop trigger if exists audit_accounting_periods on public.accounting_periods;
 create trigger audit_accounting_periods after insert or update on public.accounting_periods for each row execute function public.audit_row_change();
 
 create or replace function public.seed_accounting_period(p_facility_id uuid) returns void language plpgsql security definer set search_path=public as $$
@@ -67,9 +70,10 @@ end $$;
 do $$ declare f record; begin for f in select id from public.facilities loop perform public.seed_accounting_period(f.id); end loop; end $$;
 create or replace function public.seed_accounting_period_for_facility() returns trigger language plpgsql security definer set search_path=public as $$
 begin perform public.seed_accounting_period(new.id); return new; end $$;
+drop trigger if exists seed_accounting_period_after_facility on public.facilities;
 create trigger seed_accounting_period_after_facility after insert on public.facilities for each row execute function public.seed_accounting_period_for_facility();
 
-create table public.procurement_invoices (
+create table if not exists public.procurement_invoices (
  id uuid primary key default gen_random_uuid(), facility_id uuid not null references public.facilities(id) on delete restrict,
  supplier_name text not null check(length(btrim(supplier_name))>0), invoice_number text not null,
  invoice_date date not null, due_date date not null, amount numeric(12,2) not null check(amount>0),
@@ -80,15 +84,15 @@ create table public.procurement_invoices (
  unique(facility_id,supplier_name,invoice_number), check(due_date>=invoice_date),
  check((status='open' and amount_paid=0) or (status='partially_paid' and amount_paid>0 and amount_paid<amount) or (status='paid' and amount_paid=amount) or status='void')
 );
-create index procurement_invoices_ap_ageing on public.procurement_invoices(facility_id,due_date) where status in ('open','partially_paid');
-create table public.procurement_invoice_payments (
+create index if not exists procurement_invoices_ap_ageing on public.procurement_invoices(facility_id,due_date) where status in ('open','partially_paid');
+create table if not exists public.procurement_invoice_payments (
  id uuid primary key default gen_random_uuid(), procurement_invoice_id uuid not null references public.procurement_invoices(id) on delete restrict,
  facility_id uuid not null references public.facilities(id) on delete restrict, amount numeric(12,2) not null check(amount>0),
  amount_paid_after numeric(12,2) not null check(amount_paid_after>0), idempotency_key text not null,
  recorded_by uuid not null references public.profiles(id), recorded_at timestamptz not null default now(),
  unique(facility_id,idempotency_key)
 );
-create index procurement_invoice_payments_invoice_idx on public.procurement_invoice_payments(procurement_invoice_id,recorded_at desc);
+create index if not exists procurement_invoice_payments_invoice_idx on public.procurement_invoice_payments(procurement_invoice_id,recorded_at desc);
 
 create or replace function public.guard_procurement_invoice() returns trigger language plpgsql as $$
 begin
@@ -100,13 +104,16 @@ begin
    and current_setting('app.procurement_payment_writer',true) is distinct from 'on' then raise exception 'Supplier payments require the accounts payable workflow.'; end if;
  return new;
 end $$;
+drop trigger if exists procurement_invoice_guard on public.procurement_invoices;
 create trigger procurement_invoice_guard before update on public.procurement_invoices for each row execute function public.guard_procurement_invoice();
+drop trigger if exists audit_procurement_invoices on public.procurement_invoices;
 create trigger audit_procurement_invoices after insert or update on public.procurement_invoices for each row execute function public.audit_row_change();
 create or replace function public.post_procurement_invoice() returns trigger language plpgsql security definer set search_path=public as $$
 begin
  perform public.post_general_ledger_entry(new.facility_id,'procurement_invoice',new.id,'procurement.invoice.received',new.amount,'Supplier invoice '||new.invoice_number,new.created_by);
  return new;
 end $$;
+drop trigger if exists procurement_invoice_journal on public.procurement_invoices;
 create trigger procurement_invoice_journal after insert on public.procurement_invoices for each row execute function public.post_procurement_invoice();
 create or replace function public.post_procurement_invoice_payment() returns trigger language plpgsql security definer set search_path=public as $$
 declare inv public.procurement_invoices%rowtype;
@@ -115,7 +122,9 @@ begin
  perform public.post_general_ledger_entry(new.facility_id,'procurement_invoice_payment',new.id,'procurement.invoice.paid',new.amount,'Supplier invoice payment '||inv.invoice_number,new.recorded_by);
  return new;
 end $$;
+drop trigger if exists procurement_invoice_payment_journal on public.procurement_invoice_payments;
 create trigger procurement_invoice_payment_journal after insert on public.procurement_invoice_payments for each row execute function public.post_procurement_invoice_payment();
+drop trigger if exists audit_procurement_invoice_payments on public.procurement_invoice_payments;
 create trigger audit_procurement_invoice_payments after insert on public.procurement_invoice_payments for each row execute function public.audit_row_change();
 
 alter table public.accounting_periods enable row level security;
@@ -124,8 +133,11 @@ alter table public.procurement_invoice_payments enable row level security;
 revoke all on public.accounting_periods,public.procurement_invoices,public.procurement_invoice_payments from public,anon,authenticated;
 grant select on public.accounting_periods,public.procurement_invoices,public.procurement_invoice_payments to authenticated;
 grant all on public.accounting_periods,public.procurement_invoices,public.procurement_invoice_payments to service_role;
+drop policy if exists finance_read_accounting_periods on public.accounting_periods;
 create policy finance_read_accounting_periods on public.accounting_periods for select to authenticated using (public.has_org_permission('accounting.read',facility_id,null));
+drop policy if exists finance_read_procurement_invoices on public.procurement_invoices;
 create policy finance_read_procurement_invoices on public.procurement_invoices for select to authenticated using (public.has_org_permission('accounting.read',facility_id,null));
+drop policy if exists finance_read_procurement_invoice_payments on public.procurement_invoice_payments;
 create policy finance_read_procurement_invoice_payments on public.procurement_invoice_payments for select to authenticated using (public.has_org_permission('accounting.read',facility_id,null));
 
 create or replace function public.create_accounting_period(p_facility_id uuid,p_period_name text,p_starts_on date,p_ends_on date) returns uuid
@@ -204,6 +216,7 @@ begin
  end if;
  return new;
 end $$;
+drop trigger if exists journal_open_period_guard on public.journal_entries;
 create trigger journal_open_period_guard before insert on public.journal_entries for each row execute function public.guard_journal_open_period();
 
 create or replace function public.post_ledger_adjustment(p_facility_id uuid,p_period_id uuid,p_memo text,p_lines jsonb) returns uuid
@@ -245,7 +258,7 @@ begin
  return entry;
 end $$;
 
-create view public.accounts_receivable_ageing with (security_barrier=true) as
+create or replace view public.accounts_receivable_ageing with (security_barrier=true) as
 select b.facility_id,b.id invoice_id,b.invoice_number,b.patient_id,b.invoice_date,b.balance outstanding,
  greatest(current_date-b.invoice_date,0) age_days,
  case when current_date-b.invoice_date<=30 then b.balance else 0 end current_amount,
@@ -253,7 +266,7 @@ select b.facility_id,b.id invoice_id,b.invoice_number,b.patient_id,b.invoice_dat
  case when current_date-b.invoice_date between 61 and 90 then b.balance else 0 end days_61_90,
  case when current_date-b.invoice_date>90 then b.balance else 0 end days_over_90
 from public.billing b where b.balance>0 and (public.has_any_role(array['super_admin']) or public.has_finance_department_permission(b.patient_id,'payment.record'));
-create view public.accounts_payable_ageing with (security_barrier=true) as
+create or replace view public.accounts_payable_ageing with (security_barrier=true) as
 select i.facility_id,i.id invoice_id,i.supplier_name,i.invoice_number,i.invoice_date,i.due_date,i.currency,
  i.amount-i.amount_paid outstanding,greatest(current_date-i.due_date,0) overdue_days,
  case when current_date<=i.due_date then i.amount-i.amount_paid else 0 end current_amount,
@@ -262,7 +275,7 @@ select i.facility_id,i.id invoice_id,i.supplier_name,i.invoice_number,i.invoice_
  case when current_date-i.due_date between 61 and 90 then i.amount-i.amount_paid else 0 end days_61_90,
  case when current_date-i.due_date>90 then i.amount-i.amount_paid else 0 end days_over_90
 from public.procurement_invoices i where i.status in ('open','partially_paid') and (public.has_org_permission('accounting.read',i.facility_id,null));
-create view public.trial_balance_report with (security_barrier=true) as
+create or replace view public.trial_balance_report with (security_barrier=true) as
 select p.facility_id,p.id accounting_period_id,p.period_name,p.starts_on,p.ends_on,a.id account_id,a.account_code,a.account_name,a.account_type,
  coalesce(sum(l.debit),0)::numeric(14,2) debit_total,coalesce(sum(l.credit),0)::numeric(14,2) credit_total,
  (coalesce(sum(l.debit),0)-coalesce(sum(l.credit),0))::numeric(14,2) net_balance

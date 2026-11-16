@@ -15,8 +15,13 @@ alter table public.monitoring_events enable row level security;
 revoke all on public.monitoring_events from public,anon,authenticated;
 grant select,insert on public.monitoring_events to service_role;
 
+-- BEFORE INSERT triggers run even when ON CONFLICT DO NOTHING applies. Permit
+-- this migration's idempotent seed explicitly, then clear the transaction-
+-- local override before installing the runtime control functions.
+select set_config('onemed.allow_downtime_setting_write','true',true);
 insert into public.system_settings(setting_key,setting_value)
 values('downtime_read_only_mode','false'::jsonb) on conflict(setting_key) do nothing;
+select set_config('onemed.allow_downtime_setting_write','false',true);
 
 create or replace function public.protect_downtime_setting() returns trigger
 language plpgsql set search_path=public as $$

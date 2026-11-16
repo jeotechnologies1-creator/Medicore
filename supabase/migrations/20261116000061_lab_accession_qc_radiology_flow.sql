@@ -8,7 +8,7 @@ alter table public.lab_orders add column if not exists specimen_status text not 
 alter table public.lab_orders add column if not exists specimen_rejection_reason text;
 alter table public.lab_orders add column if not exists corrected_result_reason text;
 
-create table public.lab_accession_counters(
+create table if not exists public.lab_accession_counters(
  facility_id uuid not null references public.facilities(id) on delete restrict,
  accession_year integer not null,
  last_value bigint not null check(last_value>0),
@@ -41,38 +41,38 @@ create trigger assign_lab_accession before insert or update of accession_number 
 update public.lab_orders o set accession_number=null where accession_number is null and exists(
  select 1 from public.patients p left join public.profiles doctor on doctor.id=o.doctor_id left join public.profiles technician on technician.id=o.technician_id
  where p.id=o.patient_id and coalesce(p.home_facility_id,doctor.facility_id,technician.facility_id) is not null);
-create unique index lab_orders_accession_uidx on public.lab_orders(facility_id,accession_number) where accession_number is not null;
+create unique index if not exists lab_orders_accession_uidx on public.lab_orders(facility_id,accession_number) where accession_number is not null;
 
-create table public.lab_specimen_events(
+create table if not exists public.lab_specimen_events(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  lab_order_id uuid not null references public.lab_orders(id) on delete restrict,patient_id uuid not null references public.patients(id) on delete restrict,
  event_type text not null check(event_type in ('collected','rejected')),reason text,recorded_by uuid not null references public.profiles(id) on delete restrict,
  recorded_at timestamptz not null default now(),created_at timestamptz not null default now(),
  check(event_type<>'rejected' or nullif(btrim(reason),'') is not null));
-create index lab_specimen_events_order_idx on public.lab_specimen_events(lab_order_id,recorded_at,id);
+create index if not exists lab_specimen_events_order_idx on public.lab_specimen_events(lab_order_id,recorded_at,id);
 
-create table public.lab_qc_rules(
+create table if not exists public.lab_qc_rules(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  analyte_code text not null check(length(btrim(analyte_code))>0),code_system text not null,
  acceptance_rule jsonb not null check(jsonb_typeof(acceptance_rule)='object'),version integer not null check(version>0),
  active boolean not null default true,configured_by uuid not null references public.profiles(id) on delete restrict,
  configured_at timestamptz not null default now(),unique(facility_id,code_system,analyte_code,version));
-create unique index lab_qc_active_rule_uidx on public.lab_qc_rules(facility_id,code_system,analyte_code) where active;
-create table public.lab_qc_runs(
+create unique index if not exists lab_qc_active_rule_uidx on public.lab_qc_rules(facility_id,code_system,analyte_code) where active;
+create table if not exists public.lab_qc_runs(
  id uuid primary key default gen_random_uuid(),facility_id uuid not null references public.facilities(id) on delete restrict,
  analyte_code text not null,code_system text not null,observed_value numeric not null,
  acceptance_rule jsonb not null check(jsonb_typeof(acceptance_rule)='object'),passed boolean not null,
  run_sequence bigint generated always as identity unique,
  run_at timestamptz not null default now(),recorded_by uuid not null references public.profiles(id) on delete restrict,
  created_at timestamptz not null default now());
-create index lab_qc_runs_latest_idx on public.lab_qc_runs(facility_id,code_system,analyte_code,run_sequence desc);
+create index if not exists lab_qc_runs_latest_idx on public.lab_qc_runs(facility_id,code_system,analyte_code,run_sequence desc);
 
-create table public.lab_corrected_result_history(
+create table if not exists public.lab_corrected_result_history(
  id uuid primary key default gen_random_uuid(),lab_order_id uuid not null references public.lab_orders(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict,facility_id uuid not null references public.facilities(id) on delete restrict,
  previous_results jsonb,new_results jsonb not null,reason text not null check(length(btrim(reason))>0),
  corrected_by uuid not null references public.profiles(id) on delete restrict,corrected_at timestamptz not null default now());
-create index lab_corrected_result_history_order_idx on public.lab_corrected_result_history(lab_order_id,corrected_at,id);
+create index if not exists lab_corrected_result_history_order_idx on public.lab_corrected_result_history(lab_order_id,corrected_at,id);
 
 create or replace function public.configure_lab_qc_rule(p_facility_id uuid,p_analyte_code text,p_code_system text,p_acceptance_rule jsonb) returns integer
 language plpgsql security definer set search_path=public as $$
@@ -202,6 +202,7 @@ create or replace view public.lab_specimen_labels with (security_invoker=true) a
  from public.lab_orders where accession_number is not null;
 grant select on public.lab_specimen_labels to authenticated,service_role;
 alter table public.document_print_audit drop constraint if exists document_print_audit_document_type_check;
+alter table public.document_print_audit drop constraint if exists document_print_audit_document_type_check;
 alter table public.document_print_audit add constraint document_print_audit_document_type_check check(document_type in ('prescription','discharge_summary','referral_letter','lab_report','specimen_label','radiology_report','invoice','receipt'));
 create or replace function public.record_specimen_label_print(p_lab_order_id uuid,p_patient_id uuid) returns uuid
 language plpgsql security definer set search_path=public as $$
@@ -221,12 +222,12 @@ grant execute on function public.record_specimen_label_print(uuid,uuid) to authe
 
 alter table public.radiology_orders add column if not exists report_state text not null default 'preliminary' check(report_state in ('preliminary','final','addendum'));
 update public.radiology_orders set report_state=case report_status when 'final' then 'final' when 'amended' then 'addendum' else 'preliminary' end;
-create table public.radiology_report_history(
+create table if not exists public.radiology_report_history(
  id uuid primary key default gen_random_uuid(),radiology_order_id uuid not null references public.radiology_orders(id) on delete restrict,
  patient_id uuid not null references public.patients(id) on delete restrict,previous_report text,new_report text not null,
  report_state text not null check(report_state in ('preliminary','final','addendum')),critical_finding boolean not null default false,
  authored_by uuid not null references public.profiles(id) on delete restrict,authored_at timestamptz not null default now());
-create index radiology_report_history_order_idx on public.radiology_report_history(radiology_order_id,authored_at,id);
+create index if not exists radiology_report_history_order_idx on public.radiology_report_history(radiology_order_id,authored_at,id);
 create or replace function public.sync_radiology_report_state() returns trigger language plpgsql as $$
 begin
  new.report_status:=case new.report_state when 'preliminary' then 'preliminary' when 'final' then 'final' when 'addendum' then 'amended' end;
@@ -259,8 +260,11 @@ do $$ declare t text; begin
   execute format('revoke all on public.%I from public,anon,authenticated',t);
   execute format('grant select on public.%I to authenticated',t);
   execute format('grant select,insert on public.%I to service_role',t);
+  execute format('drop policy if exists diagnostic_history_read on public.%I',t);
   execute format('create policy diagnostic_history_read on public.%I for select to authenticated using (public.has_patient_facility_access(patient_id) and public.has_any_role(array[''super_admin'',''doctor'',''specialist'',''laboratory_scientist'',''radiographer'']))',t);
+  execute format('drop trigger if exists %I on public.%I',t||'_immutable',t);
   execute format('create trigger %I before update or delete on public.%I for each row execute function public.prevent_consultation_history_mutation()',t||'_immutable',t);
+  execute format('drop trigger if exists audit_%I on public.%I',t,t);
   execute format('create trigger audit_%I after insert on public.%I for each row execute function public.audit_row_change()',t,t);
  end loop;
 end $$;
@@ -270,11 +274,15 @@ do $$ declare t text; begin
   execute format('revoke all on public.%I from public,anon,authenticated',t);
   execute format('grant select on public.%I to authenticated',t);
   execute format('grant select,insert on public.%I to service_role',t);
+  execute format('drop policy if exists lab_qc_read on public.%I',t);
   execute format('create policy lab_qc_read on public.%I for select to authenticated using (public.has_any_role(array[''super_admin'',''laboratory_scientist'']) and (public.has_any_role(array[''super_admin'']) or exists(select 1 from public.profiles pr where pr.auth_user_id=auth.uid() and pr.facility_id=%I.facility_id)))',t,t);
  end loop;
 end $$;
+drop trigger if exists lab_qc_runs_immutable on public.lab_qc_runs;
 create trigger lab_qc_runs_immutable before update or delete on public.lab_qc_runs for each row execute function public.prevent_consultation_history_mutation();
+drop trigger if exists audit_lab_qc_rules on public.lab_qc_rules;
 create trigger audit_lab_qc_rules after insert or update on public.lab_qc_rules for each row execute function public.audit_row_change();
+drop trigger if exists audit_lab_qc_runs on public.lab_qc_runs;
 create trigger audit_lab_qc_runs after insert on public.lab_qc_runs for each row execute function public.audit_row_change();
 alter table public.lab_accession_counters enable row level security;
 revoke all on public.lab_accession_counters from public,anon,authenticated;
