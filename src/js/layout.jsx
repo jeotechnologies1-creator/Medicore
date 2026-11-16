@@ -27,6 +27,7 @@
                     super_admin: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'records', label: 'Health Information Management (HIM)', icon: Icons.FolderOpen },
+                        { id: 'vital_registry', label: 'Vital Events & Reports', icon: Icons.Activity },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                         { id: 'doctors', label: 'Doctors', icon: Icons.Stethoscope },
                         { id: 'laboratory', label: 'Laboratory', icon: Icons.FlaskConical },
@@ -57,6 +58,7 @@
                     ],
                     doctor: [
                         { id: 'patients', label: 'My Patients', icon: Icons.Users },
+                        { id: 'vital_registry', label: 'Vital Events', icon: Icons.Activity },
                         { id: 'appointments', label: 'Appointments', icon: Icons.Calendar },
                         { id: 'consultations', label: 'Consultations', icon: Icons.ClipboardList },
                         { id: 'laboratory', label: 'Lab Orders', icon: Icons.FlaskConical },
@@ -84,6 +86,7 @@
                     ],
                     records_officer: [
                         { id: 'records', label: 'Health Information Management (HIM)', icon: Icons.FolderOpen },
+                        { id: 'vital_registry', label: 'Vital Events & Reports', icon: Icons.Activity },
                         { id: 'clinical_workflows', label: 'Encounter Registration', icon: Icons.ClipboardList },
                     ],
                     surgeon: [

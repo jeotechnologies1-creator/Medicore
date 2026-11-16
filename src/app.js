@@ -262,6 +262,7 @@ const appData = getAppData();
                 dashboard: () => <DashboardModule />,
                 patients: () => <PatientsModule />,
                 records: () => <RecordsModule />,
+                vital_registry: () => <VitalRegistryModule />,
                 appointments: () => user?.role === 'patient' ? <PatientPortalModule initialTab="appointments" /> : <AppointmentsModule />,
                 doctors: () => <DoctorsModule />,
                 consultations: () => <ConsultationsModule />,

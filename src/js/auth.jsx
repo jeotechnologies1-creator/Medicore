@@ -6,7 +6,7 @@
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
-            'nursing', 'blood_bank', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings'
+            'nursing', 'blood_bank', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings', 'vital_registry'
         ];
 
         const legacyPermissionAliases = {
@@ -651,6 +651,7 @@
                 // This control is deliberately evaluated here (rather than only in
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
+                if (moduleId === 'vital_registry') return ['super_admin', 'records_officer', 'doctor'].includes(normalizedRole);
                 if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(moduleId);
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
