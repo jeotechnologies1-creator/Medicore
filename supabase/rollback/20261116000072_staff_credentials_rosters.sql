@@ -1,0 +1,15 @@
+begin;
+drop trigger if exists consultation_credential_signoff on public.consultation_signatures;
+drop trigger if exists discharge_credential_signoff on public.admission_discharge_signatures;
+drop function if exists public.guard_staff_clinical_signoff();
+drop function if exists public.record_staff_credential(uuid,uuid,text,text,date,date,text);
+drop function if exists public.configure_credential_signoff_rule(uuid,text,text,boolean);
+drop function if exists public.notify_expiring_staff_credentials(uuid,integer);
+drop function if exists public.submit_staff_leave_request(uuid,text,date,date,text);
+drop function if exists public.review_staff_leave_request(uuid,text,text);
+drop function if exists public.create_duty_roster(uuid,uuid,text,uuid,timestamptz,timestamptz,text,text);
+drop table if exists public.duty_rosters,public.staff_leave_requests,public.staff_credential_alerts,public.credential_signoff_rules,public.staff_credentials cascade;
+delete from public.role_permission_grants where permission_key in ('staff.credentials.read','staff.credentials.manage','staff.leave.manage','staff.roster.manage');
+delete from public.permission_catalog where permission_key in ('staff.credentials.read','staff.credentials.manage','staff.leave.manage','staff.roster.manage');
+notify pgrst,'reload schema';
+commit;
