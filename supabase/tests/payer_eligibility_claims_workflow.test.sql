@@ -1,0 +1,14 @@
+begin;
+select plan(10);
+select has_table('public','payer_plans','facility payer plans are configurable');
+select has_table('public','preauthorization_requests','pre-authorization requests have lifecycle records');
+select has_table('public','claim_batches','claim batches are persisted');
+select has_table('public','claim_batch_items','claim batch validation is persisted per claim');
+select has_column('public','insurance_eligibility_checks','expires_at','eligibility checks retain expiry');
+select has_column('public','insurance_eligibility_checks','request','eligibility request payload is retained');
+select has_column('public','insurance_eligibility_checks','response','eligibility response payload is retained');
+select has_column('public','insurance_claims','denial_reason','claim denial reason is retained');
+select has_column('public','insurance_claims','resubmission_of_id','resubmissions link to the denied claim');
+select ok(has_function_privilege('service_role','public.process_payer_workflow_event(uuid,text,text,jsonb)','execute') and not has_function_privilege('authenticated','public.process_payer_workflow_event(uuid,text,text,jsonb)','execute'),'only the trusted webhook worker processes normalized payer workflow events');
+select * from finish();
+rollback;

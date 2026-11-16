@@ -252,6 +252,14 @@ const [integrations, integrationWorker, integrationWebhook, integrationMigration
     read('supabase/DEPLOYMENT.md'),
     read('src/js/modules/operations.jsx')
 ]);
+const payerWorkflow = await read('supabase/migrations/20261116000063_payer_eligibility_claims_workflow.sql');
+assert.match(payerWorkflow, /required_claim_fields/, 'Payer claim validation rules must be configurable per plan.');
+assert.match(payerWorkflow, /expires_at/, 'Eligibility responses must retain expiry.');
+assert.match(payerWorkflow, /create_claim_batch/, 'Payer claims must support validated batches.');
+assert.match(payerWorkflow, /resubmit_denied_claim/, 'Denied claims must support linked resubmission.');
+assert.match(payerWorkflow, /process_payer_workflow_event/, 'Eligibility and authorization events must use normalized webhook processing.');
+assert.match(integrationWorker, /payer\.eligibility\.check/, 'Eligibility requests must use the existing leased integration outbox.');
+assert.match(integrationWebhook, /payer\.preauthorization\.updated/, 'Pre-authorization updates must use the signed webhook contract.');
 assert.equal(integrationMigration, integrations, 'External finance contracts must be included in the ordered migration chain.');
 assert.match(integrations, /has_finance_department_permission\(patient_id,'insurance\.submit'\)/, 'Finance integration table access must use facility and department permission checks.');
 assert.match(integrations, /submit_insurance_claim/, 'Payer claims must be validated and queued through a database workflow.');

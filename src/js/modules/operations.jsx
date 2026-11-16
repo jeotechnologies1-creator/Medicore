@@ -808,9 +808,12 @@ const appData = getAppData();
             const [integrationConnections, setIntegrationConnections] = useState([]);
             const [providerTransactions, setProviderTransactions] = useState([]);
             const [payerRemittances, setPayerRemittances] = useState([]);
+            const [payerPlans, setPayerPlans] = useState([]);
+            const [payerWorkflowRecords, setPayerWorkflowRecords] = useState({ eligibility: [], preauthorizations: [], batches: [] });
+            const [payerPlanDraft, setPayerPlanDraft] = useState({ facilityId: '', payerCode: '', planCode: '', displayName: '', requiredClaimFields: ['claim_number','billing_id','membership_id','amount_claimed'] });
             const [ledgerEntries, setLedgerEntries] = useState([]);
             const [integrationMessage, setIntegrationMessage] = useState('');
-            const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
+            const [membershipForm, setMembershipForm] = useState({ patientId: '', provider: '', scheme: '', planName: '', payerPlanId: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
             const [membershipMessage, setMembershipMessage] = useState('');
             const [verificationReferences, setVerificationReferences] = useState({});
             const [paymentPostings, setPaymentPostings] = useState([]);
@@ -876,6 +879,16 @@ const appData = getAppData();
                     if (error) setIntegrationMessage(`Payer remittances could not be loaded: ${error.message}`);
                     else setPayerRemittances(data || []);
                 }).catch((error) => setIntegrationMessage(`Payer remittances could not be loaded: ${error?.message || 'Connection failed.'}`));
+                if (activeTab === 'insurance' || activeTab === 'memberships') {
+                    client.from('payer_plans').select('*').eq('active', true).order('display_name').then(({ data, error }) => {
+                        if (!error) setPayerPlans(data || []);
+                    });
+                    if (activeTab === 'insurance') Promise.all([
+                        client.from('insurance_eligibility_checks').select('id,membership_id,status,service_type,reference,expires_at,checked_at').order('checked_at', { ascending: false }).limit(100),
+                        client.from('preauthorization_requests').select('id,patient_id,service_type,status,external_reference,denial_reason,expires_at,created_at').order('created_at', { ascending: false }).limit(100),
+                        client.from('claim_batches').select('id,payer_plan_id,status,created_at,submitted_at').order('created_at', { ascending: false }).limit(100),
+                    ]).then(([eligibility, preauthorizations, batches]) => setPayerWorkflowRecords({ eligibility: eligibility.data || [], preauthorizations: preauthorizations.data || [], batches: batches.data || [] }));
+                }
                 if (activeTab === 'ledger') client.from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }).then(({ data, error }) => {
                     if (!error) setLedgerEntries(data || []);
                     else setIntegrationMessage(error.message);
@@ -1080,10 +1093,10 @@ const appData = getAppData();
 
             const createInsuranceMembership = async () => {
                 if (!membershipForm.patientId || !membershipForm.provider.trim() || !membershipForm.policyNumber.trim()) return setMembershipMessage('Patient, insurer, and policy number are required.');
-                const { data, error } = await window.OneMedSupabase.getClient().from('insurance_memberships').insert({ patient_id: membershipForm.patientId, provider: membershipForm.provider.trim(), scheme: membershipForm.scheme.trim() || null, plan_name: membershipForm.planName.trim() || null, policy_number: membershipForm.policyNumber.trim(), principal_member: membershipForm.principalMember.trim() || null, dependent_relationship: membershipForm.dependentRelationship || null, effective_from: membershipForm.effectiveFrom || null, effective_to: membershipForm.effectiveTo || null, copayment: Number(membershipForm.copayment || 0), deductible: Number(membershipForm.deductible || 0), created_by: user?.id || null, coverage_status: 'pending', verification_status: 'pending_manual' }).select().single();
+                const { data, error } = await window.OneMedSupabase.getClient().from('insurance_memberships').insert({ patient_id: membershipForm.patientId, provider: membershipForm.provider.trim(), scheme: membershipForm.scheme.trim() || null, plan_name: membershipForm.planName.trim() || null, payer_plan_id: membershipForm.payerPlanId || null, policy_number: membershipForm.policyNumber.trim(), principal_member: membershipForm.principalMember.trim() || null, dependent_relationship: membershipForm.dependentRelationship || null, effective_from: membershipForm.effectiveFrom || null, effective_to: membershipForm.effectiveTo || null, copayment: Number(membershipForm.copayment || 0), deductible: Number(membershipForm.deductible || 0), created_by: user?.id || null, coverage_status: 'pending', verification_status: 'pending_manual' }).select().single();
                 if (error || !data) return setMembershipMessage(error?.message || 'Membership was not saved.');
                 setInsuranceMemberships((items) => [data, ...items]);
-                setMembershipForm({ patientId: '', provider: '', scheme: '', planName: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
+                setMembershipForm({ patientId: '', provider: '', scheme: '', planName: '', payerPlanId: '', policyNumber: '', principalMember: '', dependentRelationship: '', effectiveFrom: '', effectiveTo: '', copayment: '', deductible: '' });
                 setMembershipMessage('Membership saved as pending manual verification.');
             };
 
@@ -1096,6 +1109,62 @@ const appData = getAppData();
                 if (error || !data) return setMembershipMessage(error?.message || 'Membership status could not be updated.');
                 setInsuranceMemberships((items) => items.map((item) => item.id === membership.id ? data : item));
                 setMembershipMessage(status === 'verified_manual' ? 'Manual eligibility check recorded as verified.' : 'Manual eligibility check recorded as ineligible.');
+            };
+
+            const requestEligibilityCheck = async (membership) => {
+                const facilityId = appData.patients.find((patient) => patient.id === membership.patient_id)?.home_facility_id;
+                const payerPlan = payerPlans.find((plan) => plan.id === membership.payer_plan_id);
+                const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === (payerPlan?.payer_code || (membership.provider || '').toLowerCase()) && item.facility_id === facilityId);
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('request_payer_eligibility', { p_membership_id: membership.id, p_service_type: verificationReferences[`${membership.id}:service`] || 'general', p_encounter_id: null, p_connection_id: connection?.id || null });
+                if (error) return setMembershipMessage(error.message);
+                setMembershipMessage(connection ? `Eligibility request ${data} queued with ${connection.provider_code}; response expires after the configured window.` : `Manual eligibility request ${data} recorded with a 24 hour expiry.`);
+            };
+
+            const requestPreauthorization = async (membership) => {
+                const serviceType = window.prompt('Service type for pre-authorization');
+                if (!String(serviceType || '').trim()) return;
+                const amountText = window.prompt('Requested amount (optional)', '');
+                const amount = amountText === '' || amountText === null ? null : Number(amountText);
+                if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return setMembershipMessage('Enter a non-negative requested amount.');
+                const facilityId = appData.patients.find((patient) => patient.id === membership.patient_id)?.home_facility_id;
+                const payerPlan = payerPlans.find((plan) => plan.id === membership.payer_plan_id);
+                const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === (payerPlan?.payer_code || (membership.provider || '').toLowerCase()) && item.facility_id === facilityId);
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('request_preauthorization', { p_membership_id: membership.id, p_service_type: serviceType.trim(), p_requested_amount: amount, p_request: {}, p_encounter_id: null, p_connection_id: connection?.id || null });
+                if (error) return setMembershipMessage(error.message);
+                setMembershipMessage(`Pre-authorization ${data} recorded${connection ? ` and queued with ${connection.provider_code}` : ' for manual follow-up'}.`);
+            };
+
+            const configurePayerPlan = async () => {
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('configure_payer_plan', { p_facility_id: payerPlanDraft.facilityId, p_payer_code: payerPlanDraft.payerCode, p_plan_code: payerPlanDraft.planCode, p_display_name: payerPlanDraft.displayName, p_required_fields: payerPlanDraft.requiredClaimFields });
+                if (error) return setMembershipMessage(error.message);
+                setMembershipMessage(`Payer plan ${data} configured.`);
+                const { data: plans } = await window.OneMedSupabase.getClient().from('payer_plans').select('*').eq('active', true).order('display_name');
+                setPayerPlans(plans || []);
+            };
+
+            const createAndSubmitClaimBatch = async (plan) => {
+                const client = window.OneMedSupabase.getClient();
+                const claims = insuranceClaims.filter((claim) => claim.status === 'pending' && claim.provider === plan.payer_code && appData.patients.find((patient) => patient.id === claim.patientId)?.home_facility_id === plan.facility_id);
+                if (!claims.length) return setIntegrationMessage(`No pending claims are ready for ${plan.display_name}.`);
+                const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === plan.payer_code && item.facility_id === plan.facility_id);
+                if (!connection) return setIntegrationMessage(`No active payer connection matches ${plan.display_name}.`);
+                const { data: batchId, error: batchError } = await client.rpc('create_claim_batch', { p_payer_plan_id: plan.id, p_claim_ids: claims.map((claim) => claim.id) });
+                if (batchError) return setIntegrationMessage(batchError.message);
+                const { data, error } = await client.rpc('submit_claim_batch', { p_batch_id: batchId, p_connection_id: connection.id });
+                if (error) {
+                    const { data: validation } = await client.from('claim_batch_items').select('claim_id,validation_errors').eq('batch_id', batchId);
+                    const invalid = (validation || []).filter((item) => item.validation_errors?.length);
+                    return setIntegrationMessage(invalid.length ? `Batch ${batchId} needs these claim fields: ${invalid.map((item) => `${item.claim_id}: ${item.validation_errors.join(', ')}`).join(' · ')}` : `Batch ${batchId} was created but not submitted: ${error.message}`);
+                }
+                setIntegrationMessage(`${data} claims queued in batch ${batchId}.`);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
+            const resubmitClaim = async (claim) => {
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('resubmit_denied_claim', { p_claim_id: claim.id, p_idempotency_key: `claim-resubmit-${window.crypto?.randomUUID?.() || Date.now()}` });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage(`Denied claim resubmitted as ${data}; submit the new claim to its payer when ready.`);
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
             };
 
             const handleProcessPayment = async () => {
@@ -1370,6 +1439,15 @@ const appData = getAppData();
                                 </div>
                             </div>
 
+                            <Card title="Eligibility, authorization and claim batches" subtitle="Requests use the configured provider-neutral outbox. Responses arrive through the signed normalized webhook and retain expiry and denial details.">
+                                <div className="mb-4 flex flex-wrap gap-2">{payerPlans.map((plan) => <Button key={plan.id} size="sm" variant="secondary" onClick={() => createAndSubmitClaimBatch(plan)}>Batch pending · {plan.display_name}</Button>)}</div>
+                                <div className="grid gap-4 lg:grid-cols-3">
+                                    <div><h4 className="mb-2 text-sm font-semibold">Eligibility checks</h4><DataTable columns={[{key:'service_type',title:'Service'},{key:'status',title:'Status'},{key:'expires_at',title:'Expires',render:(row)=>row.expires_at?formatDateTime(row.expires_at):'—'}]} data={payerWorkflowRecords.eligibility.slice(0,8)} /></div>
+                                    <div><h4 className="mb-2 text-sm font-semibold">Pre-authorizations</h4><DataTable columns={[{key:'service_type',title:'Service'},{key:'status',title:'Status'},{key:'denial_reason',title:'Denial reason'}]} data={payerWorkflowRecords.preauthorizations.slice(0,8)} /></div>
+                                    <div><h4 className="mb-2 text-sm font-semibold">Claim batches</h4><DataTable columns={[{key:'id',title:'Batch',render:(row)=>row.id.slice(0,8)},{key:'status',title:'Status'},{key:'created_at',title:'Created',render:(row)=>formatDateTime(row.created_at)}]} data={payerWorkflowRecords.batches.slice(0,8)} /></div>
+                                </div>
+                            </Card>
+
                             <Card title="Claims queue">
                                 <div className="mb-4 flex flex-wrap gap-2">
                                     {['all', 'pending', 'queued', 'accepted', 'adjudicated', 'denied'].map((status) => (
@@ -1390,10 +1468,11 @@ const appData = getAppData();
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'provider', title: 'Provider' },
-                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={['adjudicated','approved','paid'].includes(row.status) ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> }
+                                        { key: 'status', title: 'Status', render: (row) => <Badge variant={['adjudicated','approved','paid'].includes(row.status) ? 'success' : row.status === 'denied' ? 'danger' : 'warning'}>{row.status}</Badge> },
+                                        { key: 'denial_reason', title: 'Denial reason' }
                                     ]}
                                     data={(insuranceClaims || []).filter((claim) => insuranceFilter === 'all' || claim.status === insuranceFilter)}
-                                    actions={(row) => row.status === 'pending' ? <Button variant="secondary" size="sm" onClick={() => submitClaimToPayer(row)}>Submit to payer</Button> : <span className="text-xs text-slate-500">Updated by payer response</span>}
+                                    actions={(row) => row.status === 'pending' ? <Button variant="secondary" size="sm" onClick={() => submitClaimToPayer(row)}>Submit to payer</Button> : row.status === 'denied' && row.denial_reason ? <Button variant="secondary" size="sm" onClick={() => resubmitClaim(row)}>Resubmit denied claim</Button> : <span className="text-xs text-slate-500">Updated by payer response</span>}
                                 />
                             </Card>
                             <Card title="Payer remittance reconciliation" subtitle="Payer receipts stay pending until Accounts validates them against an adjudicated claim.">
@@ -1424,12 +1503,25 @@ const appData = getAppData();
 
                     {activeTab === 'memberships' && (
                         <div className="space-y-6">
+                            <Card title="Configure payer plan rules" subtitle="Set required claim fields for a facility payer plan. Provider codes and routes are configured separately; no payer-specific endpoints or tariffs are embedded here.">
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                                    <Select label="Facility" value={payerPlanDraft.facilityId} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,facilityId:event.target.value}))} options={[{value:'',label:'Select facility...'},...Array.from(new Set((appData.patients || []).map((patient) => patient.home_facility_id).filter(Boolean))).map((id) => ({value:id,label:id}))]} />
+                                    <Input label="Payer provider code" value={payerPlanDraft.payerCode} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,payerCode:event.target.value}))} />
+                                    <Input label="Plan code" value={payerPlanDraft.planCode} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,planCode:event.target.value}))} />
+                                    <Input label="Plan display name" value={payerPlanDraft.displayName} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,displayName:event.target.value}))} />
+                                    <div className="flex items-end"><Button variant="primary" onClick={configurePayerPlan}>Save payer plan</Button></div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-3 text-sm">{['claim_number','billing_id','membership_id','amount_claimed','diagnosis_code','service_date'].map((field) => <label key={field} className="flex items-center gap-2"><input type="checkbox" checked={payerPlanDraft.requiredClaimFields.includes(field)} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,requiredClaimFields:event.target.checked?[...draft.requiredClaimFields,field]:draft.requiredClaimFields.filter((item)=>item!==field)}))} />{field.replaceAll('_',' ')}</label>)}</div>
+                                {membershipMessage && <p className="mt-3 text-sm text-slate-700" role="status">{membershipMessage}</p>}
+                                {payerPlans.length > 0 && <p className="mt-2 text-xs text-slate-500">Configured plans: {payerPlans.map((plan) => plan.display_name).join(' · ')}</p>}
+                            </Card>
                             <Card title="Record insurance membership" subtitle="Coverage remains pending until eligibility is checked with the insurer. Emergency care must follow facility policy regardless of verification state.">
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                                     <Select label="Patient" value={membershipForm.patientId} onChange={(event) => setMembershipForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} />
                                     <Input label="Insurer/provider" value={membershipForm.provider} onChange={(event) => setMembershipForm((form) => ({...form,provider:event.target.value}))} />
                                     <Input label="Scheme" value={membershipForm.scheme} onChange={(event) => setMembershipForm((form) => ({...form,scheme:event.target.value}))} />
                                     <Input label="Plan" value={membershipForm.planName} onChange={(event) => setMembershipForm((form) => ({...form,planName:event.target.value}))} />
+                                    <Select label="Configured payer plan" value={membershipForm.payerPlanId} onChange={(event) => setMembershipForm((form) => ({...form,payerPlanId:event.target.value}))} options={[{value:'',label:'Optional plan link'},...payerPlans.filter((plan) => !membershipForm.patientId || plan.facility_id === appData.patients.find((patient) => patient.id === membershipForm.patientId)?.home_facility_id).map((plan) => ({value:plan.id,label:`${plan.display_name} (${plan.payer_code})`}))]} />
                                     <Input label="Policy / membership number" value={membershipForm.policyNumber} onChange={(event) => setMembershipForm((form) => ({...form,policyNumber:event.target.value}))} />
                                     <Input label="Principal member" value={membershipForm.principalMember} onChange={(event) => setMembershipForm((form) => ({...form,principalMember:event.target.value}))} />
                                     <Select label="Dependent relationship" value={membershipForm.dependentRelationship} onChange={(event) => setMembershipForm((form) => ({...form,dependentRelationship:event.target.value}))} options={[{value:'',label:'Principal / unspecified'},...['spouse','child','parent','other'].map((value) => ({value,label:value}))]} />
@@ -1444,7 +1536,7 @@ const appData = getAppData();
                             <Card title="Membership and manual eligibility queue">
                                 {insuranceMemberships.length ? <div className="divide-y divide-slate-100">{insuranceMemberships.map((membership) => {
                                     const patient = (appData.patients || []).find((item) => item.id === membership.patient_id);
-                                    return <div key={membership.id} className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr] gap-3 py-4 items-center"><div><p className="font-semibold text-slate-900">{patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record unavailable'}</p><p className="text-sm text-slate-600">{membership.provider} · {membership.scheme || 'Scheme not specified'} · {membership.policy_number}</p><p className="text-xs text-slate-500">{membership.plan_name || 'No plan'} · {membership.dependent_relationship || 'Principal/unspecified'} · {membership.effective_from || 'Start unknown'} to {membership.effective_to || 'No end date'}</p></div><div><Badge variant={membership.verification_status === 'verified_manual' ? 'success' : membership.verification_status === 'rejected_manual' ? 'danger' : 'warning'}>{membership.verification_status}</Badge><p className="mt-1 text-xs text-slate-500">Manual verification only · {membership.verification_reference || 'No reference'}</p></div><div className="flex flex-wrap items-end gap-2"><Select label="Service" value={verificationReferences[`${membership.id}:service`] || 'general'} onChange={(event) => setVerificationReferences((values) => ({...values,[`${membership.id}:service`]:event.target.value}))} options={['general','consultation','pharmacy','laboratory','surgery','inpatient'].map((value) => ({value,label:value}))} /><Input label="Insurer reference" value={verificationReferences[membership.id] || ''} onChange={(event) => setVerificationReferences((values) => ({...values,[membership.id]:event.target.value}))} /><Button size="sm" variant="primary" onClick={() => recordManualEligibility(membership,'verified_manual')}>Record eligible</Button><Button size="sm" variant="danger" onClick={() => recordManualEligibility(membership,'rejected_manual')}>Record ineligible</Button></div></div>;
+                                    return <div key={membership.id} className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr] gap-3 py-4 items-center"><div><p className="font-semibold text-slate-900">{patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record unavailable'}</p><p className="text-sm text-slate-600">{membership.provider} · {membership.scheme || 'Scheme not specified'} · {membership.policy_number}</p><p className="text-xs text-slate-500">{membership.plan_name || 'No plan'} · {membership.dependent_relationship || 'Principal/unspecified'} · {membership.effective_from || 'Start unknown'} to {membership.effective_to || 'No end date'}</p></div><div><Badge variant={membership.verification_status === 'verified_manual' ? 'success' : membership.verification_status === 'rejected_manual' ? 'danger' : 'warning'}>{membership.verification_status}</Badge><p className="mt-1 text-xs text-slate-500">{membership.verification_reference || 'No reference'}</p></div><div className="flex flex-wrap items-end gap-2"><Select label="Service" value={verificationReferences[`${membership.id}:service`] || 'general'} onChange={(event) => setVerificationReferences((values) => ({...values,[`${membership.id}:service`]:event.target.value}))} options={['general','consultation','pharmacy','laboratory','surgery','inpatient'].map((value) => ({value,label:value}))} /><Input label="Insurer reference" value={verificationReferences[membership.id] || ''} onChange={(event) => setVerificationReferences((values) => ({...values,[membership.id]:event.target.value}))} /><Button size="sm" variant="primary" onClick={() => requestEligibilityCheck(membership)}>Request eligibility</Button><Button size="sm" variant="secondary" onClick={() => requestPreauthorization(membership)}>Request pre-authorization</Button><Button size="sm" variant="ghost" onClick={() => recordManualEligibility(membership,'verified_manual')}>Record eligible manually</Button><Button size="sm" variant="danger" onClick={() => recordManualEligibility(membership,'rejected_manual')}>Record ineligible manually</Button></div></div>;
                                 })}</div> : <p className="text-sm text-slate-500">No insurance memberships have been recorded.</p>}
                                 <p className="mt-3 text-xs text-slate-500">Results entered here are staff-recorded manual checks; no external insurer integration is configured.</p>
                             </Card>

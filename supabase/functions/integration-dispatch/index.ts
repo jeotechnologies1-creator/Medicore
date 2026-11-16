@@ -6,6 +6,8 @@ const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const serviceClient = createClient(supabaseUrl, serviceKey);
 const routes: Record<string, string> = {
   'payer.claim.submit': 'claims',
+  'payer.eligibility.check': 'eligibility',
+  'payer.preauthorization.request': 'preauthorizations',
   'payment.intent.create': 'payment-intents',
   'ledger.journal.posted': 'journal-entries',
 };

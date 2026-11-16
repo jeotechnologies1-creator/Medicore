@@ -30,9 +30,9 @@ Deno.serve(async (request) => {
   if (mismatch !== 0) return new Response('Invalid signature', { status: 401 });
   let event: Record<string, unknown>;
   try { event = JSON.parse(body); } catch { return new Response('Invalid JSON', { status: 400 }); }
-  const eventTypes = ['payment.succeeded', 'payment.failed', 'payer.claim.accepted', 'payer.claim.adjudicated', 'payer.remittance', 'payment.dispute.opened', 'payment.dispute.updated', 'payment.dispute.closed'];
+  const eventTypes = ['payment.succeeded', 'payment.failed', 'payer.claim.accepted', 'payer.claim.adjudicated', 'payer.claim.denied', 'payer.remittance', 'payer.eligibility.result', 'payer.preauthorization.updated', 'payment.dispute.opened', 'payment.dispute.updated', 'payment.dispute.closed'];
   if (typeof event.event_id !== 'string' || event.event_id.length < 1 || event.event_id.length > 200 || typeof event.event_type !== 'string' || !eventTypes.includes(event.event_type) || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return new Response('Invalid event shape', { status: 400 });
-  const rpc = event.event_type.startsWith('payment.dispute.') ? 'process_payment_dispute_event' : 'process_finance_integration_event';
+  const rpc = event.event_type.startsWith('payment.dispute.') ? 'process_payment_dispute_event' : (event.event_type === 'payer.eligibility.result' || event.event_type === 'payer.preauthorization.updated' || event.event_type === 'payer.claim.denied') ? 'process_payer_workflow_event' : 'process_finance_integration_event';
   const { error } = await serviceClient.rpc(rpc, {
     p_connection_id: connectionId, p_event_id: event.event_id, p_event_type: event.event_type, payload: event.data,
   });
