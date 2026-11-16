@@ -568,12 +568,7 @@
                     const normalizedPassword = String(password || '');
 
                     if (window.OneMedSupabase && typeof window.OneMedSupabase.loginProfile === 'function') {
-                        try {
-                            found = await window.OneMedSupabase.loginProfile(normalizedEmail, normalizedPassword, captchaToken);
-                        } catch (error) {
-                            console.warn('Supabase login failed:', error);
-                            found = null;
-                        }
+                        found = await window.OneMedSupabase.loginProfile(normalizedEmail, normalizedPassword, captchaToken);
                     }
 
                     if (found) {
@@ -600,7 +595,7 @@
                         setUser(safeUser);
                         return safeUser;
                     }
-                    throw new Error('Invalid credentials');
+                    throw new Error('Authentication is unavailable. Check the connection and try again.');
                 } finally {
                     setLoading(false);
                 }
@@ -779,7 +774,15 @@
                     }
                 } catch (err) {
                     if (String(err?.message || '').startsWith('Privacy acceptance could not be recorded')) logout();
-                    setError(err?.code === 'CAPTCHA_REQUIRED' ? err.message : err?.message?.includes('privacy') || err?.message?.includes('Privacy') || mfaGate ? (err?.message || 'Authenticator verification failed.') : 'Invalid email or password. Contact your administrator if you need an account.');
+                    const message = String(err?.message || '');
+                    const authMessage = /captcha|turnstile/i.test(message)
+                        ? 'Security verification was rejected. Complete the CAPTCHA again; if it repeats, the administrator needs to check the Turnstile and Supabase CAPTCHA configuration.'
+                        : /network|fetch|timeout|unavailable/i.test(message)
+                            ? 'The sign-in service could not be reached. Check your connection and try again.'
+                            : /staff profile|account is not active|no linked staff profile/i.test(message)
+                                ? message
+                                : 'Invalid email or password. Contact your administrator if you need an account.';
+                    setError(err?.code === 'CAPTCHA_REQUIRED' ? err.message : err?.message?.includes('privacy') || err?.message?.includes('Privacy') || mfaGate ? (err?.message || 'Authenticator verification failed.') : authMessage);
                     if (!mfaGate && captchaWidgetId.current && window.turnstile) {
                         window.turnstile.reset(captchaWidgetId.current);
                         setCaptchaToken('');

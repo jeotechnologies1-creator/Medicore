@@ -291,7 +291,10 @@ const OneMedSupabase = (() => {
                 password: normalizedPassword,
                 options: captchaToken ? { captchaToken } : undefined
             });
-            if (authError || !authData.user) { globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.(); return null; }
+            if (authError || !authData.user) {
+                globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
+                throw authError || new Error('Sign-in did not return an authenticated user.');
+            }
             const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', authData.user.id).maybeSingle();
             if (!error && data?.status === 'active') {
                 return {
@@ -303,11 +306,11 @@ const OneMedSupabase = (() => {
             }
             await client.auth.signOut();
             globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
-            return null;
+            if (error) throw new Error('Your credentials were accepted, but your staff profile could not be checked. Please try again or contact your administrator.');
+            throw new Error(data ? 'This account is not active. Contact your administrator.' : 'Your sign-in has no linked staff profile. Contact your administrator.');
         } catch (error) {
             globalThis.OneMedMonitor?.reportSafeAuthAnomaly?.();
-            console.warn('Supabase profile login unavailable:', error);
-            return null;
+            throw error;
         }
     };
 
