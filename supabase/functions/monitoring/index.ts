@@ -7,7 +7,11 @@ const client = createClient(url, serviceKey);
 const modules = new Set(['app','auth','dashboard','patients','records','appointments','clinical','laboratory','radiology','pharmacy','billing','admissions','portal','settings','other']);
 const errorClasses = new Set(['Error','TypeError','RangeError','ReferenceError','NetworkError','UnknownError']);
 const environments = new Set(['development','staging','production','other']);
-const healthCache = createTtlCache<{ status: 'ok' | 'unhealthy'; checked_at: string }>();
+const healthCache = createTtlCache<{ status: 'ok' | 'unhealthy'; checked_at: string; backup_stale: boolean }>();
+const isBackupStale = (lastSuccess: number) => {
+  const staleHours = Number(Deno.env.get('BACKUP_STALE_AFTER_HOURS') || '26');
+  return !Number.isFinite(lastSuccess) || !Number.isFinite(staleHours) || staleHours <= 0 || Date.now() - lastSuccess > staleHours * 60 * 60 * 1000;
+};
 
 Deno.serve(async (request) => {
   const cors = corsHeadersFor(request, 'GET, POST, OPTIONS');
@@ -17,7 +21,7 @@ Deno.serve(async (request) => {
     if (new URL(request.url).searchParams.get('alerts') === '1') {
       if (!await constantTimeEqual(request.headers.get('authorization') || '', `Bearer ${serviceKey}`)) return new Response('Unauthorized', { status: 401, headers: cors });
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const [jobs, acknowledgements, messages, authEvents, clientErrors, clientAuthAnomalies, edgeErrors] = await Promise.all([
+      const [jobs, acknowledgements, messages, authEvents, clientErrors, clientAuthAnomalies, edgeErrors, backupSetting] = await Promise.all([
         client.from('fhir_exchange_jobs').select('id', { count: 'exact', head: true }).eq('status','failed'),
         client.from('result_acknowledgements').select('id', { count: 'exact', head: true }).in('status',['unacknowledged','escalated']).or(`due_at.is.null,due_at.lte.${new Date().toISOString()}`),
         client.from('outbound_messages').select('id', { count: 'exact', head: true }).eq('status','failed'),
@@ -25,19 +29,28 @@ Deno.serve(async (request) => {
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','client_error').gte('created_at',since),
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','auth_anomaly').gte('created_at',since),
         client.from('monitoring_events').select('id', { count: 'exact', head: true }).eq('event_type','edge_error').gte('created_at',since),
+        client.from('backup_status').select('last_success_at').eq('singleton',true).maybeSingle(),
       ]);
-      const failed = [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors].some((item) => item.error);
-      if (failed) await reportSafeEdgeError('monitoring', [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors].find((item) => item.error)?.error);
+      const failed = [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].some((item) => item.error);
+      if (failed) await reportSafeEdgeError('monitoring', [jobs,acknowledgements,messages,authEvents,clientErrors,clientAuthAnomalies,edgeErrors,backupSetting].find((item) => item.error)?.error);
+      const backupLastSuccess = typeof backupSetting.data?.last_success_at === 'string' ? Date.parse(backupSetting.data.last_success_at) : Number.NaN;
+      const backupStale = isBackupStale(backupLastSuccess);
       // Client-reported client_error/auth_anomaly rows are untrusted and are informational only; they must not page by themselves.
-      return Response.json({ status: failed ? 'query_error' : 'ok', alerts: { failed_jobs: jobs.count || 0, unacknowledged_critical_results: acknowledgements.count || 0, failed_outbound_messages: messages.count || 0, ...monitoringCounterGroups({ authenticationAnomalies: authEvents.count || 0, edgeFunctionErrors: edgeErrors.count || 0 }, { errors: clientErrors.count || 0, authAnomalies: clientAuthAnomalies.count || 0 }) } }, { status: failed ? 503 : 200, headers: cors });
+      return Response.json({ status: failed ? 'query_error' : 'ok', alerts: { failed_jobs: jobs.count || 0, unacknowledged_critical_results: acknowledgements.count || 0, failed_outbound_messages: messages.count || 0, backup_stale: backupStale, ...monitoringCounterGroups({ authenticationAnomalies: authEvents.count || 0, edgeFunctionErrors: edgeErrors.count || 0 }, { errors: clientErrors.count || 0, authAnomalies: clientAuthAnomalies.count || 0 }) } }, { status: failed ? 503 : 200, headers: cors });
     }
     try {
       if (!await checkRateLimit(client, request, 'monitoring-health', null, 60, 60)) return new Response('Rate limited', { status: 429, headers: cors });
     } catch { return new Response('Monitoring unavailable', { status: 503, headers: cors }); }
     const health = await healthCache.getOrLoad(async () => {
-      const { error } = await client.from('system_settings').select('setting_key').eq('setting_key','downtime_read_only_mode').maybeSingle();
+      const [downtime, backup] = await Promise.all([
+        client.from('system_settings').select('setting_key').eq('setting_key','downtime_read_only_mode').maybeSingle(),
+        client.from('backup_status').select('last_success_at').eq('singleton',true).maybeSingle(),
+      ]);
+      const error = downtime.error || backup.error;
       if (error) await reportSafeEdgeError('monitoring', error);
-      return { status: error ? 'unhealthy' as const : 'ok' as const, checked_at: new Date().toISOString() };
+      const lastSuccess = typeof backup.data?.last_success_at === 'string' ? Date.parse(backup.data.last_success_at) : Number.NaN;
+      const backupStale = isBackupStale(lastSuccess);
+      return { status: error || backupStale ? 'unhealthy' as const : 'ok' as const, checked_at: new Date().toISOString(), backup_stale: backupStale };
     }, 15_000);
     return Response.json(health, { status: health.status === 'unhealthy' ? 503 : 200, headers: cors });
   }

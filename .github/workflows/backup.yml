@@ -1,0 +1,51 @@
+name: Encrypted backup example
+
+on:
+  # Scheduled runs are skipped unless the repository variable ENABLE_BACKUPS is exactly "true".
+  schedule:
+    - cron: '15 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: github.event_name != 'schedule' || vars.ENABLE_BACKUPS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BACKUP_SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_DIR: ${{ runner.temp }}/onemed-backups
+      BACKUP_ENCRYPTION_RECIPIENT: ${{ secrets.BACKUP_ENCRYPTION_RECIPIENT }}
+      BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS }}
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies and backup tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes age awscli postgresql-client
+          npm ci --no-audit --no-fund
+      - name: Validate required backup secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DATABASE_URL SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BACKUP_ENCRYPTION_RECIPIENT BACKUP_S3_ENDPOINT BACKUP_S3_BUCKET BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "Required backup setting is missing: $name" >&2
+              exit 1
+            fi
+          done
+      - name: Create, encrypt, verify, and upload backup
+        run: npm run backup:daily

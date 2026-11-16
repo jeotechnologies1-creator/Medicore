@@ -14,7 +14,8 @@
     "test:edge": "deno test supabase/functions/tests",
     "test:db": "supabase test db",
     "check:migrations": "node scripts/check-migrations.mjs",
-    "backup:daily": "node scripts/backup-daily.mjs"
+    "backup:daily": "node scripts/backup-daily.mjs",
+    "restore:backup": "node scripts/restore-backup.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
