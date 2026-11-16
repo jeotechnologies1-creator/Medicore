@@ -1,0 +1,18 @@
+begin;
+select plan(14);
+select has_table('public','facility_assets','facility asset register is available');
+select has_table('public','asset_maintenance_schedules','preventive maintenance schedule is available');
+select has_table('public','asset_work_orders','assigned work order workflow is available');
+select has_table('public','asset_work_order_parts','parts usage is tracked');
+select has_table('public','asset_maintenance_alerts','maintenance alert dispatch is deduplicated');
+select has_function('public','create_facility_asset',array['uuid','text','text','text','uuid','boolean','text','text','text','text','date'],'facility-scoped asset creation RPC exists');
+select has_function('public','configure_asset_maintenance',array['uuid','text','integer','date','text'],'maintenance recurrence requires explicit interval and due date');
+select has_function('public','create_asset_work_order',array['uuid','text','text','text','uuid','uuid','boolean'],'work orders support assignment and downtime start');
+select has_function('public','update_asset_work_order',array['uuid','text','uuid','text','boolean'],'work order status and downtime can be updated');
+select has_function('public','record_asset_part_used',array['uuid','text','numeric','uuid','uuid'],'part use can be recorded and linked to stock');
+select has_function('public','notify_due_asset_maintenance',array['uuid','integer'],'due maintenance alerts can be dispatched');
+select has_trigger('public','asset_work_order_parts','asset_work_order_parts_immutable','part usage history is append-only');
+select ok(not has_table_privilege('authenticated','public.facility_assets','INSERT'),'authenticated users cannot bypass asset workflow');
+select ok(exists(select 1 from pg_policies where schemaname='public' and tablename='facility_assets' and policyname='asset_facility_read'),'asset data is facility-scoped under RLS');
+select * from finish();
+rollback;

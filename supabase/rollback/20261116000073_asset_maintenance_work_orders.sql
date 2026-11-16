@@ -1,0 +1,13 @@
+begin;
+drop trigger if exists asset_work_order_parts_immutable on public.asset_work_order_parts;
+drop function if exists public.create_facility_asset(uuid,text,text,text,uuid,boolean,text,text,text,text,date);
+drop function if exists public.configure_asset_maintenance(uuid,text,integer,date,text);
+drop function if exists public.create_asset_work_order(uuid,text,text,text,uuid,uuid,boolean);
+drop function if exists public.update_asset_work_order(uuid,text,uuid,text,boolean);
+drop function if exists public.record_asset_part_used(uuid,text,numeric,uuid,uuid);
+drop function if exists public.notify_due_asset_maintenance(uuid,integer);
+drop table if exists public.asset_maintenance_alerts,public.asset_work_order_parts,public.asset_work_orders,public.asset_maintenance_schedules,public.facility_assets cascade;
+delete from public.role_permission_grants where permission_key in ('asset.read','asset.manage','asset.maintenance.manage');
+delete from public.permission_catalog where permission_key in ('asset.read','asset.manage','asset.maintenance.manage');
+notify pgrst,'reload schema';
+commit;

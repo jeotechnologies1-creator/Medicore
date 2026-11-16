@@ -1,6 +1,106 @@
 import { getAppData } from '../store.js';
 const appData = getAppData();
 
+const AssetMaintenancePanel = () => {
+    const { user } = useAuth();
+    const client = window.OneMedSupabase?.getClient?.();
+    const [facilityId, setFacilityId] = useState(user?.facility_id || user?.facilityId || '');
+    const [assets, setAssets] = useState([]);
+    const [schedules, setSchedules] = useState([]);
+    const [orders, setOrders] = useState([]);
+    const [notice, setNotice] = useState('');
+    const [error, setError] = useState('');
+    const [assetForm, setAssetForm] = useState({ tag: '', name: '', location: '', category: '', critical: false });
+    const [scheduleForm, setScheduleForm] = useState({ assetId: '', name: '', intervalDays: '', dueOn: '' });
+    const [orderForm, setOrderForm] = useState({ assetId: '', title: '', priority: 'normal', downtime: false });
+    const refresh = async () => {
+        if (!client || !facilityId) return;
+        const [a, s, w] = await Promise.all([
+            client.from('facility_assets').select('id,asset_tag,asset_name,category,location,status,critical_equipment').eq('facility_id', facilityId).order('asset_tag'),
+            client.from('asset_maintenance_schedules').select('id,asset_id,maintenance_name,next_due_on,interval_days,active').eq('facility_id', facilityId).eq('active', true).order('next_due_on'),
+            client.from('asset_work_orders').select('id,asset_id,title,status,priority,opened_at,downtime_started_at,completed_at').eq('facility_id', facilityId).in('status', ['open', 'assigned', 'in_progress', 'on_hold']).order('opened_at', { ascending: false })
+        ]);
+        const failed = [a, s, w].find((result) => result.error);
+        if (failed) { setError(failed.error.message || 'Unable to load asset operations.'); return; }
+        setAssets(a.data || []); setSchedules(s.data || []); setOrders(w.data || []); setError('');
+    };
+    useEffect(() => { refresh(); }, [facilityId]);
+    const call = async (rpc, args, success) => {
+        if (!client) return setError('Database connection is unavailable.');
+        const { error: rpcError } = await client.rpc(rpc, args);
+        if (rpcError) { setError(rpcError.message); setNotice(''); return; }
+        setError(''); setNotice(success); await refresh();
+    };
+    const submitAsset = (event) => {
+        event.preventDefault();
+        call('create_facility_asset', { p_facility_id: facilityId, p_asset_tag: assetForm.tag, p_asset_name: assetForm.name, p_location: assetForm.location, p_category: assetForm.category || null, p_critical: assetForm.critical }, 'Asset registered.');
+        setAssetForm({ tag: '', name: '', location: '', category: '', critical: false });
+    };
+    const scheduleOrder = (event) => {
+        event.preventDefault();
+        call('configure_asset_maintenance', { p_asset_id: scheduleForm.assetId, p_name: scheduleForm.name, p_interval_days: Number(scheduleForm.intervalDays), p_next_due_on: scheduleForm.dueOn }, 'Maintenance schedule saved.');
+        setScheduleForm({ assetId: '', name: '', intervalDays: '', dueOn: '' });
+    };
+    const openOrder = (event) => {
+        event.preventDefault();
+        call('create_asset_work_order', { p_asset_id: orderForm.assetId, p_title: orderForm.title, p_description: null, p_priority: orderForm.priority, p_assigned_to: null, p_schedule_id: null, p_downtime: orderForm.downtime }, 'Work order opened.');
+        setOrderForm({ assetId: '', title: '', priority: 'normal', downtime: false });
+    };
+    const completeOrder = (id) => call('update_asset_work_order', { p_work_order_id: id, p_status: 'completed', p_resolution: 'Completed via Operations asset board.', p_downtime_ended: true }, 'Work order completed.');
+    const alertDue = () => call('notify_due_asset_maintenance', { p_facility_id: facilityId, p_days_ahead: 30 }, 'Due maintenance alerts sent to facility custodians and maintenance staff.');
+    const fieldClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm';
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+                <div><h3 className="text-lg font-semibold text-slate-900">Assets and maintenance</h3><p className="text-sm text-slate-500">Facility equipment, preventive schedules, and active work orders.</p></div>
+                <label className="text-sm text-slate-600">Facility ID<input className={`${fieldClass} mt-1 min-w-72`} value={facilityId} onChange={(event) => setFacilityId(event.target.value)} /></label>
+            </div>
+            {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{notice}</p>}
+            {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
+            <div className="grid gap-5 xl:grid-cols-3">
+                <Card title="Register asset">
+                    <form className="space-y-3" onSubmit={submitAsset}>
+                        <input aria-label="Asset tag" className={fieldClass} placeholder="Asset tag" required value={assetForm.tag} onChange={(e) => setAssetForm({ ...assetForm, tag: e.target.value })} />
+                        <input aria-label="Asset name" className={fieldClass} placeholder="Asset name" required value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} />
+                        <input aria-label="Location" className={fieldClass} placeholder="Location" required value={assetForm.location} onChange={(e) => setAssetForm({ ...assetForm, location: e.target.value })} />
+                        <input aria-label="Category" className={fieldClass} placeholder="Category (optional)" value={assetForm.category} onChange={(e) => setAssetForm({ ...assetForm, category: e.target.value })} />
+                        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={assetForm.critical} onChange={(e) => setAssetForm({ ...assetForm, critical: e.target.checked })} />Critical equipment</label>
+                        <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white" type="submit" disabled={!facilityId}>Save asset</button>
+                    </form>
+                </Card>
+                <Card title="Preventive maintenance">
+                    <form className="space-y-3" onSubmit={scheduleOrder}>
+                        <select aria-label="Asset for schedule" className={fieldClass} required value={scheduleForm.assetId} onChange={(e) => setScheduleForm({ ...scheduleForm, assetId: e.target.value })}><option value="">Choose asset</option>{assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.asset_tag} · {asset.asset_name}</option>)}</select>
+                        <input aria-label="Maintenance task" className={fieldClass} placeholder="Maintenance task" required value={scheduleForm.name} onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })} />
+                        <input aria-label="Interval in days" className={fieldClass} type="number" min="1" placeholder="Interval in days" required value={scheduleForm.intervalDays} onChange={(e) => setScheduleForm({ ...scheduleForm, intervalDays: e.target.value })} />
+                        <input aria-label="Next due date" className={fieldClass} type="date" required value={scheduleForm.dueOn} onChange={(e) => setScheduleForm({ ...scheduleForm, dueOn: e.target.value })} />
+                        <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white" type="submit" disabled={!assets.length}>Save schedule</button>
+                    </form>
+                    <button className="mt-3 rounded-lg border border-slate-300 px-3 py-2 text-sm" type="button" onClick={alertDue} disabled={!facilityId}>Send 30-day due alerts</button>
+                </Card>
+                <Card title="Open work order">
+                    <form className="space-y-3" onSubmit={openOrder}>
+                        <select aria-label="Asset for work order" className={fieldClass} required value={orderForm.assetId} onChange={(e) => setOrderForm({ ...orderForm, assetId: e.target.value })}><option value="">Choose asset</option>{assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.asset_tag} · {asset.asset_name}</option>)}</select>
+                        <input aria-label="Work order title" className={fieldClass} placeholder="Work order title" required value={orderForm.title} onChange={(e) => setOrderForm({ ...orderForm, title: e.target.value })} />
+                        <select aria-label="Priority" className={fieldClass} value={orderForm.priority} onChange={(e) => setOrderForm({ ...orderForm, priority: e.target.value })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select>
+                        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={orderForm.downtime} onChange={(e) => setOrderForm({ ...orderForm, downtime: e.target.checked })} />Equipment is currently down</label>
+                        <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white" type="submit" disabled={!assets.length}>Open work order</button>
+                    </form>
+                </Card>
+            </div>
+            <div className="grid gap-5 xl:grid-cols-2">
+                <Card title={`Asset register (${assets.length})`}>
+                    <div className="max-h-80 overflow-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="py-2 pr-3">Tag / asset</th><th className="py-2 pr-3">Location</th><th className="py-2 pr-3">Status</th><th className="py-2">Critical</th></tr></thead><tbody>{assets.map((asset) => <tr className="border-b" key={asset.id}><td className="py-2 pr-3">{asset.asset_tag} · {asset.asset_name}</td><td className="py-2 pr-3">{asset.location}</td><td className="py-2 pr-3 capitalize">{asset.status}</td><td className="py-2">{asset.critical_equipment ? 'Yes' : 'No'}</td></tr>)}</tbody></table>{!assets.length && <p className="py-4 text-sm text-slate-500">No assets found for this facility.</p>}</div>
+                </Card>
+                <Card title={`Active work orders (${orders.length})`}>
+                    <div className="max-h-80 space-y-2 overflow-auto">{orders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3"><div><p className="font-medium">{assets.find((a) => a.id === order.asset_id)?.asset_tag || 'Asset'} · {order.title}</p><p className="text-xs text-slate-500">{order.status} · {order.priority}{order.downtime_started_at ? ' · downtime active' : ''}</p></div><button className="rounded border px-3 py-1.5 text-xs" type="button" onClick={() => completeOrder(order.id)}>Complete</button></div>)}{!orders.length && <p className="py-4 text-sm text-slate-500">No open work orders.</p>}</div>
+                    <h4 className="mt-4 font-medium">Upcoming maintenance</h4><div className="mt-2 space-y-2">{schedules.slice(0, 6).map((schedule) => <div key={schedule.id} className="flex justify-between text-sm"><span>{assets.find((a) => a.id === schedule.asset_id)?.asset_tag} · {schedule.maintenance_name}</span><span>{schedule.next_due_on}</span></div>)}{!schedules.length && <p className="text-sm text-slate-500">No active schedules.</p>}</div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
         // ==========================================
         // OPERATIONS COMMAND CENTRE
         // ==========================================
@@ -78,7 +178,8 @@ const appData = getAppData();
             const tabs = [
                 { id: 'flow', label: 'Patient Flow' },
                 { id: 'capacity', label: 'Capacity' },
-                { id: 'logistics', label: 'Logistics' }
+                { id: 'logistics', label: 'Logistics' },
+                { id: 'assets', label: 'Assets & Maintenance' }
             ];
 
             return (
@@ -229,6 +330,8 @@ const appData = getAppData();
                             ))}
                         </div>
                     )}
+
+                    {activeTab === 'assets' && <AssetMaintenancePanel />}
                 </div>
             );
         };
