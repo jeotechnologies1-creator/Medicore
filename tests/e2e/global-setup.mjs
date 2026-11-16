@@ -23,6 +23,21 @@ export default async function globalSetup() {
   if (facilityError) throw facilityError;
   const { error: profileError } = await admin.from('profiles').update({ role: 'super_admin', status: 'active' }).eq('auth_user_id', userId);
   if (profileError) throw profileError;
+  const secondEmail = 'ci-second-super-admin@example.test';
+  const secondPassword = 'CI-only-Second-Password-2026!';
+  const { data: secondCreated, error: secondCreateError } = await admin.auth.admin.createUser({ email: secondEmail, password: secondPassword, email_confirm: true });
+  if (secondCreateError && !/already been registered|already exists/i.test(secondCreateError.message)) throw secondCreateError;
+  let secondUserId = secondCreated.user?.id;
+  if (!secondUserId) {
+    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) throw error;
+    secondUserId = data.users.find((user) => user.email === secondEmail)?.id;
+  }
+  if (!secondUserId) throw new Error('Could not locate the second CI browser test identity.');
+  const { error: secondProfileError } = await admin.from('profiles').update({ role: 'super_admin', status: 'active' }).eq('auth_user_id', secondUserId);
+  if (secondProfileError) throw secondProfileError;
   process.env.CI_E2E_EMAIL = email;
   process.env.CI_E2E_PASSWORD = password;
+  process.env.CI_E2E_SECOND_EMAIL = secondEmail;
+  process.env.CI_E2E_SECOND_PASSWORD = secondPassword;
 }

@@ -119,7 +119,7 @@ test('document printing does not open the print dialog when auditing fails', asy
   await expect(page.getByTestId('print-document-view')).toHaveCount(0);
 });
 
-test('login enforces MFA enrollment before granting app access', async ({ page }) => {
+test('login enforces MFA enrollment and service price changes require a second approver', async ({ page, browser }) => {
   await page.goto('/');
   await page.getByLabel('Email').fill(process.env.CI_E2E_EMAIL);
   await page.locator('#onemed-login-password').fill(process.env.CI_E2E_PASSWORD);
@@ -181,5 +181,40 @@ test('login enforces MFA enrollment before granting app access', async ({ page }
     await expect(page.getByText('This module could not be loaded. Reload the page and try again.')).toHaveCount(0);
     await expect(page.locator('#main-content')).not.toBeEmpty();
   }
+  await page.getByRole('button', { name: 'Billing', exact: true }).click();
+  await page.getByRole('button', { name: 'Price Catalogue', exact: true }).click();
+  await page.getByLabel('Facility').selectOption('a1000000-0000-4000-8000-000000000001');
+  const chargeCode = `TEST-E2E-${Date.now()}`;
+  await page.getByLabel('Code').fill(chargeCode);
+  await page.getByLabel('Name').fill('TEST synthetic catalogue charge');
+  await page.getByLabel('Department').fill('TEST department');
+  await page.getByLabel('Price').fill('12.34');
+  await page.getByRole('button', { name: 'Submit price for approval' }).click();
+  await expect(page.getByText(/Price request submitted/)).toBeVisible();
+
+  const approverContext = await browser.newContext();
+  const approverPage = await approverContext.newPage();
+  await approverPage.goto('/');
+  await approverPage.getByLabel('Email').fill(process.env.CI_E2E_SECOND_EMAIL);
+  await approverPage.locator('#onemed-login-password').fill(process.env.CI_E2E_SECOND_PASSWORD);
+  await approverPage.getByRole('button', { name: 'Sign In' }).click();
+  await expect(approverPage.getByRole('button', { name: /set up authenticator/i })).toBeVisible();
+  await approverPage.getByRole('button', { name: /set up authenticator/i }).click();
+  const approverSetupText = await approverPage.getByText(/Manual setup key:/).innerText();
+  const approverSecret = approverSetupText.split(':').at(-1).trim().replace(/\s/g, '');
+  await approverPage.getByLabel('Authenticator code').fill(totp(approverSecret));
+  await approverPage.getByRole('button', { name: 'Verify and continue' }).click();
+  await expect(approverPage.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
+  await approverPage.getByRole('button', { name: 'Billing', exact: true }).click();
+  await approverPage.getByRole('button', { name: 'Price Catalogue', exact: true }).click();
+  await approverPage.getByRole('button', { name: 'Approve pending price' }).click();
+  await expect(approverPage.getByText(/Price approved and added to the effective price history/)).toBeVisible();
+  await approverPage.getByLabel('Patient').selectOption({ label: `CI ${patientName}` });
+  await approverPage.getByLabel('Active catalogue charge').selectOption({ label: `${chargeCode} · TEST synthetic catalogue charge` });
+  const invoiceNumber = `TEST-E2E-INVOICE-${Date.now()}`;
+  await approverPage.getByLabel('Invoice number').fill(invoiceNumber);
+  await approverPage.getByRole('button', { name: 'Create catalogue invoice' }).click();
+  await expect(approverPage.getByText(new RegExp(`Itemized invoice ${invoiceNumber} created`))).toBeVisible();
+  await approverContext.close();
   expect(pageErrors).toEqual([]);
 });

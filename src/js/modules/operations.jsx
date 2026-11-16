@@ -794,14 +794,13 @@ const appData = getAppData();
         // ==========================================
         const BillingModule = ({ initialTab = 'invoices' }) => {
             const { user } = useAuth();
+            const canManageCatalogue = ['super_admin', 'accountant'].includes(user?.role);
             const newPaymentIdempotencyKey = () => window.crypto?.randomUUID?.() || `payment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
             const [activeTab, setActiveTab] = useState(initialTab);
-            const [showNewInvoice, setShowNewInvoice] = useState(false);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
             const [invoices, setInvoices] = useState(getAppData().billing || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
-            const [invoiceForm, setInvoiceForm] = useState({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
             const [paymentForm, setPaymentForm] = useState(() => ({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }));
             const [bankAccounts, setBankAccounts] = useState([]);
             const [claimForm, setClaimForm] = useState({ patientId: '', invoiceId: '', membershipId: '', connectionId: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0 });
@@ -824,6 +823,11 @@ const appData = getAppData();
             const [disputeAlerts, setDisputeAlerts] = useState([]);
             const [disputeMessage, setDisputeMessage] = useState('');
             const [disputeThreshold, setDisputeThreshold] = useState({ connectionId: '', windowDays: 30, warningCount: '', criticalCount: '', warningRate: '', criticalRate: '' });
+            const [chargeCatalogue, setChargeCatalogue] = useState([]);
+            const [chargeFacilities, setChargeFacilities] = useState([]);
+            const [chargeMessage, setChargeMessage] = useState('');
+            const [chargeDraft, setChargeDraft] = useState({ facilityId: '', itemId: '', code: '', name: '', department: '', price: '', effectiveFrom: new Date().toISOString().slice(0, 10), effectiveTo: '' });
+            const [catalogueInvoice, setCatalogueInvoice] = useState({ patientId: '', itemId: '', quantity: '1', invoiceNumber: `INV-${Date.now()}` });
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -907,6 +911,76 @@ const appData = getAppData();
                     if (data?.length) setDisputeThreshold((draft) => ({ ...draft, connectionId: draft.connectionId || data[0].id }));
                 });
             }, [activeTab]);
+
+            const refreshChargeCatalogue = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return setChargeMessage('Supabase is not configured. The price catalogue is unavailable.');
+                const [{ data: items, error }, { data: facilities }] = await Promise.all([
+                    client.from('service_charge_catalogue').select('id,facility_id,code,name,department,active,created_at,service_charge_prices(id,price,effective_from,effective_to,status,requested_by,approved_by,approved_at)').order('code'),
+                    client.from('facilities').select('id,name').order('name')
+                ]);
+                if (error) return setChargeMessage(`Price catalogue could not be loaded: ${error.message}`);
+                setChargeCatalogue(items || []);
+                setChargeFacilities(facilities || []);
+                setChargeDraft((draft) => ({ ...draft, facilityId: draft.facilityId || facilities?.[0]?.id || '' }));
+            };
+
+            useEffect(() => {
+                if (activeTab === 'catalogue') refreshChargeCatalogue().catch((error) => setChargeMessage(error.message || 'Price catalogue could not be loaded.'));
+            }, [activeTab]);
+
+            const requestChargePrice = async () => {
+                if (!chargeDraft.facilityId || !chargeDraft.code.trim() || !chargeDraft.name.trim() || !chargeDraft.department.trim() || chargeDraft.price === '') return setChargeMessage('Facility, code, name, department, and price are required.');
+                const { error } = await window.OneMedSupabase.getClient().rpc('request_service_charge_price', {
+                    p_facility_id: chargeDraft.facilityId, p_catalogue_item_id: chargeDraft.itemId || null,
+                    p_code: chargeDraft.code.trim(), p_name: chargeDraft.name.trim(), p_department: chargeDraft.department.trim(),
+                    p_price: Number(chargeDraft.price), p_effective_from: chargeDraft.effectiveFrom,
+                    p_effective_to: chargeDraft.effectiveTo || null
+                });
+                if (error) return setChargeMessage(error.message);
+                setChargeMessage('Price request submitted. A different authorized finance user must approve it before it becomes effective.');
+                setChargeDraft((draft) => ({ ...draft, itemId: '', code: '', name: '', department: '', price: '', effectiveTo: '' }));
+                await refreshChargeCatalogue();
+            };
+
+            const approveChargePrice = async (priceId) => {
+                const { error } = await window.OneMedSupabase.getClient().rpc('approve_service_charge_price', { p_price_id: priceId });
+                if (error) return setChargeMessage(error.message);
+                setChargeMessage('Price approved and added to the effective price history.');
+                await refreshChargeCatalogue();
+            };
+
+            const retireChargeItem = async (itemId) => {
+                if (!window.confirm('Retire this catalogue item? Existing invoice snapshots remain unchanged.')) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('retire_service_charge', { p_catalogue_item_id: itemId });
+                if (error) return setChargeMessage(error.message);
+                setChargeMessage('Catalogue item retired. Existing invoices and price history remain available.');
+                await refreshChargeCatalogue();
+            };
+
+            const createCatalogueInvoice = async () => {
+                if (!catalogueInvoice.patientId || !catalogueInvoice.itemId || Number(catalogueInvoice.quantity) <= 0) return setChargeMessage('Select a patient and active catalogue item and enter a positive quantity.');
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('create_catalogued_invoice', {
+                    p_patient_id: catalogueInvoice.patientId, p_invoice_number: catalogueInvoice.invoiceNumber,
+                    p_lines: [{ catalogue_item_id: catalogueInvoice.itemId, quantity: Number(catalogueInvoice.quantity) }]
+                });
+                if (error) return setChargeMessage(error.message);
+                setChargeMessage(`Itemized invoice ${catalogueInvoice.invoiceNumber} created (${data}).`);
+                setCatalogueInvoice({ patientId: '', itemId: '', quantity: '1', invoiceNumber: `INV-${Date.now()}` });
+                window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
+            };
+
+            const issueInvoiceCreditNote = async (invoice) => {
+                const amount = Number(window.prompt(`Credit amount for ${invoice.invoiceNumber}`) || 0);
+                if (amount <= 0) return;
+                const reason = window.prompt('Document the correction reason.') || '';
+                if (!reason.trim()) return;
+                const { error } = await window.OneMedSupabase.getClient().rpc('issue_invoice_credit_note', {
+                    p_billing_id: invoice.id, p_invoice_line_item_id: null, p_amount: amount, p_reason: reason.trim()
+                });
+                if (error) return setIntegrationMessage(error.message);
+                setIntegrationMessage('Credit note issued. The original invoice remains unchanged.');
+            };
 
             const refreshDisputes = async (successMessage = '') => {
                 try {
@@ -1001,6 +1075,7 @@ const appData = getAppData();
                 ,{ id: 'refunds', label: 'Refunds' }
                 ,{ id: 'disputes', label: 'Disputes & Alerts' }
                 ,{ id: 'ledger', label: 'General Ledger' }
+                ,{ id: 'catalogue', label: 'Price Catalogue' }
             ];
 
             const createInsuranceMembership = async () => {
@@ -1021,40 +1096,6 @@ const appData = getAppData();
                 if (error || !data) return setMembershipMessage(error?.message || 'Membership status could not be updated.');
                 setInsuranceMemberships((items) => items.map((item) => item.id === membership.id ? data : item));
                 setMembershipMessage(status === 'verified_manual' ? 'Manual eligibility check recorded as verified.' : 'Manual eligibility check recorded as ineligible.');
-            };
-
-            const handleCreateInvoice = async () => {
-                if (!invoiceForm.patientId) return;
-                const payload = {
-                    patientId: invoiceForm.patientId,
-                    invoiceNumber: invoiceForm.invoiceNumber || 'INV-' + Date.now(),
-                    date: formatFacilityDate(),
-                    subtotal: Number(invoiceForm.total || 0),
-                    discount: 0,
-                    tax: 0,
-                    total: Number(invoiceForm.total || 0),
-                    paid: 0,
-                    balance: Math.max(0, Number(invoiceForm.total || 0)),
-                    department: invoiceForm.department.trim(),
-                    service: invoiceForm.service.trim(),
-                    paymentMethod: 'cash',
-                    status: 'pending'
-                };
-
-                const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return notifyPersistenceFailure('create invoice');
-                const { data, error } = await client.from('billing').insert([{
-                    patient_id: payload.patientId, invoice_number: payload.invoiceNumber, invoice_date: payload.date,
-                    subtotal: payload.subtotal, discount: payload.discount, tax: payload.tax, total: payload.total,
-                    paid: 0, balance: payload.balance, department: payload.department || null, service: payload.service || null, payment_method: null, status: 'pending'
-                }]).select();
-                if (error || !data?.[0]) return notifyPersistenceFailure('create invoice', error);
-                const mapped = { ...payload, id: data[0].id, patientId: data[0].patient_id || payload.patientId, invoiceNumber: data[0].invoice_number || payload.invoiceNumber, date: data[0].invoice_date || payload.date, paymentMethod: data[0].payment_method || payload.paymentMethod };
-                const next = [...invoices, mapped];
-                persistStoreTable('billing', next);
-                setInvoices(next);
-                setShowNewInvoice(false);
-                setInvoiceForm({ patientId: '', invoiceNumber: 'INV-' + Date.now(), total: 0, department: '', service: '', status: 'pending' });
             };
 
             const handleProcessPayment = async () => {
@@ -1159,7 +1200,7 @@ const appData = getAppData();
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" onClick={() => setShowInsuranceModal(true)}>New Claim</Button>
-                            <Button variant="primary" icon={Icons.Plus} onClick={() => setShowNewInvoice(true)}>Create Invoice</Button>
+                            <Button variant="primary" icon={Icons.Plus} onClick={() => setActiveTab('catalogue')}>Create Invoice</Button>
                         </div>
                     </div>
 
@@ -1186,11 +1227,44 @@ const appData = getAppData();
                                     <>
                                         <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'invoice', id: row.id, patientId: row.patientId, title: `Invoice ${row.invoiceNumber}`, author: user?.name, fields: [['Date', row.date], ['Service', row.service], ['Department', row.department], ['Subtotal', formatCurrency(row.subtotal)], ['Discount', formatCurrency(row.discount)], ['Tax', formatCurrency(row.tax)], ['Total', formatCurrency(row.total)], ['Paid', formatCurrency(row.paid)], ['Balance', formatCurrency(row.balance)]] }).catch((error) => notifyPersistenceFailure('print invoice', error))}>Print invoice</Button>
                                         <Button variant="secondary" size="sm" onClick={() => { setPaymentForm({ invoiceId: row.id, amount: Math.max(0, Number(row.balance || 0)), method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }); setShowPaymentModal(true); }}>Post Payment</Button>
+                                        {['super_admin','accountant'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => issueInvoiceCreditNote(row)}>Issue credit note</Button>}
                                     </>
                                 )}
                             />
                         </Card>
                     )}
+
+                    {activeTab === 'catalogue' && <div className="space-y-6">
+                        {chargeMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{chargeMessage}</p>}
+                        {canManageCatalogue && <Card title="Request or update a service price" subtitle="Every requested price needs approval from another authorized finance user before it becomes effective.">
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <Select label="Facility" value={chargeDraft.facilityId} onChange={(event) => setChargeDraft({ ...chargeDraft, facilityId: event.target.value, itemId: '', code: '', name: '', department: '' })} options={[{ value: '', label: 'Select facility' }, ...chargeFacilities.map((facility) => ({ value: facility.id, label: facility.name }))]} />
+                                <Select label="Existing catalogue item (optional)" value={chargeDraft.itemId} onChange={(event) => { const entry = chargeCatalogue.find((item) => item.id === event.target.value); setChargeDraft({ ...chargeDraft, itemId: event.target.value, code: entry?.code || '', name: entry?.name || '', department: entry?.department || '' }); }} options={[{ value: '', label: 'New service or charge' }, ...chargeCatalogue.filter((item) => item.facility_id === chargeDraft.facilityId && item.active).map((item) => ({ value: item.id, label: `${item.code} · ${item.name}` }))]} />
+                                <Input label="Code" value={chargeDraft.code} onChange={(event) => setChargeDraft({ ...chargeDraft, code: event.target.value })} />
+                                <Input label="Name" value={chargeDraft.name} onChange={(event) => setChargeDraft({ ...chargeDraft, name: event.target.value })} />
+                                <Input label="Department" value={chargeDraft.department} onChange={(event) => setChargeDraft({ ...chargeDraft, department: event.target.value })} />
+                                <Input label="Price" type="number" min="0" step="0.01" value={chargeDraft.price} onChange={(event) => setChargeDraft({ ...chargeDraft, price: event.target.value })} />
+                                <Input label="Effective from" type="date" value={chargeDraft.effectiveFrom} onChange={(event) => setChargeDraft({ ...chargeDraft, effectiveFrom: event.target.value })} />
+                                <Input label="Effective to (optional)" type="date" value={chargeDraft.effectiveTo} onChange={(event) => setChargeDraft({ ...chargeDraft, effectiveTo: event.target.value })} />
+                            </div>
+                            <Button className="mt-4" variant="primary" onClick={requestChargePrice}>Submit price for approval</Button>
+                        </Card>}
+                        <Card title="Create an itemized invoice" subtitle="Invoice lines capture the approved code, description, price, and effective price version at issue time.">
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <Select label="Patient" value={catalogueInvoice.patientId} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, patientId: event.target.value })} options={[{ value: '', label: 'Select patient' }, ...(appData.patients || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} />
+                                <Select label="Active catalogue charge" value={catalogueInvoice.itemId} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, itemId: event.target.value })} options={[{ value: '', label: 'Select charge' }, ...chargeCatalogue.filter((item) => item.active && item.service_charge_prices?.some((price) => price.status === 'active')).map((item) => ({ value: item.id, label: `${item.code} · ${item.name}` }))]} />
+                                <Input label="Quantity" type="number" min="0.001" step="0.001" value={catalogueInvoice.quantity} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, quantity: event.target.value })} />
+                                <Input label="Invoice number" value={catalogueInvoice.invoiceNumber} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, invoiceNumber: event.target.value })} />
+                            </div>
+                            <Button className="mt-4" variant="primary" onClick={createCatalogueInvoice}>Create catalogue invoice</Button>
+                        </Card>
+                        <Card title="Facility price catalogue and history"><DataTable columns={[
+                            { key: 'code', title: 'Code' }, { key: 'name', title: 'Service / charge' }, { key: 'department', title: 'Department' },
+                            { key: 'facility_id', title: 'Facility', render: (row) => chargeFacilities.find((facility) => facility.id === row.facility_id)?.name || row.facility_id },
+                            { key: 'prices', title: 'Price history', render: (row) => (row.service_charge_prices || []).sort((a, b) => b.effective_from.localeCompare(a.effective_from)).map((price) => `${formatCurrency(price.price)} · ${price.status} · ${price.effective_from}${price.effective_to ? ` to ${price.effective_to}` : ''}`).join(' | ') || 'No prices' },
+                            { key: 'approval', title: 'Approval', render: (row) => canManageCatalogue ? (row.service_charge_prices || []).filter((price) => price.status === 'pending').map((price) => <Button key={price.id} size="sm" variant="primary" onClick={() => approveChargePrice(price.id)}>Approve pending price</Button>) : null }
+                        ]} data={chargeCatalogue} actions={(row) => canManageCatalogue && row.active ? <Button size="sm" variant="danger" onClick={() => retireChargeItem(row.id)}>Retire</Button> : row.active ? null : <Badge variant="default">Retired</Badge>} /></Card>
+                    </div>}
 
                     {activeTab === 'payments' && (
                         <div className="space-y-4">
@@ -1414,27 +1488,6 @@ const appData = getAppData();
                             </Card>
                         </div>
                     )}
-
-                    <Modal
-                        isOpen={showNewInvoice}
-                        onClose={() => setShowNewInvoice(false)}
-                        title="Create Invoice"
-                        size="md"
-                        footer={
-                            <div className="flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => setShowNewInvoice(false)}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.Save} onClick={handleCreateInvoice}>Save Invoice</Button>
-                            </div>
-                        }
-                    >
-                        <div className="space-y-4">
-                            <Select label="Patient" value={invoiceForm.patientId} onChange={(e) => setInvoiceForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Input label="Invoice Number" value={invoiceForm.invoiceNumber} onChange={(e) => setInvoiceForm(prev => ({ ...prev, invoiceNumber: e.target.value }))} />
-                            <Input label="Total Amount" type="number" value={invoiceForm.total} onChange={(e) => setInvoiceForm(prev => ({ ...prev, total: e.target.value }))} />
-                            <Input label="Department" value={invoiceForm.department} onChange={(e) => setInvoiceForm(prev => ({ ...prev, department: e.target.value }))} />
-                            <Input label="Service" value={invoiceForm.service} onChange={(e) => setInvoiceForm(prev => ({ ...prev, service: e.target.value }))} />
-                        </div>
-                    </Modal>
 
                     <Modal
                         isOpen={showPaymentModal}
