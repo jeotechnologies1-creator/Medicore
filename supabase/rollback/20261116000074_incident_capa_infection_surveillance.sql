@@ -1,0 +1,16 @@
+begin;
+drop trigger if exists safety_incident_closure_immutable on public.safety_incident_closures;
+drop function if exists public.is_safety_incident_reporter(uuid);
+drop function if exists public.configure_incident_severity(uuid,text,text,integer,boolean);
+drop function if exists public.report_safety_incident(uuid,text,text,text,text,timestamptz,text,uuid);
+drop function if exists public.investigate_safety_incident(uuid,text,text);
+drop function if exists public.add_safety_incident_action(uuid,text,text,uuid,date);
+drop function if exists public.update_safety_incident_action(uuid,text);
+drop function if exists public.close_safety_incident(uuid,text);
+drop function if exists public.record_infection_surveillance_case(uuid,uuid,uuid,text,text,date,text);
+drop function if exists public.get_ward_infection_trends(uuid,date,date);
+drop table if exists public.infection_surveillance_cases,public.safety_incident_closures,public.safety_incident_actions,public.safety_incident_investigations,public.safety_incident_reporter_identity,public.safety_incidents,public.incident_severity_scales cascade;
+delete from public.role_permission_grants where permission_key in ('incident.report','incident.safety.read','infection.surveillance.read','infection.surveillance.manage');
+delete from public.permission_catalog where permission_key in ('incident.report','incident.safety.read','infection.surveillance.read','infection.surveillance.manage');
+notify pgrst,'reload schema';
+commit;
