@@ -47,7 +47,7 @@ export default async function globalSetup() {
     nurseUserId = data.users.find((user) => user.email === nurseEmail)?.id;
   }
   if (!nurseUserId) throw new Error('Could not locate the non-records browser test identity.');
-  const { error: nurseProfileError } = await admin.from('profiles').update({ role: 'nurse', status: 'active' }).eq('auth_user_id', nurseUserId);
+  const { error: nurseProfileError } = await admin.from('profiles').update({ role: 'nurse', status: 'active', facility_id: 'a1000000-0000-4000-8000-000000000001' }).eq('auth_user_id', nurseUserId);
   if (nurseProfileError) throw nurseProfileError;
   const codingEmail = 'ci-coding-workspace@example.test';
   const codingPassword = 'CI-only-Coding-Password-2026!';

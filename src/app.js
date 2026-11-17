@@ -291,6 +291,7 @@ const appData = getAppData();
                 offices: () => <MedicalOfficesModule />,
                 organization: () => <OrganizationModule />,
                 hr: () => <HRStaffModule />,
+                staff_leave: () => <StaffLeaveModule />,
                 portal: () => <PatientPortalModule />,
                 ward: () => <AdmissionsModule />,
                 nursing: () => <NursingCareModule />,

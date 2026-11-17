@@ -107,6 +107,7 @@ const routeModules = {
   offices: ['./js/modules/people.jsx'],
   organization: ['./js/modules/system.jsx'],
   hr: ['./js/modules/people.jsx'],
+  staff_leave: ['./js/modules/people.jsx'],
   portal: ['./js/modules/portal.jsx'],
   ward: ['./js/modules/operations.jsx'],
   nursing: ['./js/modules/clinical.jsx'],

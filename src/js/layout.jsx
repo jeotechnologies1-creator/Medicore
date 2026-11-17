@@ -89,6 +89,9 @@
                         { id: 'vital_registry', label: 'Vital Events & Reports', icon: Icons.Activity },
                         { id: 'clinical_workflows', label: 'Encounter Registration', icon: Icons.ClipboardList },
                     ],
+                    hr_officer: [
+                        { id: 'hr', label: 'HR & Staff', icon: Icons.UserCog },
+                    ],
                     surgeon: [
                         { id: 'patients', label: 'Patients', icon: Icons.Users },
                         { id: 'clinical_workflows', label: 'Clinical Workflows', icon: Icons.ClipboardList },
@@ -139,8 +142,11 @@
 
                 const rawRole = String(user?.role || 'patient').trim().toLowerCase().replace(/[\s-]+/g, '_');
                 const role = rawRole === 'health_information_management_officer' ? 'records_officer' : rawRole;
-                const allowed = new Set((roleMenus[role] || []).map((item) => item.id));
-                return [...common, ...(roleMenus[role] || [])].filter((item) =>
+                const staffRoles = ['super_admin', 'hr_officer', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'maintenance_officer', 'safety_officer'];
+                const personalLeave = staffRoles.includes(role) ? [{ id: 'staff_leave', label: 'My Leave', icon: Icons.UserCheck }] : [];
+                const roleItems = [...(roleMenus[role] || []), ...personalLeave];
+                const allowed = new Set(roleItems.map((item) => item.id));
+                return [...common, ...roleItems].filter((item) =>
                     (item.id === 'dashboard' || allowed.has(item.id)) && hasModuleAccess(item.id)
                 );
             };

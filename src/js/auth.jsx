@@ -6,7 +6,7 @@
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
-            'nursing', 'blood_bank', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings', 'vital_registry'
+            'nursing', 'blood_bank', 'hr', 'offices', 'organization', 'reports', 'audit', 'settings', 'vital_registry', 'staff_leave'
         ];
 
         const legacyPermissionAliases = {
@@ -652,6 +652,8 @@
                 // navigation) so direct navigation is governed by the same policy.
                 const normalizedRole = normalizeRoleKey(user.role);
                 if (moduleId === 'vital_registry') return ['super_admin', 'records_officer', 'doctor'].includes(normalizedRole);
+                if (moduleId === 'hr') return ['super_admin', 'hr_officer'].includes(normalizedRole);
+                if (moduleId === 'staff_leave') return ['super_admin', 'hr_officer', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'maintenance_officer', 'safety_officer'].includes(normalizedRole);
                 if (normalizedRole === 'receptionist') return ['dashboard', 'patients', 'appointments', 'clinical_workflows'].includes(moduleId);
                 const matrix = getStoredRoleMatrix();
                 const match = matrix.find(row => normalizeRoleKey(row.role) === normalizedRole);
