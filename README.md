@@ -100,3 +100,5 @@ See [EMR_GO_LIVE_CHECKLIST.md](EMR_GO_LIVE_CHECKLIST.md) for the interoperabilit
 ## Architecture and workflow documentation
 
 The repository audit, current module status, target organogram, schema map, patient journey, departmental handoffs, role/security model, integration catalogue, implementation roadmap, test plan, and operations runbook are maintained under [`docs/`](docs/architecture/repository-audit.md). Status labels in those documents distinguish implemented, partial, planned, and unverified capabilities; they do not certify deployment readiness.
+
+The current module-by-module inventory is [`docs/architecture/module-inventory.md`](docs/architecture/module-inventory.md). Go-live evidence owners, links, review dates, and outstanding live-project controls are tracked in [`docs/status/evidence-tracker.md`](docs/status/evidence-tracker.md). Repository code and tests do not establish that migrations or integrations are deployed; live Supabase status remains unverified until staging evidence is recorded.

@@ -1,59 +1,36 @@
-# HIM functionality gap analysis
+# HIM functionality and evidence review
 
-This is a repository-level review of the HIM prompt against the current implementation. “Implemented” means a code/schema path exists; it does not claim production deployment or operational validation. No production data was created or altered during this work.
+Repository review date: 2026-11-17. **Implemented** means code/schema and a repository test exist; **Partial** means material workflow scope remains; **Planned** means no substantial implementation/test exists. All live Supabase behavior remains **Unverified** until a staging project is exercised. No status in this report certifies deployment or operational readiness.
 
-## Already implemented
+## Implemented in the repository
 
-| Function | Existing implementation |
+| Function | Evidence |
 |---|---|
-| Patient registry and demographic chart | Existing `patients` table and Patients module; facility scope is enforced by migration 29. |
-| Patient identity history and emergency merge | `merge_unidentified_patient(...)` preserves temporary identity history and requires a documented reason. |
-| Patient longitudinal chart index | Records screen shows demographics, journey, pending tasks, allergies, conditions, medication orders, consultations, and documents without duplicating clinical source data. |
-| Patient record access logging | Records screen inserts `patient_access_logs` before opening a chart or secure document URL. |
-| Document storage and signed links | Private document storage workflow, classification metadata, and scoped access exist. |
-| Referrals, family-card links, appointment coordination, portal inbox | Existing workflows are integrated into Records. |
-| Role, facility, and department authorization | Existing profile roles, organization membership, permission catalog, patient facility scope, and restrictive RLS policies. |
+| Patient registry, demographic chart and facility access rules | Patient module; facility-scope policies; `patient_portal_isolation.test.sql`. |
+| Duplicate search and controlled identity merge | Migrations `20261116000076` and `20261116000079`; immutable search test and identity workflow coverage. |
+| Longitudinal chart index and patient-access logging | Records module; `him_records.test.sql`; `him_dashboard_analytics.test.sql`. |
+| Private document storage and audited print/access paths | Document storage scope, privacy audit and release workflow migrations; `release_information_disclosure_workflow.test.sql`. |
+| Physical-file register and circulation | `20261103000030_him_records.sql`; `him_records.test.sql`. |
+| Diagnosis coding and chart deficiencies | `20261116000066_diagnosis_coding_chart_deficiencies.sql`; `diagnosis_coding_chart_deficiencies.test.sql`. |
+| Release-of-information and data-subject request lifecycle | `20261116000067_release_information_disclosure_workflow.sql`; `release_information_disclosure_workflow.test.sql`. |
+| Retention schedules, legal holds, approvals and disposal certificates | `20261116000068_retention_holds_disposal.sql`; `retention_holds_disposal.test.sql`. Disposal seals source data; it does not hard-delete the clinical source. |
+| Birth/death registration and statutory reporting controls | `20261116000069_birth_death_statutory_reporting.sql`; `birth_death_statutory_reporting.test.sql`. |
+| Facility-scoped HIM summary analytics | `20261116000070_him_dashboard_analytics.sql`; `him_dashboard_analytics.test.sql`. |
+| Append-only audit and hard-delete safeguards | Audit migrations and `server_audit_privacy.test.sql`, `clinical_hard_delete_lock.test.sql`. |
 
-## Implemented but incomplete or requiring improvement
+## Partial or planned scope
 
-| Function | Gap / status after this change |
-|---|---|
-| HIM navigation/dashboard | Records now shows database-side, facility-scoped patient and physical-file KPI aggregates. A comprehensive date-filtered operational dashboard (visits, admissions, deaths, births, disease trends, completeness, and departmental performance) is still missing. |
-| Patient duplicate resolution | Duplicate warning and emergency identity merge exist; a general audited duplicate review/merge workflow needs a separate governance review. |
-| Medical record files | Migration 30 adds one facility-bound physical file index per patient with generated identifier, status, custodian, location field, and retrieval/return timestamps. UI can request and track movement; location/classification administration, barcode scanning, file inventory reconciliation, archiving, and digitisation are not yet surfaced. |
-| File movement | Migration 30 provides transactional request, release, reject, return, missing, investigation, and located transitions; event history is append-only. Expected-return overdue is derived in the UI. Reminder delivery, escalation scheduling, role-specific approval tiers, and physical recipient identity verification remain unimplemented. |
-| Chart audit / documentation deficiencies | No complete HIM audit template, encounter-linked deficiency queue, assigned remediation, or compliance percentage workflow verified. |
-| Disease classification / coding | Existing diagnosis fields are not a verified versioned ICD terminology catalog; no code assignment or clinical query workflow added. |
-| Release of information | No complete request, authorization, disclosure register, redaction, or patient access-request workflow verified. |
-| Retention / archive / legal hold | Clinical hard-delete protections exist; configurable retention schedules, archive workflows, disposal approval, and legal-hold case management are absent. |
-| Reports / NHMIS | Generic reports exist, but no validated HIM/statutory aggregate catalog, export disclosure controls, or verified current NHMIS form mappings. |
-| Birth/death registration | Some clinical emergency/death workflow fields exist; authoritative birth/death registry, source verification, and dedicated statistics are not a complete HIM module. |
-
-## Missing or deliberately not fabricated
-
-- Verified/versioned ICD-10 (or other classification) source dataset and licensing/version metadata.
-- Validated NHMIS reporting definitions and current submission formats.
-- Release-of-information request and disclosure accounting.
-- Documentation audit templates, findings, corrective actions, and trend reporting.
-- Configurable physical filing locations and inventory reconciliation.
-- Retention schedule configuration, legal holds, and approved disposal workflow.
-- Email/SMS reminder delivery configuration and escalation schedule.
-- A broad HIM analytics dashboard for visits, admissions, deaths, births, disease trends, record completeness, and departmental performance.
-
-These were not populated with invented codes, legal requirements, report definitions, fake patient rows, or unsupported compliance claims.
-
-## Major feature status
-
-| Feature | Status | Evidence / limitation |
+| Function | Status | Remaining gap |
 |---|---|---|
-| Existing patient directory and read-only chart | Completed in repository | Reuses the current patient and clinical tables; facility RLS and access logging already exist. Hosted behavior remains environment-specific. |
-| HIM physical file register and circulation UI | Partially completed | Frontend, permission-scoped tables/RPCs, state transitions, event history, and synthetic DB test are written. The migration has not been applied. |
-| HIM dashboard | Partially completed | Facility-scoped database aggregates cover patient counts and physical-file activity; no custom date range or comprehensive clinical/reporting indicators. |
-| Migration 30 staging verification | Blocked by local environment | Local Supabase could not start because Docker/Podman is not installed or available on PATH. No hosted staging connection was configured in this workspace. |
-| Audit/deficiency, coding, ROI, retention/archive, NHMIS | Not implemented as complete workflows | Existing adjacent features are listed above; there is no verified end-to-end HIM workflow for these requirements. |
+| HIM operational dashboard | Partial | Current aggregates cover patient and physical-file activity. A complete date-filtered operational dashboard and governed measures still need acceptance. |
+| Physical-file inventory | Partial | Circulation and event history exist. Barcode scanning, location administration, inventory reconciliation and digitization operations need completion. |
+| Chart audit and deficiency remediation | Partial | Templates, encounter-linked deficiencies and coding queries exist; broad audit coverage, remediation operations and compliance trend measures need validation. |
+| Coding catalog | Partial | Diagnosis coding and clinician query workflow exist; terminology release/version governance and licensed catalog updates need a production source and review. |
+| Release/disclosure operations | Partial | Request, approval separation and disclosure register paths exist; operational redaction, identity proofing and local authorization policy need validation. |
+| Retention and archive operations | Partial | Schedule, holds, dual approval and source-sealing certificate flow exist; configure legally reviewed schedules, facility procedures and live audit evidence. |
+| Statutory/NHMIS reporting | Partial | Statutory definitions and suppression controls exist; validated current submission mappings and jurisdictional approval remain outstanding. |
+| Maternity/newborn HIM | Planned | No dedicated end-to-end maternal/newborn record and reporting module. |
 
-## Added in this implementation
+## Live validation status
 
-Migration `20261103000030_him_records.sql` (source `supabase/migrations/20261103000030_him_records.sql`) adds the records-file register, movement register, append-only movement events, facility-scoped RLS, dedicated HIM permissions, and transactional RPCs. `src/js/modules/records.js` adds the circulation register to the existing HIM page. The rollback is `supabase/rollback/20261103000030_him_records.sql` and requires exporting operational casework before use.
-
-The migration must be tested in staging after migrations 1–29. Staff besides Super Admin need an active membership at the patient's verified facility as well as the Records Officer grants. This repository change does not mean the migration has been applied to any Supabase environment.
+No staging/live Supabase project was exercised for this review. Migration application state, hosted RLS behavior, facility membership configuration, real data preflight, statutory reporting, retention schedules and external notification delivery remain **Unverified**. Repository evidence is indexed in the [go-live evidence tracker](../status/evidence-tracker.md); synthetic SQL fixtures use transaction rollback, and no live patient data is included in these tests.
