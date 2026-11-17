@@ -17,6 +17,7 @@
     "check:migrations": "node scripts/check-migrations.mjs",
     "generate:downtime-forms": "node scripts/generate-downtime-forms.mjs",
     "verify:hosted-config": "node scripts/verify-hosted-config.mjs",
+    "staging:evidence": "node scripts/staging-evidence.mjs",
     "backup:daily": "node scripts/backup-daily.mjs",
     "restore:backup": "node scripts/restore-backup.mjs"
   },

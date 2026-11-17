@@ -97,6 +97,8 @@ Maintain an approved read-only/downtime procedure outside this repository: paper
 
 See [EMR_GO_LIVE_CHECKLIST.md](EMR_GO_LIVE_CHECKLIST.md) for the interoperability, safety, security, and operational controls required before go-live.
 
+For sequential staging checks and a timestamped commit-specific report, see the [staging acceptance runner](docs/deployment/staging-acceptance.md) (`npm run staging:evidence`).
+
 ## Architecture and workflow documentation
 
 The repository audit, current module status, target organogram, schema map, patient journey, departmental handoffs, role/security model, integration catalogue, implementation roadmap, test plan, and operations runbook are maintained under [`docs/`](docs/architecture/repository-audit.md). Status labels in those documents distinguish implemented, partial, planned, and unverified capabilities; they do not certify deployment readiness.
