@@ -132,6 +132,41 @@
             status: row.status || 'active'
         }));
 
+        const loadPharmacyInventoryFromLedger = async (client, facilityId) => {
+            if (!client || !facilityId) return [];
+            const { data: rows, error } = await client.from('pharmacy_inventory').select('*').eq('facility_id', facilityId).order('name');
+            if (error) throw error;
+            const inventoryRows = rows || [];
+            const lotIds = inventoryRows.map((row) => row.id);
+            if (!lotIds.length) return [];
+            const { data: stockItems, error: itemError } = await client.from('store_stock_items').select('id,pharmacy_inventory_id').eq('facility_id', facilityId).in('pharmacy_inventory_id', lotIds);
+            if (itemError) throw itemError;
+            const linkedItems = stockItems || [];
+            const itemIds = linkedItems.map((row) => row.id);
+            const { data: balances, error: balanceError } = itemIds.length
+                ? await client.from('stock_balances').select('stock_item_id,location_id,quantity').eq('facility_id', facilityId).in('stock_item_id', itemIds)
+                : { data: [], error: null };
+            if (balanceError) throw balanceError;
+            const itemByLot = new Map(linkedItems.map((item) => [item.pharmacy_inventory_id, item]));
+            const balancesByItem = new Map();
+            for (const balance of balances || []) {
+                const list = balancesByItem.get(balance.stock_item_id) || [];
+                list.push(balance);
+                balancesByItem.set(balance.stock_item_id, list);
+            }
+            return normalizeInventory(inventoryRows).map((row) => {
+                const stockItem = itemByLot.get(row.id);
+                const itemBalances = stockItem ? (balancesByItem.get(stockItem.id) || []) : [];
+                return {
+                    ...row,
+                    stockQuantity: stockItem ? itemBalances.reduce((sum, balance) => sum + Number(balance.quantity || 0), 0) : null,
+                    ledgerLinked: Boolean(stockItem),
+                    stockItemId: stockItem?.id || null,
+                    locationBalances: itemBalances
+                };
+            });
+        };
+
         const normalizeBilling = (rows = []) => rows.map((row) => ({
             ...row,
             id: row.id,
@@ -689,4 +724,4 @@
             return colors[status] || 'bg-slate-100 text-slate-600 border-slate-200';
         };
 
-export { normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadSupabaseTables, loadModuleData, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };
+export { normalizeUsers, normalizePatients, normalizeAppointments, normalizeLabOrders, normalizeRadiologyOrders, normalizePrescriptions, normalizeInventory, loadPharmacyInventoryFromLedger, normalizeBilling, normalizePaymentSubmissions, normalizeAdmissions, normalizeEncounters, normalizeSurgeries, normalizeNotifications, normalizeAuditLogs, normalizeVitals, normalizeMedicationAdministrations, normalizeConsultations, normalizeDocuments, normalizeImmunizations, normalizeAllergies, normalizeConditions, normalizeMedicationOrders, normalizeCarePlans, normalizeClinicalTasks, normalizeClinicalAlerts, normalizeWards, normalizeBeds, normalizeInsuranceClaims, normalizeRefillRequests, normalizeOffices, normalizeOfficeStaff, normalizeResultAcknowledgements, normalizeMedicationReconciliations, createEmptyStore, initializeEmptyStore, persistStoreTable, notifyPersistenceFailure, navigateTo, loadSupabaseTables, loadModuleData, formatFacilityDate, formatDate, formatDateTime, formatCurrency, calculateAge, formatAge, getStatusColor };

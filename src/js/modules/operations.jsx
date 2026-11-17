@@ -566,6 +566,7 @@ const AssetMaintenancePanel = () => {
         // ==========================================
         const PharmacyModule = ({ initialTab = 'dispensary' }) => {
             const { user } = useAuth();
+            const facilityId = user?.facility_id || user?.facilityId || '';
             const canManageInventory = ['super_admin', 'pharmacist'].includes(user?.role);
             const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
@@ -581,6 +582,18 @@ const AssetMaintenancePanel = () => {
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
+
+            useEffect(() => {
+                let current = true;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !facilityId) return () => { current = false; };
+                loadPharmacyInventoryFromLedger(client, facilityId).then((rows) => {
+                    if (current) { setInventory(rows); appData.pharmacyInventory = rows; }
+                }).catch((error) => {
+                    if (current) setStockMessage(`Ledger inventory could not be loaded: ${error?.message || 'Connection failed.'}`);
+                });
+                return () => { current = false; };
+            }, [facilityId]);
 
             useEffect(() => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -626,48 +639,7 @@ const AssetMaintenancePanel = () => {
                 return !Number.isNaN(expiry.valueOf()) && expiry >= today && expiry <= threeMonths;
             }).length;
 
-            const handleAddStock = async () => {
-                const selectedFormularyItem = formulary.find((item) => item.id === stockForm.formularyItemId);
-                const quantity = Number(stockForm.stockQuantity || 0);
-                const reorder = Number(stockForm.reorderLevel || 0);
-                const price = Number(stockForm.unitPrice || 0);
-                if (!selectedFormularyItem) return setStockMessage('Select an active formulary item before adding a stock lot.');
-                if (!stockForm.name.trim()) return setStockMessage('Medication name is required.');
-                if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) return setStockMessage('Stock and reorder quantities must be whole numbers, and unit price cannot be negative.');
-                setStockMessage('');
-                const payload = {
-                    name: stockForm.name.trim(),
-                    genericName: stockForm.genericName.trim(),
-                    category: stockForm.category.trim(),
-                    stockQuantity: quantity,
-                    reorderLevel: reorder,
-                    unitPrice: price,
-                    expiryDate: stockForm.expiryDate,
-                    batchNumber: stockForm.batchNumber,
-                    barcode: stockForm.barcode,
-                    supplier: stockForm.supplier,
-                    status: Number(stockForm.stockQuantity) <= Number(stockForm.reorderLevel) ? 'low_stock' : 'active'
-                };
-
-                const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return notifyPersistenceFailure('add inventory');
-                const { data, error } = await client.from('pharmacy_inventory').insert([{
-                    name: payload.name, generic_name: payload.genericName || null, category: payload.category || null,
-                    formulary_item_id: selectedFormularyItem.id,
-                    stock_quantity: payload.stockQuantity, reorder_level: payload.reorderLevel,
-                    unit_price: payload.unitPrice, expiry_date: payload.expiryDate || null,
-                    batch_number: payload.batchNumber.trim() || null, barcode: payload.barcode.trim() || null,
-                    supplier: payload.supplier || null, status: payload.status
-                }]).select();
-                if (error || !data?.[0]) return setStockMessage(error?.message || 'Inventory could not be saved.');
-                const mapped = { ...payload, id: data[0].id, genericName: data[0].generic_name || payload.genericName, stockQuantity: data[0].stock_quantity ?? payload.stockQuantity, reorderLevel: data[0].reorder_level ?? payload.reorderLevel, unitPrice: data[0].unit_price ?? payload.unitPrice, expiryDate: data[0].expiry_date || payload.expiryDate };
-                const next = [...inventory, mapped];
-                appData.pharmacyInventory = next;
-                persistStoreTable('pharmacyInventory', next);
-                setInventory(next);
-                setShowAddStock(false);
-                setStockForm({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
-            };
+            const handleAddStock = () => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }));
 
             const handleDispense = async (prescription) => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -724,7 +696,7 @@ const AssetMaintenancePanel = () => {
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" icon={Icons.ScanLine} onClick={() => document.getElementById('pharmacy-inventory-search')?.focus()}>Scan / Enter Barcode</Button>
-                            {canManageInventory && <Button variant="primary" icon={Icons.Plus} onClick={() => { setStockMessage(''); setShowAddStock(true); }}>Add Stock</Button>}
+                            {canManageInventory && <Button variant="primary" icon={Icons.Plus} onClick={handleAddStock}>Manage Stock Ledger</Button>}
                         </div>
                     </div>
 
@@ -773,7 +745,7 @@ const AssetMaintenancePanel = () => {
                                                     <p className="text-sm font-medium text-slate-900">{drug.name}</p>
                                                     <p className="text-xs text-slate-500">{drug.category} - Stock: {drug.stockQuantity}</p>
                                                 </div>
-                                                {canManageInventory && <Button variant="ghost" size="sm" icon={Icons.Plus} aria-label="Add stock" onClick={() => { setStockMessage(''); setShowAddStock(true); }} />}
+                                                {canManageInventory && <Button variant="ghost" size="sm" icon={Icons.Plus} aria-label="Add stock" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }))} />}
                                             </div>
                                         ))}
                                     </div>
@@ -798,7 +770,7 @@ const AssetMaintenancePanel = () => {
                                     { key: 'name', title: 'Drug Name' },
                                     { key: 'genericName', title: 'Generic Name' },
                                     { key: 'category', title: 'Category' },
-                                    { key: 'stockQuantity', title: 'Stock', render: (row) => (
+                                    { key: 'stockQuantity', title: 'Ledger stock', render: (row) => !row.ledgerLinked ? <span className="text-amber-800">Not linked to stock ledger</span> : (
                                         <div className="flex items-center gap-2">
                                             <span className={row.stockQuantity < row.reorderLevel ? 'text-red-600 font-medium' : ''}>{row.stockQuantity}</span>
                                             {row.stockQuantity < row.reorderLevel && <Badge variant="danger">Low</Badge>}

@@ -407,45 +407,7 @@ const appData = getAppData();
 
             const filtered = (inventory || []).filter(item => ((item.name || '') + (item.category || '')).toLowerCase().includes(search.toLowerCase()));
 
-            const handleAddItem = async () => {
-                const quantity = Number(itemForm.stockQuantity);
-                const reorder = Number(itemForm.reorderLevel);
-                const price = Number(itemForm.unitPrice);
-                const selectedFormularyItem = formularyItems.find((item) => item.id === itemForm.formularyItemId);
-                if (!selectedFormularyItem) return setMessage('Select an active formulary item.');
-                if (!Number.isInteger(quantity) || quantity < 0 || !Number.isInteger(reorder) || reorder < 0 || !Number.isFinite(price) || price < 0) {
-                    return setMessage('Stock and reorder quantities must be whole numbers, and the unit price cannot be negative.');
-                }
-                const client = window.OneMedSupabase?.getClient?.();
-                if (!client) return setMessage('Supabase is unavailable. No inventory item was saved.');
-                setSaving(true);
-                setMessage('');
-                const payload = {
-                    formulary_item_id: selectedFormularyItem.id,
-                    name: selectedFormularyItem.generic_name,
-                    generic_name: selectedFormularyItem.generic_name,
-                    category: itemForm.category.trim() || null,
-                    stock_quantity: quantity,
-                    reorder_level: reorder,
-                    unit_price: price,
-                    expiry_date: itemForm.expiryDate || null,
-                    batch_number: itemForm.batchNumber.trim() || null,
-                    barcode: itemForm.barcode.trim() || null,
-                    supplier: itemForm.supplier.trim() || null,
-                    location: itemForm.location.trim() || null,
-                    status: quantity <= reorder ? 'low_stock' : 'active'
-                };
-                const { data, error } = await client.from('pharmacy_inventory').insert(payload).select().single();
-                setSaving(false);
-                if (error || !data) return setMessage(error?.message || 'Inventory item could not be saved.');
-                const next = [...inventory, normalizeInventory([data])[0]];
-                appData.pharmacyInventory = next;
-                persistStoreTable('pharmacyInventory', next);
-                setInventory(next);
-                setItemForm({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: '0', reorderLevel: '0', unitPrice: '0', expiryDate: '', batchNumber: '', barcode: '', supplier: '', location: '' });
-                setMessage('');
-                setShowAddItem(false);
-            };
+            const handleAddItem = () => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }));
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">
@@ -454,7 +416,7 @@ const appData = getAppData();
                             <h2 className="text-2xl font-bold text-slate-900">Inventory & Stock Control</h2>
                             <p className="text-slate-500 mt-1">Monitor stock levels, expiry dates, and reorder alerts</p>
                         </div>
-                        {['super_admin', 'pharmacist'].includes(user?.role) && <Button variant="primary" icon={Icons.Plus} onClick={() => { setMessage(''); setShowAddItem(true); }}>Add Item</Button>}
+                        {['super_admin', 'pharmacist'].includes(user?.role) && <Button variant="primary" icon={Icons.Plus} onClick={handleAddItem}>Manage Stock Ledger</Button>}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
