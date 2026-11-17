@@ -247,7 +247,7 @@ const AssetMaintenancePanel = () => {
                         </Card>
                     )}
 
-                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                    <Tabs tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />
 
                     {activeTab === 'flow' && (
                         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -582,6 +582,9 @@ const AssetMaintenancePanel = () => {
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
+            useEffect(() => {
+                if (!canManageCatalogue && activeTab === 'ledger') setActiveTab('invoices');
+            }, [canManageCatalogue, activeTab]);
 
             useEffect(() => {
                 let current = true;
@@ -892,6 +895,9 @@ const AssetMaintenancePanel = () => {
             const [trialBalance, setTrialBalance] = useState([]);
             const [accountingPeriods, setAccountingPeriods] = useState([]);
             const [payableInvoices, setPayableInvoices] = useState([]);
+            const [ledgerAccounts, setLedgerAccounts] = useState([]);
+            const [creditNotes, setCreditNotes] = useState([]);
+            const [adjustmentDraft, setAdjustmentDraft] = useState({ periodId: '', memo: '', debitAccount: '', debit: '', creditAccount: '', credit: '' });
             const [payableDraft, setPayableDraft] = useState({ facilityId: '', supplier: '', invoiceNumber: '', invoiceDate: new Date().toISOString().slice(0, 10), dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), amount: '', currency: 'NGN', description: '' });
             const [periodDraft, setPeriodDraft] = useState(() => {
                 const year = new Date().getFullYear() + 1;
@@ -980,16 +986,28 @@ const AssetMaintenancePanel = () => {
                     client.from('trial_balance_report').select('*').order('period_name').order('account_code'),
                     client.from('accounting_periods').select('*').order('starts_on', { ascending: false }),
                     client.from('accounts_payable_ageing').select('*').order('due_date'),
-                ]).then(([journal, ar, balance, periods, payables]) => {
-                    const error = journal.error || ar.error || balance.error || periods.error || payables.error;
+                    client.from('general_ledger_accounts').select('id,facility_id,account_code,account_name,account_type,status').eq('status', 'active').order('account_code'),
+                ]).then(([journal, ar, balance, periods, payables, accounts]) => {
+                    const error = journal.error || ar.error || balance.error || periods.error || payables.error || accounts.error;
                     if (error) setIntegrationMessage(error.message);
                     else {
                         setLedgerEntries(journal.data || []); setArAgeing(ar.data || []); setTrialBalance(balance.data || []); setAccountingPeriods(periods.data || []); setPayableInvoices(payables.data || []);
+                        setLedgerAccounts(accounts.data || []);
                         setPeriodDraft((draft) => ({ ...draft, facilityId: draft.facilityId || periods.data?.[0]?.facility_id || '' }));
                         setPayableDraft((draft) => ({ ...draft, facilityId: draft.facilityId || periods.data?.[0]?.facility_id || '' }));
+                        setAdjustmentDraft((draft) => ({ ...draft, periodId: draft.periodId || periods.data?.find((period) => period.status === 'open')?.id || '' }));
                     }
                 });
             }, [activeTab]);
+
+            useEffect(() => {
+                if (activeTab !== 'invoices' || !canManageCatalogue) return;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return;
+                client.from('invoice_credit_notes').select('*').order('created_at', { ascending: false })
+                    .then(({ data, error }) => { if (error) setIntegrationMessage(`Credit notes could not be loaded: ${error.message}`); else setCreditNotes(data || []); })
+                    .catch((error) => setIntegrationMessage(`Credit notes could not be loaded: ${error?.message || 'Connection failed.'}`));
+            }, [activeTab, canManageCatalogue]);
 
             useEffect(() => {
                 if (activeTab !== 'refunds') return;
@@ -1089,6 +1107,8 @@ const AssetMaintenancePanel = () => {
                 });
                 if (error) return setIntegrationMessage(error.message);
                 setIntegrationMessage('Credit note issued. The original invoice remains unchanged.');
+                const { data, error: refreshError } = await window.OneMedSupabase.getClient().from('invoice_credit_notes').select('*').order('created_at', { ascending: false });
+                if (!refreshError) setCreditNotes(data || []);
             };
 
             const refreshDisputes = async (successMessage = '') => {
@@ -1186,6 +1206,7 @@ const AssetMaintenancePanel = () => {
                 ,{ id: 'ledger', label: 'General Ledger' }
                 ,{ id: 'catalogue', label: 'Price Catalogue' }
             ];
+            const visibleTabs = canManageCatalogue ? tabs : tabs.filter((tab) => tab.id !== 'ledger');
 
             const createAccountingPeriod = async () => {
                 const { data, error } = await window.OneMedSupabase.getClient().rpc('create_accounting_period', {
@@ -1226,6 +1247,39 @@ const AssetMaintenancePanel = () => {
                 if (error) return setIntegrationMessage(error.message);
                 const { data } = await window.OneMedSupabase.getClient().from('accounts_payable_ageing').select('*').order('due_date');
                 setPayableInvoices(data || []);
+            };
+
+            const postLedgerAdjustment = async (event) => {
+                event.preventDefault();
+                const period = accountingPeriods.find((entry) => entry.id === adjustmentDraft.periodId);
+                if (!period || !adjustmentDraft.memo.trim() || !adjustmentDraft.debitAccount || !adjustmentDraft.creditAccount || Number(adjustmentDraft.debit) <= 0 || Number(adjustmentDraft.credit) <= 0) {
+                    setIntegrationMessage('Choose an open period, enter a memo, and provide positive debit and credit lines.');
+                    return;
+                }
+                if (Number(adjustmentDraft.debit) !== Number(adjustmentDraft.credit)) {
+                    setIntegrationMessage('Ledger adjustment debits and credits must balance.');
+                    return;
+                }
+                const { data, error } = await window.OneMedSupabase.getClient().rpc('post_ledger_adjustment', {
+                    p_facility_id: period.facility_id, p_period_id: period.id, p_memo: adjustmentDraft.memo.trim(),
+                    p_lines: [
+                        { account_code: ledgerAccounts.find((account) => account.id === adjustmentDraft.debitAccount)?.account_code, debit: Number(adjustmentDraft.debit), credit: 0 },
+                        { account_code: ledgerAccounts.find((account) => account.id === adjustmentDraft.creditAccount)?.account_code, debit: 0, credit: Number(adjustmentDraft.credit) }
+                    ]
+                });
+                if (error) {
+                    const closedPeriod = /period.*closed|open accounting period|next open accounting period/i.test(error.message || '');
+                    setIntegrationMessage(closedPeriod ? `Posting rejected by accounting-period controls: ${error.message}` : error.message);
+                    return;
+                }
+                setIntegrationMessage(`Balanced ledger adjustment posted (${data}).`);
+                setAdjustmentDraft((draft) => ({ ...draft, memo: '', debit: '', credit: '' }));
+                const [journal, balance] = await Promise.all([
+                    window.OneMedSupabase.getClient().from('journal_entries').select('id,source_type,source_id,event_type,memo,amount,posted_at,journal_lines(debit,credit,account:general_ledger_accounts(account_code,account_name))').order('posted_at', { ascending: false }),
+                    window.OneMedSupabase.getClient().from('trial_balance_report').select('*').order('period_name').order('account_code')
+                ]);
+                if (!journal.error) setLedgerEntries(journal.data || []);
+                if (!balance.error) setTrialBalance(balance.data || []);
             };
 
             const createInsuranceMembership = async () => {
@@ -1439,6 +1493,16 @@ const AssetMaintenancePanel = () => {
                             />
                         </Card>
                     )}
+                    {activeTab === 'invoices' && canManageCatalogue && <Card title="Issued credit notes" subtitle="Credit notes are append-only and leave the original invoice snapshot unchanged.">
+                        <DataTable columns={[
+                            { key: 'original_invoice_number', title: 'Original invoice' },
+                            { key: 'amount', title: 'Credit amount', render: (row) => formatCurrency(row.amount) },
+                            { key: 'reason', title: 'Reason' },
+                            { key: 'created_at', title: 'Issued', render: (row) => formatDateTime(row.created_at) },
+                            { key: 'id', title: 'Credit note ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> }
+                        ]} data={creditNotes} />
+                        {!creditNotes.length && <p className="mt-3 text-sm text-slate-500">No credit notes have been issued.</p>}
+                    </Card>}
 
                     {activeTab === 'catalogue' && <div className="space-y-6">
                         {chargeMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{chargeMessage}</p>}
@@ -1464,12 +1528,12 @@ const AssetMaintenancePanel = () => {
                             </div>
                             <Button className="mt-4" variant="primary" onClick={createCatalogueInvoice}>Create catalogue invoice</Button>
                         </Card>
-                        <Card title="Facility price catalogue and history"><DataTable columns={[
+                        {canManageCatalogue && <Card title="Facility price catalogue and history"><DataTable columns={[
                             { key: 'code', title: 'Code' }, { key: 'name', title: 'Service / charge' }, { key: 'department', title: 'Department' },
                             { key: 'facility_id', title: 'Facility', render: (row) => chargeFacilities.find((facility) => facility.id === row.facility_id)?.name || row.facility_id },
                             { key: 'prices', title: 'Price history', render: (row) => (row.service_charge_prices || []).sort((a, b) => b.effective_from.localeCompare(a.effective_from)).map((price) => `${formatCurrency(price.price)} · ${price.status} · ${price.effective_from}${price.effective_to ? ` to ${price.effective_to}` : ''}`).join(' | ') || 'No prices' },
-                            { key: 'approval', title: 'Approval', render: (row) => canManageCatalogue ? (row.service_charge_prices || []).filter((price) => price.status === 'pending').map((price) => <Button key={price.id} size="sm" variant="primary" onClick={() => approveChargePrice(price.id)}>Approve pending price</Button>) : null }
-                        ]} data={chargeCatalogue} actions={(row) => canManageCatalogue && row.active ? <Button size="sm" variant="danger" onClick={() => retireChargeItem(row.id)}>Retire</Button> : row.active ? null : <Badge variant="default">Retired</Badge>} /></Card>
+                            { key: 'approval', title: 'Approval', render: (row) => canManageCatalogue ? (row.service_charge_prices || []).filter((price) => price.status === 'pending').map((price) => price.requested_by === user?.id ? <span key={price.id} className="text-xs text-amber-800">Awaiting a different finance reviewer</span> : <Button key={price.id} size="sm" variant="primary" onClick={() => approveChargePrice(price.id)}>Approve pending price</Button>) : null }
+                        ]} data={chargeCatalogue} actions={(row) => row.active ? <Button size="sm" variant="danger" onClick={() => retireChargeItem(row.id)}>Retire</Button> : <Badge variant="default">Retired</Badge>} /></Card>}
                     </div>}
 
                     {activeTab === 'payments' && (
@@ -1625,7 +1689,7 @@ const AssetMaintenancePanel = () => {
                         </div>
                     )}
 
-                    {activeTab === 'ledger' && <div className="space-y-4">
+                    {activeTab === 'ledger' && canManageCatalogue && <div className="space-y-4">
                         {integrationMessage && <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{integrationMessage}</p>}
                         <Card title="Accounting periods" subtitle="Closed periods reject all new journal entries. Record corrections in an open period after the closed period.">
                             <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -1640,6 +1704,17 @@ const AssetMaintenancePanel = () => {
                                 { key: 'starts_on', title: 'Starts' }, { key: 'ends_on', title: 'Ends' }, { key: 'status', title: 'Status' },
                                 { key: 'close', title: 'Action', render: (row) => row.status === 'open' ? <Button size="sm" variant="secondary" onClick={() => closeAccountingPeriod(row)}>Close period</Button> : 'Closed' }
                             ]} data={accountingPeriods} />
+                        </Card>
+                        <Card title="Post balanced ledger adjustment" subtitle="Adjustments can only post to the next open accounting period. Closed-period entries are rejected by the database.">
+                            <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={postLedgerAdjustment}>
+                                <Select label="Accounting period" value={adjustmentDraft.periodId} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, periodId: event.target.value })} options={[{ value: '', label: 'Select an open period' }, ...accountingPeriods.filter((period) => period.status === 'open').map((period) => ({ value: period.id, label: `${period.period_name} · ${period.starts_on} to ${period.ends_on}` }))]} />
+                                <Input label="Adjustment memo" value={adjustmentDraft.memo} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, memo: event.target.value })} />
+                                <Select label="Debit account" value={adjustmentDraft.debitAccount} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, debitAccount: event.target.value })} options={[{ value: '', label: 'Select account' }, ...ledgerAccounts.filter((account) => accountingPeriods.find((period) => period.id === adjustmentDraft.periodId)?.facility_id === account.facility_id).map((account) => ({ value: account.id, label: `${account.account_code} · ${account.account_name}` }))]} />
+                                <Input label="Debit amount (NGN)" type="number" min="0.01" step="0.01" value={adjustmentDraft.debit} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, debit: event.target.value })} />
+                                <Select label="Credit account" value={adjustmentDraft.creditAccount} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, creditAccount: event.target.value })} options={[{ value: '', label: 'Select account' }, ...ledgerAccounts.filter((account) => accountingPeriods.find((period) => period.id === adjustmentDraft.periodId)?.facility_id === account.facility_id).map((account) => ({ value: account.id, label: `${account.account_code} · ${account.account_name}` }))]} />
+                                <Input label="Credit amount (NGN)" type="number" min="0.01" step="0.01" value={adjustmentDraft.credit} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, credit: event.target.value })} />
+                                <Button className="self-end" type="submit" variant="primary">Post adjustment</Button>
+                            </form>
                         </Card>
                         <Card title="Accounts receivable ageing" subtitle="Open invoice balances by days since invoice date.">
                             <DataTable columns={[

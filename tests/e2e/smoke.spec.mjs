@@ -241,6 +241,7 @@ test('login enforces MFA enrollment and service price changes require a second a
   await page.getByLabel('Price').fill('12.34');
   await page.getByRole('button', { name: 'Submit price for approval' }).click();
   await expect(page.getByText(/Price request submitted/)).toBeVisible();
+  await expect(page.getByText('Awaiting a different finance reviewer')).toBeVisible();
 
   const approverContext = await browser.newContext();
   const approverPage = await approverContext.newPage();
