@@ -18,6 +18,9 @@ export async function verifyPaystackSignature(rawBody: string, headers: Headers,
       for (const signature of signatures) if (await constantTimeEqual(signature.toLowerCase(), expected)) return true;
     }
   }
+  // If Paystack sent the modern timestamped header, never downgrade an invalid
+  // or stale event to the legacy untimestamped scheme.
+  if (modern) return false;
   const legacy = headers.get('x-paystack-signature');
   if (legacy && apiSecret) {
     const expected = hex(await hmac(apiSecret, 'SHA-512', new TextEncoder().encode(rawBody)));
@@ -28,8 +31,10 @@ export async function verifyPaystackSignature(rawBody: string, headers: Headers,
 
 export async function verifyFlutterwaveSignature(rawBody: string, headers: Headers, secretHash: string | undefined, scheme: string | undefined) {
   if (!secretHash) return false;
-  if ((scheme ?? 'v3') === 'v3') return constantTimeEqual(headers.get('verif-hash') ?? '', secretHash);
-  if (scheme === 'hmac-sha256-base64') {
+  // Flutterwave's versioned v4 webhook docs specify HMAC-SHA256/Base64. Prefer
+  // it by default; v3 accounts can opt into the documented verif-hash contract.
+  if (scheme === 'v3') return constantTimeEqual(headers.get('verif-hash') ?? '', secretHash);
+  if (scheme === undefined || scheme === 'v4' || scheme === 'hmac-sha256-base64') {
     const signature = headers.get('flutterwave-signature') ?? '';
     const encoded = btoa(String.fromCharCode(...new Uint8Array(await hmac(secretHash, 'SHA-256', new TextEncoder().encode(rawBody)))));
     return constantTimeEqual(signature, encoded);

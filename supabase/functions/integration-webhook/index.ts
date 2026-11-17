@@ -36,7 +36,7 @@ async function handleVendorGatewayWebhook(connectionId: string, providerCode: st
     signatureValid = await verifyPaystackSignature(body, headers, token, signingSecrets);
   } else {
     const secretHash = Deno.env.get(`MEDICORE_FLUTTERWAVE_WEBHOOK_SECRET_${suffix}`);
-    const scheme = Deno.env.get(`MEDICORE_FLUTTERWAVE_WEBHOOK_SCHEME_${suffix}`) ?? 'v3';
+    const scheme = Deno.env.get(`MEDICORE_FLUTTERWAVE_WEBHOOK_SCHEME_${suffix}`) ?? 'v4';
     signatureValid = await verifyFlutterwaveSignature(body, headers, secretHash, scheme);
   }
   if (!signatureValid) return new Response('Invalid provider signature', { status: 401 });

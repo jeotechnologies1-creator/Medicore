@@ -43,16 +43,49 @@ Deno.test('Paystack verifier checks provider amount, currency, and reference bef
   if (!verified.succeeded || verified.providerTransactionId !== '999') throw new Error('Paystack transaction verification failed');
 });
 
-Deno.test('vendor signatures follow Paystack timestamped and legacy schemes and Flutterwave configured schemes', async () => {
-  const body = '{"event":"charge.success"}';
-  const secret = 'whsec_fixture_secret';
-  const timestamp = String(Math.floor(Date.now() / 1000));
+Deno.test('Paystack recorded sandbox fixture validates and rejects tampered, replayed, stale and downgraded requests', async () => {
+  const recorded = await fixture('paystack_charge_success.json');
+  const body = JSON.stringify(recorded);
+  const secret = 'whsec_test_fixture_only';
+  const now = 1_800_000_000;
+  const timestamp = String(now);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
   const signature = [...new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))].map((value) => value.toString(16).padStart(2, '0')).join('');
-  if (!await verifyPaystackSignature(body, new Headers({ 'Paystack-Signature': `t=${timestamp},v1=whk_fixture:${signature}` }), undefined, [secret])) throw new Error('Paystack timestamped signature rejected');
-  const flwKey = await crypto.subtle.importKey('raw', new TextEncoder().encode('flw_fixture'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', flwKey, new TextEncoder().encode(body)));
-  const signatureBase64 = btoa(Array.from(digest, (value) => String.fromCharCode(value)).join(''));
-  if (!await verifyFlutterwaveSignature(body, new Headers({ 'flutterwave-signature': signatureBase64 }), 'flw_fixture', 'hmac-sha256-base64')) throw new Error('Flutterwave HMAC signature rejected');
-  if (!await verifyFlutterwaveSignature(body, new Headers({ 'verif-hash': 'flw_fixture' }), 'flw_fixture', 'v3')) throw new Error('Flutterwave v3 verif-hash rejected');
+  const headers = new Headers({ 'Paystack-Signature': `t=${timestamp},v1=whk_test_fixture:${signature}` });
+  if (!await verifyPaystackSignature(body, headers, undefined, [secret], now)) throw new Error('Paystack timestamped sandbox fixture rejected');
+  if (!await verifyPaystackSignature(body, headers, undefined, [secret], now)) throw new Error('Byte-identical Paystack retry should authenticate and be deduplicated by event ID');
+  if (await verifyPaystackSignature(`${body} `, headers, undefined, [secret], now)) throw new Error('Tampered Paystack body accepted');
+  if (await verifyPaystackSignature(body, headers, undefined, [secret], now + 301)) throw new Error('Replayed/stale Paystack timestamp accepted');
+  const legacyKey = await crypto.subtle.importKey('raw', new TextEncoder().encode('sk_test_legacy_fixture'), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
+  const legacy = [...new Uint8Array(await crypto.subtle.sign('HMAC', legacyKey, new TextEncoder().encode(body)))].map((value) => value.toString(16).padStart(2, '0')).join('');
+  if (await verifyPaystackSignature(body, new Headers({ 'Paystack-Signature': `t=${now - 301},v1=whk_test_fixture:${signature}`, 'x-paystack-signature': legacy }), 'sk_test_legacy_fixture', [secret], now)) throw new Error('Stale modern signature downgraded to legacy signature');
+  const normalized = normalizeGatewayWebhook('paystack', recorded);
+  if (!normalized || normalized.eventId !== normalizeGatewayWebhook('paystack', recorded)?.eventId) throw new Error('Paystack replay did not preserve a stable idempotency key');
+});
+
+Deno.test('Flutterwave recorded sandbox fixture validates HMAC and rejects tampering; legacy v3 is explicit', async () => {
+  const recorded = await fixture('flutterwave_charge_completed.json');
+  const body = JSON.stringify(recorded);
+  const secret = 'flw_test_fixture_only';
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)));
+  const signature = btoa(Array.from(digest, (value) => String.fromCharCode(value)).join(''));
+  const headers = new Headers({ 'flutterwave-signature': signature });
+  if (!await verifyFlutterwaveSignature(body, headers, secret, undefined)) throw new Error('Preferred Flutterwave HMAC signature rejected');
+  if (!await verifyFlutterwaveSignature(body, headers, secret, undefined)) throw new Error('Byte-identical Flutterwave retry should authenticate and be deduplicated by event ID');
+  if (await verifyFlutterwaveSignature(`${body} `, headers, secret, undefined)) throw new Error('Tampered Flutterwave body accepted');
+  if (!await verifyFlutterwaveSignature(body, new Headers({ 'verif-hash': secret }), secret, 'v3')) throw new Error('Explicit Flutterwave v3 verif-hash rejected');
+  if (await verifyFlutterwaveSignature(body, new Headers({ 'verif-hash': secret }), secret, undefined)) throw new Error('Legacy Flutterwave scheme accepted without explicit configuration');
+  const normalized = normalizeGatewayWebhook('flutterwave', recorded);
+  if (!normalized || normalized.eventId !== normalizeGatewayWebhook('flutterwave', recorded)?.eventId) throw new Error('Flutterwave replay did not preserve a stable idempotency key');
+});
+
+Deno.test('recorded test-mode refund and dispute fixtures retain stable vendor event IDs', async () => {
+  const [paystackRefund, flutterwaveDispute] = await Promise.all([
+    fixture('paystack_refund_processed.json'), fixture('flutterwave_chargeback_initiated.json'),
+  ]);
+  const refund = normalizeGatewayWebhook('paystack', paystackRefund);
+  const dispute = normalizeGatewayWebhook('flutterwave', flutterwaveDispute);
+  if (refund?.kind !== 'refund' || refund.eventId !== 'refund.processed:700000001') throw new Error('Paystack refund fixture did not normalize idempotently');
+  if (dispute?.kind !== 'dispute_opened' || dispute.eventId !== 'chargeback.initiated:600000001') throw new Error('Flutterwave dispute fixture did not normalize idempotently');
 });
