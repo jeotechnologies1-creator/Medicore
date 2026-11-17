@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue } from '../store.js';
 
         // ==========================================
         // AUDIT LOGS MODULE
@@ -8,29 +7,29 @@ const appData = getAppData();
             const [filterSeverity, setFilterSeverity] = useState('all');
             const [selectedAuditLog, setSelectedAuditLog] = useState(null);
 
-            const filteredLogs = appData.auditLogs.filter(log =>
+            const filteredLogs = getStoreValue("auditLogs").filter(log =>
                 filterSeverity === 'all' || log.severity === filterSeverity
             );
 
             const governanceSummary = {
-                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length || 0),
-                pendingReviews: (appData.auditLogs || []).filter((log) => ['warning', 'critical'].includes(log.severity)).length + (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length,
+                criticalIncidents: filteredLogs.filter((log) => log.severity === 'critical').length + ((getStoreValue("clinicalAlerts") || []).filter(item => item.severity === 'critical').length || 0),
+                pendingReviews: (getStoreValue("auditLogs") || []).filter((log) => ['warning', 'critical'].includes(log.severity)).length + (getStoreValue("clinicalAlerts") || []).filter(alert => alert.status === 'open').length,
                 complianceRate: (() => {
                     const checks = [
-                        (appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0,
-                        (appData.labOrders || []).some(item => item.status === 'critical') === false,
-                        (appData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge'))
+                        (getStoreValue("allergies") || []).length > 0 && (getStoreValue("medicationOrders") || []).length > 0,
+                        (getStoreValue("labOrders") || []).some(item => item.status === 'critical') === false,
+                        (getStoreValue("documents") || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge'))
                     ].filter(Boolean).length;
                     const base = checks === 0 ? 0 : Math.round((checks / 3) * 100);
                     return Math.min(100, base || 0);
                 })(),
-                escalationQueue: (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').length
+                escalationQueue: (getStoreValue("clinicalAlerts") || []).filter(alert => alert.status === 'open').length
             };
 
-            const incidentQueue = (appData.auditLogs || []).slice(0, 4).map((log) => ({
+            const incidentQueue = (getStoreValue("auditLogs") || []).slice(0, 4).map((log) => ({
                 id: log.id || 'LOG-' + Date.now(),
-                patient: (appData.patients || []).find(patient => patient.id === log.entityId)?.firstName && (appData.patients || []).find(patient => patient.id === log.entityId)?.lastName
-                    ? `${(appData.patients || []).find(patient => patient.id === log.entityId).firstName} ${(appData.patients || []).find(patient => patient.id === log.entityId).lastName}`
+                patient: (getStoreValue("patients") || []).find(patient => patient.id === log.entityId)?.firstName && (getStoreValue("patients") || []).find(patient => patient.id === log.entityId)?.lastName
+                    ? `${(getStoreValue("patients") || []).find(patient => patient.id === log.entityId).firstName} ${(getStoreValue("patients") || []).find(patient => patient.id === log.entityId).lastName}`
                     : 'Unassigned patient',
                 area: log.entityType || 'System event',
                 issue: log.action || 'Record reviewed',
@@ -42,30 +41,30 @@ const appData = getAppData();
             const complianceChecks = [
                 {
                     title: 'Medication allergy verification',
-                    status: ((appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0) ? 'pass' : 'review',
+                    status: ((getStoreValue("allergies") || []).length > 0 && (getStoreValue("medicationOrders") || []).length > 0) ? 'pass' : 'review',
                     owner: 'Clinical safety',
                     nextAction: 'Review active medication orders against the allergy list.',
                     sla: 'within 24h'
                 },
                 {
                     title: 'Critical lab result acknowledgment',
-                    status: (appData.labOrders || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
+                    status: (getStoreValue("labOrders") || []).some(item => item.status === 'critical') ? 'escalate' : 'pass',
                     owner: 'Laboratory',
                     nextAction: 'Confirm timely acknowledgment and escalation for any critical findings.',
                     sla: 'within 30 min'
                 },
                 {
                     title: 'Consent and discharge documentation',
-                    status: (appData.documents || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
+                    status: (getStoreValue("documents") || []).some(item => item.documentType && item.documentType.toLowerCase().includes('discharge')) ? 'pass' : 'review',
                     owner: 'Clinical records',
                     nextAction: 'Ensure discharge summaries capture patient instructions and consent milestones.',
                     sla: 'within 4h'
                 }
             ];
-            const escalationQueue = (appData.clinicalAlerts || []).filter(alert => alert.status === 'open').slice(0, 3).map((alert) => ({
+            const escalationQueue = (getStoreValue("clinicalAlerts") || []).filter(alert => alert.status === 'open').slice(0, 3).map((alert) => ({
                 id: alert.id || 'ALERT-' + Date.now(),
-                patient: (appData.patients || []).find(patient => patient.id === alert.patientId)
-                    ? `${(appData.patients || []).find(patient => patient.id === alert.patientId).firstName} ${(appData.patients || []).find(patient => patient.id === alert.patientId).lastName}`
+                patient: (getStoreValue("patients") || []).find(patient => patient.id === alert.patientId)
+                    ? `${(getStoreValue("patients") || []).find(patient => patient.id === alert.patientId).firstName} ${(getStoreValue("patients") || []).find(patient => patient.id === alert.patientId).lastName}`
                     : 'Unassigned patient',
                 area: alert.alertType || 'Clinical alert',
                 due: alert.severity === 'critical' ? 'Immediate' : 'Review',
@@ -177,7 +176,7 @@ const appData = getAppData();
                             columns={[
                                 { key: 'timestamp', title: 'Timestamp', render: (row) => formatDateTime(row.timestamp), className: 'whitespace-nowrap' },
                                 { key: 'user', title: 'User', render: (row) => {
-                                    const user = appData.users.find(u => u.id === row.userId);
+                                    const user = getStoreValue("users").find(u => u.id === row.userId);
                                     return user ? (
                                         <div className="flex items-center gap-2">
                                             <Avatar name={user.name} size="sm" />
@@ -220,23 +219,23 @@ const appData = getAppData();
             const [exportMessage, setExportMessage] = useState('');
             const [exporting, setExporting] = useState(false);
             const [documentMessage, setDocumentMessage] = useState('');
-            const documents = appData.documents || [];
+            const documents = getStoreValue("documents") || [];
             const files = documents.map((document) => ({
                 id: document.id,
                 name: document.fileName || 'Unnamed document',
                 category: document.documentType || 'Clinical document',
                 patient: (() => {
-                    const patient = (appData.patients || []).find((item) => item.id === document.patientId);
+                    const patient = (getStoreValue("patients") || []).find((item) => item.id === document.patientId);
                     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unassigned patient';
                 })(),
                 updated: document.createdAt || document.uploadedAt,
                 status: 'Stored'
             }));
-            const openAlerts = (appData.clinicalAlerts || []).filter((item) => item.status === 'open');
-            const reviewRecords = (appData.auditLogs || []).filter((item) => ['warning', 'critical'].includes(item.severity));
+            const openAlerts = (getStoreValue("clinicalAlerts") || []).filter((item) => item.status === 'open');
+            const reviewRecords = (getStoreValue("auditLogs") || []).filter((item) => ['warning', 'critical'].includes(item.severity));
             const complianceChecks = [
-                (appData.allergies || []).length > 0 && (appData.medicationOrders || []).length > 0,
-                !(appData.labOrders || []).some((item) => item.status === 'critical'),
+                (getStoreValue("allergies") || []).length > 0 && (getStoreValue("medicationOrders") || []).length > 0,
+                !(getStoreValue("labOrders") || []).some((item) => item.status === 'critical'),
                 documents.some((item) => String(item.documentType || '').toLowerCase().includes('discharge'))
             ];
             const complianceRate = Math.round((complianceChecks.filter(Boolean).length / complianceChecks.length) * 100);
@@ -251,9 +250,9 @@ const appData = getAppData();
             };
 
             const automationSummary = [
-                { label: 'High-risk events', value: (appData.clinicalAlerts || []).filter(item => item.severity === 'critical').length },
-                { label: 'Open incidents', value: (appData.clinicalAlerts || []).filter(item => item.status === 'open').length },
-                { label: 'Records to review', value: Math.max(0, (appData.auditLogs || []).length) },
+                { label: 'High-risk events', value: (getStoreValue("clinicalAlerts") || []).filter(item => item.severity === 'critical').length },
+                { label: 'Open incidents', value: (getStoreValue("clinicalAlerts") || []).filter(item => item.status === 'open').length },
+                { label: 'Records to review', value: Math.max(0, (getStoreValue("auditLogs") || []).length) },
                 { label: 'Retention coverage', value: '—' }
             ];
 
@@ -262,7 +261,7 @@ const appData = getAppData();
                     setExportMessage('FHIR export requires the super administrator role because export records are restricted by the current database policy.');
                     return;
                 }
-                const patient = (appData.patients || []).find((item) => item.id === exportPatientId);
+                const patient = (getStoreValue("patients") || []).find((item) => item.id === exportPatientId);
                 if (!patient || exporting) return;
                 setExporting(true);
                 setExportMessage('');
@@ -283,30 +282,30 @@ const appData = getAppData();
                     address: patient.address ? [{ text: patient.address }] : undefined
                 };
                 add(patientResource);
-                (appData.encounters || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("encounters") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'Encounter', id: String(row.id), status: ({ planned: 'planned', arrived: 'arrived', in_progress: 'in-progress', 'in-progress': 'in-progress', onleave: 'onleave', finished: 'finished', completed: 'finished', cancelled: 'cancelled', 'entered-in-error': 'entered-in-error' })[row.status] || 'unknown',
                     class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: ({ outpatient: 'AMB', emergency: 'EMER', inpatient: 'IMP' })[row.encounterType] || 'AMB', display: row.encounterType || 'outpatient' },
                     subject: patientRef, period: { start: row.startedAt || undefined, end: row.endedAt || undefined },
                     reasonCode: row.reasonForVisit ? [{ text: row.reasonForVisit }] : undefined
                 }));
-                (appData.allergies || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("allergies") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'AllergyIntolerance', id: String(row.id), patient: patientRef,
                     clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical', code: ['active', 'inactive', 'resolved'].includes(row.clinicalStatus) ? row.clinicalStatus : 'active' }] },
                     code: { text: row.substance || 'Unspecified substance' }, category: ['food', 'medication', 'environment', 'biologic'].includes(row.category) ? [row.category] : undefined,
                     criticality: ['low', 'high', 'unable-to-assess'].includes(row.criticality) ? row.criticality : 'unable-to-assess',
                     reaction: row.reaction ? [{ manifestation: [{ text: row.reaction }], severity: ({ mild: 'mild', moderate: 'moderate', severe: 'severe' })[String(row.severity || '').toLowerCase()] }] : undefined
                 }));
-                (appData.conditions || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("conditions") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'Condition', id: String(row.id), subject: patientRef,
                     clinicalStatus: { text: row.clinicalStatus || 'active' }, verificationStatus: { text: row.verificationStatus || 'provisional' },
                     code: { text: row.conditionName || 'Unspecified condition' }, onsetDateTime: row.onsetDate || undefined, note: row.notes ? [{ text: row.notes }] : undefined
                 }));
-                (appData.medicationOrders || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("medicationOrders") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'MedicationRequest', id: String(row.id), status: ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft', 'unknown'].includes(row.status) ? row.status : 'unknown',
                     intent: 'order', medicationCodeableConcept: { text: row.medicationName || 'Unspecified medication' }, subject: patientRef,
                     dosageInstruction: [{ text: [row.dose, row.doseUnit, row.route, row.frequency].filter(Boolean).join(' ') }], reasonCode: row.indication ? [{ text: row.indication }] : undefined
                 }));
-                (appData.vitals || []).filter((row) => row.patientId === patient.id).forEach((row) => {
+                (getStoreValue("vitals") || []).filter((row) => row.patientId === patient.id).forEach((row) => {
                     const measurements = [
                         ['temperature', row.temperature, 'Cel', '°C'], ['heart-rate', row.heartRate, '/min', 'beats/minute'],
                         ['respiratory-rate', row.respiratoryRate, '/min', 'breaths/minute'], ['oxygen-saturation', row.oxygenSaturation, '%', '%'],
@@ -324,11 +323,11 @@ const appData = getAppData();
                             component: [{ code: { text: 'systolic blood pressure' }, valueQuantity: { value: Number(row.bloodPressureSystolic), unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' } }, { code: { text: 'diastolic blood pressure' }, valueQuantity: { value: Number(row.bloodPressureDiastolic), unit: 'mmHg', system: 'http://unitsofmeasure.org', code: 'mm[Hg]' } }] });
                     }
                 });
-                (appData.immunizations || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("immunizations") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'Immunization', id: String(row.id), status: ({ administered: 'completed', completed: 'completed', 'entered-in-error': 'entered-in-error', 'not-done': 'not-done' })[row.status] || 'not-done', vaccineCode: { text: row.vaccine || 'Unspecified vaccine' }, patient: patientRef,
                     occurrenceDateTime: row.administeredDate || undefined, note: row.notes ? [{ text: row.notes }] : undefined
                 }));
-                (appData.carePlans || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
+                (getStoreValue("carePlans") || []).filter((row) => row.patientId === patient.id).forEach((row) => add({
                     resourceType: 'CarePlan', id: String(row.id), status: ['draft', 'active', 'on-hold', 'revoked', 'completed', 'entered-in-error', 'unknown'].includes(row.status) ? row.status : 'unknown',
                     intent: 'plan', subject: patientRef, title: row.title || 'Care plan', description: row.description || undefined, period: { end: row.targetDate || undefined }
                 }));
@@ -380,7 +379,7 @@ const appData = getAppData();
                     {user?.role === 'super_admin' ? <Card title="FHIR R4 patient export">
                         <p className="mb-4 text-sm text-slate-600">Download a patient scoped FHIR R4 collection Bundle containing available demographics, encounters, allergies, problems, medication orders, observations, immunizations, and care plans. Export is recorded before the file is created.</p>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                            <div className="flex-1"><Select label="Patient" value={exportPatientId} onChange={(event) => { setExportPatientId(event.target.value); setExportMessage(''); }} options={[{ value: '', label: 'Select a patient…' }, ...(appData.patients || []).map((item) => ({ value: item.id, label: `${item.patientNumber || item.id} — ${item.firstName || ''} ${item.lastName || ''}`.trim() }))]} /></div>
+                            <div className="flex-1"><Select label="Patient" value={exportPatientId} onChange={(event) => { setExportPatientId(event.target.value); setExportMessage(''); }} options={[{ value: '', label: 'Select a patient…' }, ...(getStoreValue("patients") || []).map((item) => ({ value: item.id, label: `${item.patientNumber || item.id} — ${item.firstName || ''} ${item.lastName || ''}`.trim() }))]} /></div>
                             <Button variant="primary" icon={Icons.Download} disabled={!exportPatientId || exporting} onClick={exportPatientBundle}>{exporting ? 'Preparing export…' : 'Download FHIR Bundle'}</Button>
                         </div>
                         {exportMessage && <p className="mt-3 text-sm text-slate-700" role="status">{exportMessage}</p>}
@@ -696,7 +695,7 @@ const appData = getAppData();
                 return normalizeMatrixRows([...savedRows, ...missingDefaultRoles]);
             };
 
-            const initialDepartments = (appData.wards || []).filter((ward) => ward?.id && ward?.name).map((ward) => ({
+            const initialDepartments = (getStoreValue("wards") || []).filter((ward) => ward?.id && ward?.name).map((ward) => ({
                 id: ward.id,
                 name: ward.name,
                 type: ward.type || 'Ward',
@@ -922,7 +921,7 @@ const appData = getAppData();
                     return;
                 }
                 const headers = ['timestamp', 'userId', 'action', 'entityType', 'severity', 'ipAddress'];
-                const rows = appData.auditLogs.map((log) => [
+                const rows = getStoreValue("auditLogs").map((log) => [
                     log.timestamp,
                     log.userId,
                     log.action,
@@ -1372,7 +1371,7 @@ const appData = getAppData();
             const [loadError, setLoadError] = useState('');
             const client = window.OneMedSupabase?.getClient?.();
             const isAdmin = user?.role === 'super_admin';
-            const staff = (appData.users || []).filter((person) => person.status === 'active' && person.role !== 'patient');
+            const staff = (getStoreValue("users") || []).filter((person) => person.status === 'active' && person.role !== 'patient');
 
             const refresh = async () => {
                 if (!client) return setLoadError('Supabase is not configured. Connect the database to manage the organization chart.');

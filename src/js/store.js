@@ -34,7 +34,7 @@ const initialData = {
     medicationReconciliations: []
 };
 
-const appData = new Proxy(initialData, {
+const store = new Proxy(initialData, {
     get(target, property) {
         if (!(property in target)) target[property] = [];
         return target[property];
@@ -45,4 +45,9 @@ const appData = new Proxy(initialData, {
     }
 });
 
-export const getAppData = () => appData;
+export const getStoreValue = (key) => store[key];
+export const setStoreValue = (key, value) => {
+    store[key] = value;
+    return value;
+};
+export const setStoreValues = (values) => Object.assign(store, values);

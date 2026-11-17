@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from '../store.js';
 
         // MAIN APP LAYOUT
         // ==========================================
@@ -141,7 +140,7 @@ const appData = getAppData();
             const [staffForm, setStaffForm] = useState({ fullName: '', email: '', role: 'doctor', department: '' });
             const [staffMessage, setStaffMessage] = useState('');
             const [creatingStaff, setCreatingStaff] = useState(false);
-            const staff = (appData.users || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'super_admin'].includes(person.role));
+            const staff = (getStoreValue("users") || []).filter((person) => person && ['doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'super_admin'].includes(person.role));
             const activeStaff = staff.filter((person) => person.status === 'active').length;
             const attendanceRate = staff.length ? Math.round((activeStaff / staff.length) * 100) : 0;
             const departments = Array.from(new Set(staff.map((person) => person.department || 'General').filter(Boolean)));
@@ -177,7 +176,7 @@ const appData = getAppData();
                     });
                     if (error) throw new Error(await getEdgeFunctionErrorMessage(error, 'create-staff'));
                     if (!data?.staff) throw new Error(data?.error || 'The function returned no staff profile. Check the create-staff Edge Function logs.');
-                    appData.users = [...(appData.users || []), normalizeUsers([data.staff])[0]];
+                    setStoreValue("users", [...(getStoreValue("users") || []), normalizeUsers([data.staff])[0]]);
                     setStaffForm({ fullName: '', email: '', role: 'doctor', department: '' });
                     setStaffMessage(`Invitation sent to ${data.staff.email}. They can set their password using the email link.`);
                 } catch (error) {
@@ -379,17 +378,17 @@ const appData = getAppData();
             const [patientPortalMessage, setPatientPortalMessage] = useState('');
             const [creatingPatientPortal, setCreatingPatientPortal] = useState(false);
 
-            const offices = appData.offices || [];
-            const experts = (appData.users || []).filter((person) => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(person.role) || person.role.includes('doctor') || person.role.includes('nurse'));
+            const offices = getStoreValue("offices") || [];
+            const experts = (getStoreValue("users") || []).filter((person) => ['doctor', 'nurse', 'laboratory_scientist', 'pharmacist', 'radiographer', 'surgeon'].includes(person.role) || person.role.includes('doctor') || person.role.includes('nurse'));
             const activeOffices = offices.filter((office) => office.status === 'active').length;
             const totalSpecialties = new Set(offices.map((office) => office.specialty).filter(Boolean)).size;
             const occupancyLoad = offices.length ? Math.round((offices.filter((office) => office.status === 'active').length / Math.max(1, offices.length)) * 100) : 0;
             const today = formatFacilityDate();
             const serviceLoad = [
-                { label: 'Today\'s appointments', value: (appData.appointments || []).filter((item) => item.date === today).length, color: 'medical' },
-                { label: 'Emergency appointments', value: (appData.appointments || []).filter((item) => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length, color: 'red' },
-                { label: 'Pending lab orders', value: (appData.labOrders || []).filter((item) => item.status !== 'completed').length, color: 'amber' },
-                { label: 'Active admissions', value: (appData.admissions || []).filter((item) => item.status === 'active').length, color: 'emerald' }
+                { label: 'Today\'s appointments', value: (getStoreValue("appointments") || []).filter((item) => item.date === today).length, color: 'medical' },
+                { label: 'Emergency appointments', value: (getStoreValue("appointments") || []).filter((item) => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length, color: 'red' },
+                { label: 'Pending lab orders', value: (getStoreValue("labOrders") || []).filter((item) => item.status !== 'completed').length, color: 'amber' },
+                { label: 'Active admissions', value: (getStoreValue("admissions") || []).filter((item) => item.status === 'active').length, color: 'emerald' }
             ];
 
             const handleCreateOffice = async () => {
@@ -425,7 +424,7 @@ const appData = getAppData();
                     if (error) throw error;
 
                     const newOffice = normalizeOffices(data || [])[0];
-                    appData.offices = [...offices, newOffice];
+                    setStoreValue("offices", [...offices, newOffice]);
 
                     if (officeForm.headDoctorId) {
                         const { error: officeStaffError } = await client.from('office_staff').insert([{
@@ -526,7 +525,7 @@ const appData = getAppData();
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {user?.role === 'super_admin' && <Card title="Create Patient Portal Account">
                             <div className="space-y-4">
-                                <Select label="Patient record" value={patientPortalForm.patientId} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(appData.patients || []).map(patient => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />
+                                <Select label="Patient record" value={patientPortalForm.patientId} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(patient => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName} · ${patient.patientNumber || patient.id}` }))]} />
                                 <Input label="Patient email" type="email" value={patientPortalForm.email} onChange={(e) => setPatientPortalForm(prev => ({ ...prev, email: e.target.value }))} />
                                 {patientPortalMessage && <p role="status" className={'text-sm ' + (patientPortalMessage.includes('Invitation sent') ? 'text-emerald-600' : 'text-red-600')}>{patientPortalMessage}</p>}
                                 <Button variant="primary" className="w-full justify-center" onClick={handleCreatePatientPortal} disabled={creatingPatientPortal} icon={creatingPatientPortal ? Icons.RefreshCw : Icons.UserPlus}>{creatingPatientPortal ? 'Creating account...' : 'Create Patient Portal'}</Button>
@@ -570,11 +569,11 @@ const appData = getAppData();
         const DoctorsModule = () => {
             const { user } = useAuth();
             const [selectedClinician, setSelectedClinician] = useState(null);
-            const doctors = (appData.users || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
+            const doctors = (getStoreValue("users") || []).filter(user => ['doctor', 'surgeon', 'specialist'].includes(user.role) || user.role.includes('doctor'));
             const activeDoctors = doctors.filter(doc => doc.status === 'active');
             const specialties = new Set(activeDoctors.map(doc => doc.department || 'General')).size;
-            const consultationsCount = (appData.consultations || []).length;
-            const avgPatientsPerDoctor = activeDoctors.length ? Math.round((appData.patients || []).length / activeDoctors.length) : 0;
+            const consultationsCount = (getStoreValue("consultations") || []).length;
+            const avgPatientsPerDoctor = activeDoctors.length ? Math.round((getStoreValue("patients") || []).length / activeDoctors.length) : 0;
 
             return (
                 <div className="p-6 space-y-6 animate-fade-in">

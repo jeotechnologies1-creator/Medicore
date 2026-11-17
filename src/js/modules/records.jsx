@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from '../store.js';
 
 const DowntimeReconciliationPanel = () => {
     const { user } = useAuth();
@@ -117,7 +116,7 @@ const RecordsModule = () => {
     const [himAnalytics, setHimAnalytics] = useState(null);
     const [himAnalyticsError, setHimAnalyticsError] = useState('');
     const [himAnalyticsLoading, setHimAnalyticsLoading] = useState(false);
-    const [himPatients, setHimPatients] = useState(appData.patients || []);
+    const [himPatients, setHimPatients] = useState(getStoreValue("patients") || []);
     const [patientDirectoryLoading, setPatientDirectoryLoading] = useState(false);
     const [patientDirectoryError, setPatientDirectoryError] = useState('');
     const [privacyRequests, setPrivacyRequests] = useState([]);
@@ -444,7 +443,7 @@ const RecordsModule = () => {
         if (!appointment) return setAppointmentMessage('Appointment update returned no booking. Refresh and check the request status.');
         setAppointmentRequests((current) => current.filter((row) => row.id !== request.id));
         const mapped = normalizeAppointments([appointment])[0];
-        appData.appointments = (appData.appointments || []).map((row) => row.id === request.id ? { ...row, ...mapped } : row);
+        setStoreValue("appointments", (getStoreValue("appointments") || []).map((row) => row.id === request.id ? { ...row, ...mapped } : row));
         setAppointmentMessage(action === 'scheduled' ? 'Appointment confirmed and an in-app notification was sent to the patient.' : 'Appointment request declined.');
     };
 
@@ -470,7 +469,7 @@ const RecordsModule = () => {
         if (error) return setBookingMessage(error.message);
         if (!data?.appointment) return setBookingMessage('No appointment was returned.');
         const mapped = normalizeAppointments([data.appointment])[0];
-        appData.appointments = [mapped, ...(appData.appointments || [])];
+        setStoreValue("appointments", [mapped, ...(getStoreValue("appointments") || [])]);
         setBookingForm({ patientId: '', doctorId: '', date: '', time: '', department: '', appointmentType: 'consultation', notes: '' });
         setBookingMessage('Appointment booked and an in-app notification was sent to the patient.');
     };
@@ -495,11 +494,11 @@ const RecordsModule = () => {
     if (selectedPatient) {
         const patient = patients.find((row) => row.id === selectedPatient.id) || selectedPatient;
         const patientRecords = (rows) => (rows || []).filter((row) => row.patientId === patient.id);
-        const allergies = patientRecords(appData.allergies);
-        const conditions = patientRecords(appData.conditions);
-        const medications = patientRecords(appData.medicationOrders);
-        const consultations = patientRecords(appData.consultations);
-        const documents = patientRecords(appData.documents);
+        const allergies = patientRecords(getStoreValue("allergies"));
+        const conditions = patientRecords(getStoreValue("conditions"));
+        const medications = patientRecords(getStoreValue("medicationOrders"));
+        const consultations = patientRecords(getStoreValue("consultations"));
+        const documents = patientRecords(getStoreValue("documents"));
 
         return (
             <div className="p-6 space-y-6 animate-fade-in">
@@ -517,7 +516,7 @@ const RecordsModule = () => {
                 </div>
                 <Card title="Patient Journey" subtitle="Timestamped care events, with outstanding work shown separately.">
                     {patientJourney.length ? <ol className="space-y-3">{patientJourney.map((event) => <li key={event.id} className="flex gap-3 border-l-2 border-medical-200 pl-4"><span className="mt-1 h-2 w-2 rounded-full bg-medical-600" /><div><div className="flex flex-wrap items-center gap-2"><span className="font-medium capitalize text-slate-800">{event.event_type.replaceAll('_',' ')}</span><Badge>{event.to_status || 'Recorded'}</Badge></div><p className="text-xs text-slate-500">{formatDateTime(event.created_at)} · {event.department} · Encounter {event.encounter_id.slice(0,8)}</p>{event.notes && <p className="mt-1 text-sm text-slate-600">{event.notes}</p>}</div></li>)}</ol> : <p className="text-sm text-slate-500">No encounter workflow events have been recorded for this patient yet.</p>}
-                    <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-slate-800">Pending actions</h3>{(() => { const tasks = [...(appData.clinicalTasks || []).filter((row) => row.patientId === patient.id && !['completed','cancelled'].includes(row.status)).map((row) => ({label:row.title,status:row.status,department:row.taskType})), ...(appData.labOrders || []).filter((row) => row.patientId === patient.id && row.status !== 'completed').map((row) => ({label:row.testType,status:row.status,department:'Laboratory'})), ...(appData.prescriptions || []).filter((row) => row.patientId === patient.id && !['dispensed','cancelled'].includes(row.status)).map((row) => ({label:row.diagnosis || 'Medication order',status:row.status,department:'Pharmacy'})), ...(appData.admissions || []).filter((row) => row.patientId === patient.id && row.status === 'active').map((row) => ({label:`${row.ward || 'Ward'} admission`,status:'active',department:'Ward / Inpatient'}))]; return tasks.length ? <ul className="flex flex-wrap gap-2">{tasks.map((task,index) => <li key={`${task.department}-${task.label}-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{task.department}: {task.label} · {task.status}</li>)}</ul> : <p className="text-sm text-slate-500">No pending actions are shown in connected queues.</p>; })()}</div>
+                    <div className="mt-5"><h3 className="mb-2 text-sm font-semibold text-slate-800">Pending actions</h3>{(() => { const tasks = [...(getStoreValue("clinicalTasks") || []).filter((row) => row.patientId === patient.id && !['completed','cancelled'].includes(row.status)).map((row) => ({label:row.title,status:row.status,department:row.taskType})), ...(getStoreValue("labOrders") || []).filter((row) => row.patientId === patient.id && row.status !== 'completed').map((row) => ({label:row.testType,status:row.status,department:'Laboratory'})), ...(getStoreValue("prescriptions") || []).filter((row) => row.patientId === patient.id && !['dispensed','cancelled'].includes(row.status)).map((row) => ({label:row.diagnosis || 'Medication order',status:row.status,department:'Pharmacy'})), ...(getStoreValue("admissions") || []).filter((row) => row.patientId === patient.id && row.status === 'active').map((row) => ({label:`${row.ward || 'Ward'} admission`,status:'active',department:'Ward / Inpatient'}))]; return tasks.length ? <ul className="flex flex-wrap gap-2">{tasks.map((task,index) => <li key={`${task.department}-${task.label}-${index}`} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{task.department}: {task.label} · {task.status}</li>)}</ul> : <p className="text-sm text-slate-500">No pending actions are shown in connected queues.</p>; })()}</div>
                 </Card>
                 <div className="grid gap-6 xl:grid-cols-2">
                     <Card title="Demographics">

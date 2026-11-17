@@ -1,9 +1,8 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from '../store.js';
 
         const ConsultationsModule = () => {
             const { user } = useAuth();
-            const [consultations, setConsultations] = useState(getAppData().consultations || []);
+            const [consultations, setConsultations] = useState(getStoreValue("consultations") || []);
             const [form, setForm] = useState({ patientId: '', encounterId: '', doctorId: user?.id || '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
             const [consultationMessage, setConsultationMessage] = useState('');
             const [historyNote, setHistoryNote] = useState(null);
@@ -33,7 +32,7 @@ const appData = getAppData();
                 }).select();
                 if (error || !data?.[0]) return setConsultationMessage(error?.message || 'Consultation was not saved.');
                 const next = [normalizeConsultations(data)[0], ...consultations];
-                appData.consultations = next;
+                setStoreValue("consultations", next);
                 setConsultations(next);
                 setForm({ patientId: '', encounterId: '', doctorId: user?.id || '', chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
                 setConsultationMessage('Draft consultation saved. Sign it when it is ready to become immutable.');
@@ -44,7 +43,7 @@ const appData = getAppData();
                 const { error } = await client.rpc('sign_consultation', { p_consultation_id: note.id });
                 if (error) return setConsultationMessage(error.message);
                 const next = consultations.map((row) => row.id === note.id ? { ...row, note_state: 'signed', status: 'completed' } : row);
-                setConsultations(next); appData.consultations = next;
+                setConsultations(next); setStoreValue("consultations", next);
                 setConsultationMessage('Consultation signed and locked. Corrections must be recorded as an addendum.');
             };
 
@@ -70,7 +69,7 @@ const appData = getAppData();
                 if (!prescriptionForm.patientId || !prescriptionForm.diagnosis.trim() || !prescriptionForm.formularyItemId || !prescriptionForm.dose.trim() || !prescriptionForm.doseUnit.trim() || !prescriptionForm.frequency.trim() || !prescriptionForm.route.trim() || !Number.isInteger(Number(prescriptionForm.quantity)) || Number(prescriptionForm.quantity) < 1) return setPrescriptionMessage('Patient, diagnosis, formulary medicine, dose, dose unit, frequency, route, and whole-number quantity are required.');
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return setPrescriptionMessage('The clinical database is unavailable. No prescription was saved.');
-                const encounter = (appData.encounters || []).find((item) => item.patientId === prescriptionForm.patientId && !item.endedAt);
+                const encounter = (getStoreValue("encounters") || []).find((item) => item.patientId === prescriptionForm.patientId && !item.endedAt);
                 const { data: prescriptionId, error } = await client.rpc('create_structured_prescription', {
                     p_patient_id: prescriptionForm.patientId, p_encounter_id: encounter?.id || null, p_diagnosis: prescriptionForm.diagnosis.trim(),
                     p_code_system: prescriptionForm.diagnosisCodeSystem, p_code: prescriptionForm.diagnosisCode, p_display: prescriptionForm.diagnosisDisplay,
@@ -81,7 +80,7 @@ const appData = getAppData();
                 if (error || !prescriptionId) return setPrescriptionMessage(error?.message || 'Prescription was not saved.');
                 const { data, error: fetchError } = await client.from('prescriptions').select('*').eq('id', prescriptionId).single();
                 if (fetchError || !data) return setPrescriptionMessage('Prescription was saved, but the pharmacy queue could not refresh.');
-                appData.prescriptions = [normalizePrescriptions([data])[0], ...(appData.prescriptions || [])];
+                setStoreValue("prescriptions", [normalizePrescriptions([data])[0], ...(getStoreValue("prescriptions") || [])]);
                 setPrescriptionForm({ patientId: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, formularyItemId: '', quantity: 1, dose: '', doseUnit: '', route: '', frequency: '', duration: '', instructions: '', priority: 'routine' });
                 setPrescriptionMessage('Prescription sent to the pharmacy queue.');
             };
@@ -100,8 +99,8 @@ const appData = getAppData();
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="New Consultation" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value, encounterId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                                <Select label="Encounter" value={form.encounterId} onChange={(e) => setForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'Select encounter...' }, ...(appData.encounters || []).filter(item => item.patientId === form.patientId).map(item => ({ value: item.id, label: `${item.encounterType || 'Encounter'} · ${item.reasonForVisit || item.startedAt || item.id}` }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value, encounterId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Encounter" value={form.encounterId} onChange={(e) => setForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'Select encounter...' }, ...(getStoreValue("encounters") || []).filter(item => item.patientId === form.patientId).map(item => ({ value: item.id, label: `${item.encounterType || 'Encounter'} · ${item.reasonForVisit || item.startedAt || item.id}` }))]} />
                                 <p className="text-xs text-slate-500">Author: {user?.name || 'Signed-in clinician'}</p>
                                 <Input label="Chief Complaint" value={form.chiefComplaint} onChange={(e) => setForm(prev => ({ ...prev, chiefComplaint: e.target.value }))} />
                                 <CodedConceptInput label="Diagnosis" value={form.diagnosis} codeSystem={form.diagnosisCodeSystem} code={form.diagnosisCode} display={form.diagnosisDisplay} onChange={(term) => setForm(prev => ({ ...prev, diagnosis: term.value, diagnosisCodeSystem: term.codeSystem, diagnosisCode: term.code, diagnosisDisplay: term.display }))} />
@@ -124,15 +123,15 @@ const appData = getAppData();
 
                     {['doctor','specialist','super_admin'].includes(user?.role) && <Card title="New prescription" subtitle="Urgent orders are highlighted in the pharmacy queue. Dispensing is recorded atomically against available stock.">
                         {!safetyChecksReady && <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">Interaction/dose checks are inactive. Safety rule tables are empty or do not have a signed-off version.</div>}
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><CodedConceptInput label="Diagnosis" value={prescriptionForm.diagnosis} codeSystem={prescriptionForm.diagnosisCodeSystem} code={prescriptionForm.diagnosisCode} display={prescriptionForm.diagnosisDisplay} onChange={(term) => setPrescriptionForm((form) => ({...form,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} /><Select label="Formulary medicine" value={prescriptionForm.formularyItemId} onChange={(event) => { const selected = formulary.find((item) => item.id === event.target.value); setPrescriptionForm((form) => ({...form,formularyItemId:event.target.value,route:selected?.route || ''})); }} options={[{value:'',label:formulary.length ? 'Select medicine...' : 'No formulary items loaded'},...formulary.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}${item.controlled ? ' · controlled' : ''}`}))]} /><Input label="Dose" type="number" min="0.0001" step="any" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Dose unit" value={prescriptionForm.doseUnit} onChange={(event) => setPrescriptionForm((form) => ({...form,doseUnit:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Input label="Duration" value={prescriptionForm.duration} onChange={(event) => setPrescriptionForm((form) => ({...form,duration:event.target.value}))} /><Input label="Instructions" value={prescriptionForm.instructions} onChange={(event) => setPrescriptionForm((form) => ({...form,instructions:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3"><Select label="Patient" value={prescriptionForm.patientId} onChange={(event) => setPrescriptionForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(getStoreValue("patients") || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} /><CodedConceptInput label="Diagnosis" value={prescriptionForm.diagnosis} codeSystem={prescriptionForm.diagnosisCodeSystem} code={prescriptionForm.diagnosisCode} display={prescriptionForm.diagnosisDisplay} onChange={(term) => setPrescriptionForm((form) => ({...form,diagnosis:term.value,diagnosisCodeSystem:term.codeSystem,diagnosisCode:term.code,diagnosisDisplay:term.display}))} /><Select label="Formulary medicine" value={prescriptionForm.formularyItemId} onChange={(event) => { const selected = formulary.find((item) => item.id === event.target.value); setPrescriptionForm((form) => ({...form,formularyItemId:event.target.value,route:selected?.route || ''})); }} options={[{value:'',label:formulary.length ? 'Select medicine...' : 'No formulary items loaded'},...formulary.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}${item.controlled ? ' · controlled' : ''}`}))]} /><Input label="Dose" type="number" min="0.0001" step="any" value={prescriptionForm.dose} onChange={(event) => setPrescriptionForm((form) => ({...form,dose:event.target.value}))} /><Input label="Dose unit" value={prescriptionForm.doseUnit} onChange={(event) => setPrescriptionForm((form) => ({...form,doseUnit:event.target.value}))} /><Input label="Quantity" type="number" min="1" step="1" value={prescriptionForm.quantity} onChange={(event) => setPrescriptionForm((form) => ({...form,quantity:event.target.value}))} /><Input label="Route" value={prescriptionForm.route} onChange={(event) => setPrescriptionForm((form) => ({...form,route:event.target.value}))} /><Input label="Frequency" value={prescriptionForm.frequency} onChange={(event) => setPrescriptionForm((form) => ({...form,frequency:event.target.value}))} /><Input label="Duration" value={prescriptionForm.duration} onChange={(event) => setPrescriptionForm((form) => ({...form,duration:event.target.value}))} /><Input label="Instructions" value={prescriptionForm.instructions} onChange={(event) => setPrescriptionForm((form) => ({...form,instructions:event.target.value}))} /><Select label="Priority" value={prescriptionForm.priority} onChange={(event) => setPrescriptionForm((form) => ({...form,priority:event.target.value}))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} /></div>
                         {prescriptionMessage && <p className="mt-3 text-sm text-slate-700" role="status">{prescriptionMessage}</p>}<Button className="mt-4" variant="primary" onClick={savePrescription}>Send prescription to pharmacy</Button>
                     </Card>}
 
                     <Card title="Consultation history">
-                        <div className="space-y-3">{consultations.slice(0, 10).map((note) => <article key={note.id} className="rounded-lg border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong>{(appData.patients || []).find((p) => p.id === note.patientId)?.firstName || 'Patient'} · {note.chiefComplaint || 'Consultation'}</strong><p className="text-xs text-slate-500">{formatDateTime(note.createdAt)} · {note.note_state || 'draft'}</p></div><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => showConsultationHistory(note)}>History</Button>{note.note_state !== 'signed' && note.doctorId === user?.id && <Button size="sm" variant="primary" onClick={() => signConsultation(note)}>Sign note</Button>}</div></div><p className="mt-2 text-sm text-slate-600">{note.assessment}</p></article>)}</div>
+                        <div className="space-y-3">{consultations.slice(0, 10).map((note) => <article key={note.id} className="rounded-lg border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong>{(getStoreValue("patients") || []).find((p) => p.id === note.patientId)?.firstName || 'Patient'} · {note.chiefComplaint || 'Consultation'}</strong><p className="text-xs text-slate-500">{formatDateTime(note.createdAt)} · {note.note_state || 'draft'}</p></div><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => showConsultationHistory(note)}>History</Button>{note.note_state !== 'signed' && note.doctorId === user?.id && <Button size="sm" variant="primary" onClick={() => signConsultation(note)}>Sign note</Button>}</div></div><p className="mt-2 text-sm text-slate-600">{note.assessment}</p></article>)}</div>
                     </Card>
 
-                    {historyNote && <div role="dialog" aria-modal="true" aria-label="Consultation history" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><Card title="Signed note history" className="max-h-[85vh] w-full max-w-2xl overflow-auto"><div className="space-y-4">{historyRows.map((item) => { const authorId = item.type === 'original' ? item.signature?.author_id : item.author_id; const author = (getAppData().users || []).find((person) => person.id === authorId)?.name || authorId || 'Unknown'; return <article key={item.id} className="border-l-2 border-medical-500 pl-4"><strong>{item.type === 'original' ? 'Original signed note' : 'Addendum'}</strong><p className="text-xs text-slate-500">{formatDateTime(item.type === 'original' ? item.signature?.signed_at : item.created_at)} · Author {author}</p>{item.type === 'addendum' && <p className="text-sm"><strong>Reason:</strong> {item.reason}</p>}<p className="whitespace-pre-wrap text-sm">{item.type === 'original' ? `${item.chiefComplaint}\n${item.diagnosis}\n${item.assessment}\n${item.plan}` : item.content}</p></article>; })}
+                    {historyNote && <div role="dialog" aria-modal="true" aria-label="Consultation history" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><Card title="Signed note history" className="max-h-[85vh] w-full max-w-2xl overflow-auto"><div className="space-y-4">{historyRows.map((item) => { const authorId = item.type === 'original' ? item.signature?.author_id : item.author_id; const author = (getStoreValue("users") || []).find((person) => person.id === authorId)?.name || authorId || 'Unknown'; return <article key={item.id} className="border-l-2 border-medical-500 pl-4"><strong>{item.type === 'original' ? 'Original signed note' : 'Addendum'}</strong><p className="text-xs text-slate-500">{formatDateTime(item.type === 'original' ? item.signature?.signed_at : item.created_at)} · Author {author}</p>{item.type === 'addendum' && <p className="text-sm"><strong>Reason:</strong> {item.reason}</p>}<p className="whitespace-pre-wrap text-sm">{item.type === 'original' ? `${item.chiefComplaint}\n${item.diagnosis}\n${item.assessment}\n${item.plan}` : item.content}</p></article>; })}
                         {historyNote.note_state === 'signed' && <><TextArea label="Correction reason" value={addendumForm.reason} onChange={(event) => setAddendumForm((current) => ({ ...current, reason: event.target.value }))} rows={2} />
                         <TextArea label="Addendum" value={addendumForm.content} onChange={(event) => setAddendumForm((current) => ({ ...current, content: event.target.value }))} rows={3} /></>}
                         <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setHistoryNote(null)}>Close</Button>{historyNote.note_state === 'signed' && <Button variant="primary" onClick={saveAddendum}>Addendum</Button>}</div>
@@ -143,7 +142,7 @@ const appData = getAppData();
 
         const VitalsModule = () => {
             const { user } = useAuth();
-            const [vitals, setVitals] = useState(getAppData().vitals || []);
+            const [vitals, setVitals] = useState(getStoreValue("vitals") || []);
             const [form, setForm] = useState({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0', consciousness: 'A', supplementalOxygen: false, spo2Scale: 'scale_1' });
             const [vitalsMessage, setVitalsMessage] = useState('');
 
@@ -155,7 +154,7 @@ const appData = getAppData();
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return setVitalsMessage('The clinical database is unavailable. No observations were saved.');
                 const numericOrNull = (value) => value === '' ? null : Number(value);
-                const encounter = (appData.encounters || []).find((item) => item.patientId === form.patientId && !item.endedAt);
+                const encounter = (getStoreValue("encounters") || []).find((item) => item.patientId === form.patientId && !item.endedAt);
                 const { data, error } = await client.from('vital_signs').insert({
                     patient_id: form.patientId, encounter_id: encounter?.id || null, recorded_by: user?.id || null, temperature: numericOrNull(form.temperature), heart_rate: numericOrNull(form.heartRate),
                     blood_pressure_systolic: numericOrNull(form.bloodPressureSystolic), blood_pressure_diastolic: numericOrNull(form.bloodPressureDiastolic),
@@ -166,7 +165,7 @@ const appData = getAppData();
                 }).select();
                 if (error || !data?.[0]) return setVitalsMessage(error?.message || 'Observations were not saved.');
                 const next = [normalizeVitals(data)[0], ...vitals];
-                appData.vitals = next;
+                setStoreValue("vitals", next);
                 setVitals(next);
                 setForm({ patientId: '', temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '', weight: '', height: '', painScore: '0', consciousness: 'A', supplementalOxygen: false, spo2Scale: 'scale_1' });
                 const savedVital = data[0];
@@ -188,7 +187,7 @@ const appData = getAppData();
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <Card title="Record Vitals" className="lg:col-span-2">
                             <div className="space-y-4">
-                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                                <Select label="Patient" value={form.patientId} onChange={(e) => setForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                                 <div className="grid grid-cols-2 gap-4">
                                     <Input label="Temperature (°C)" value={form.temperature} onChange={(e) => setForm(prev => ({ ...prev, temperature: e.target.value }))} />
                                     <Input label="Heart Rate" value={form.heartRate} onChange={(e) => setForm(prev => ({ ...prev, heartRate: e.target.value }))} />
@@ -222,7 +221,7 @@ const appData = getAppData();
                             columns={[
                                 { key: 'timestamp', title: 'Recorded', render: (row) => formatDateTime(row.timestamp) },
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = appData.patients.find(p => p.id === row.patientId);
+                                    const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                     return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';
                                 }},
                                 { key: 'heartRate', title: 'HR' },
@@ -238,15 +237,15 @@ const appData = getAppData();
 
         const ClinicalSafetyModule = () => {
             const { user } = useAuth();
-            const [allergies, setAllergies] = useState(getAppData().allergies || []);
-            const [conditions, setConditions] = useState(getAppData().conditions || []);
-            const [carePlans, setCarePlans] = useState(getAppData().carePlans || []);
-            const [alerts, setAlerts] = useState(getAppData().clinicalAlerts || []);
-            const [resultAcknowledgements, setResultAcknowledgements] = useState(getAppData().resultAcknowledgements || []);
+            const [allergies, setAllergies] = useState(getStoreValue("allergies") || []);
+            const [conditions, setConditions] = useState(getStoreValue("conditions") || []);
+            const [carePlans, setCarePlans] = useState(getStoreValue("carePlans") || []);
+            const [alerts, setAlerts] = useState(getStoreValue("clinicalAlerts") || []);
+            const [resultAcknowledgements, setResultAcknowledgements] = useState(getStoreValue("resultAcknowledgements") || []);
             const [allergyForm, setAllergyForm] = useState({ patientId: '', substance: '', codeSystem: null, code: null, display: null, reaction: '', severity: 'moderate', criticality: 'low' });
             const [conditionForm, setConditionForm] = useState({ patientId: '', conditionName: '', codeSystem: null, code: null, display: null, onsetDate: '' });
             const [carePlanForm, setCarePlanForm] = useState({ patientId: '', title: '', description: '', targetDate: '' });
-            const patients = getAppData().patients || [];
+            const patients = getStoreValue("patients") || [];
 
             const save = async (table, payload, setter, appTable, mapper) => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -255,12 +254,12 @@ const appData = getAppData();
                 if (error || !data?.[0]) { console.error(`Unable to save ${table}`, error); return false; }
                 const record = mapper([data[0]])[0];
                 const next = [record, ...(appTable === 'allergies' ? allergies : appTable === 'conditions' ? conditions : carePlans)];
-                appData[appTable] = next;
+                setStoreValue(appTable, next);
                 setter(next);
                 return true;
             };
 
-            const latestVitals = (appData.vitals || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
+            const latestVitals = (getStoreValue("vitals") || []).filter(v => Number(v.oxygenSaturation) < 90 || Number(v.bloodPressureSystolic) < 90 || Number(v.temperature) >= 39);
             const activeAlerts = [...alerts, ...latestVitals.map(v => ({ id: `vital-${v.id}`, patientId: v.patientId, severity: 'critical', alertType: 'vital', message: `Abnormal vital signs recorded ${formatDateTime(v.timestamp)}`, status: 'open' }))]
                 .filter(alert => alert.status === 'open');
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))];
@@ -312,7 +311,7 @@ const appData = getAppData();
                 if (error || !data?.[0]) return notifyPersistenceFailure('acknowledge result', error);
                 const updated = normalizeResultAcknowledgements(data)[0];
                 const next = resultAcknowledgements.map((item) => item.id === updated.id ? updated : item);
-                appData.resultAcknowledgements = next;
+                setStoreValue("resultAcknowledgements", next);
                 setResultAcknowledgements(next);
             };
 
@@ -391,7 +390,7 @@ const appData = getAppData();
 
         const InventoryModule = () => {
             const { user } = useAuth();
-            const [inventory, setInventory] = useState(getAppData().pharmacyInventory || []);
+            const [inventory, setInventory] = useState(getStoreValue("pharmacyInventory") || []);
             const [search, setSearch] = useState('');
             const [showAddItem, setShowAddItem] = useState(false);
             const [saving, setSaving] = useState(false);
@@ -471,9 +470,9 @@ const appData = getAppData();
         const ClinicalWorkflowsModule = () => {
             const { user } = useAuth();
             const [tab, setTab] = useState('encounters');
-            const [encounters, setEncounters] = useState(getAppData().encounters || []);
-            const [immunizations, setImmunizations] = useState(getAppData().immunizations || []);
-            const [administrations, setAdministrations] = useState(getAppData().medicationAdministrations || []);
+            const [encounters, setEncounters] = useState(getStoreValue("encounters") || []);
+            const [immunizations, setImmunizations] = useState(getStoreValue("immunizations") || []);
+            const [administrations, setAdministrations] = useState(getStoreValue("medicationAdministrations") || []);
             const isRegistrationOnly = ['records_officer', 'receptionist'].includes(user?.role);
             const [unknownIdentity, setUnknownIdentity] = useState(false);
             const [intakeMessage, setIntakeMessage] = useState('');
@@ -488,7 +487,7 @@ const appData = getAppData();
             const [marForm, setMarForm] = useState({ scheduledDoseId: '', patientBarcode: '', medicationBarcode: '', dose: '', doseUnit: '', route: '', status: 'administered', reason: '', override: false, witnessId: '', witnessPin: '', scheduledAt: '' });
             const [marMessage, setMarMessage] = useState('');
             const [marWindow, setMarWindow] = useState({ early: '', late: '' });
-            const patients = getAppData().patients || [];
+            const patients = getStoreValue("patients") || [];
             const patientOptions = [{ value: '', label: 'Select patient...' }, ...patients.map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))];
             const patientName = (id) => {
                 const patient = patients.find((item) => item.id === id);
@@ -590,7 +589,7 @@ const appData = getAppData();
                 await client.from('encounter_workflow_events').insert({ encounter_id: bidEncounter.id, patient_id: bidEncounter.patientId || bidEncounter.patient_id, event_type: 'bid_clinical_assessment_recorded', to_status: bidForm.status, department: 'Medical / Emergency', notes: bidForm.notes.trim(), actor_id: user?.id });
                 const updated = normalizeEncounters([data])[0];
                 const next = encounters.map((item) => item.id === updated.id ? updated : item);
-                appData.encounters = next; setEncounters(next); persistStoreTable('encounters', next);
+                setStoreValue("encounters", next); setEncounters(next); persistStoreTable('encounters', next);
                 setBidEncounter(null); setBidForm({ status: 'under_assessment', notes: '', disposition: '' }); setIntakeMessage('BID/BOD clinical assessment recorded. Follow the facility disposition workflow.');
             };
             return <div className="p-6 space-y-6 animate-fade-in">
@@ -602,12 +601,12 @@ const appData = getAppData();
                 {tab === 'mar' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <Card title="Schedule a dose"><div className="space-y-3"><Select label="Patient" value={administrationForm.patientId} onChange={(event) => setAdministrationForm({ patientId: event.target.value, prescriptionItemId: '', dosage: '', notes: '' })} options={patientOptions} /><Select label="Prescribed medication" value={administrationForm.prescriptionItemId} onChange={(event) => setAdministrationForm({...administrationForm,prescriptionItemId:event.target.value})} options={[{value:'',label:prescribedMedicationItems.length ? 'Select prescription item...' : 'No active prescription items'},...prescribedMedicationItems.map((item) => ({value:item.id,label:`${item.formulary_items?.generic_name || 'Medication'} · ${item.dose} ${item.dose_unit} ${item.route}`}))]} /><Input label="Scheduled time" type="datetime-local" value={marForm.scheduledAt} onChange={(event)=>setMarForm({...marForm,scheduledAt:event.target.value})}/><Button onClick={scheduleDose}>Schedule dose</Button>{user?.role==='super_admin'&&<div className="border-t pt-3"><h3 className="font-semibold">Facility MAR time window</h3><p className="text-xs text-slate-500">Configure the allowed early and late window in minutes. No window is assumed.</p><div className="grid grid-cols-2 gap-2"><Input label="Early minutes" type="number" min="0" value={marWindow.early} onChange={(event)=>setMarWindow({...marWindow,early:event.target.value})}/><Input label="Late minutes" type="number" min="0" value={marWindow.late} onChange={(event)=>setMarWindow({...marWindow,late:event.target.value})}/></div><Button size="sm" onClick={async()=>{const {error}=await window.OneMedSupabase.getClient().rpc('configure_mar_time_window',{p_facility_id:user?.facility_id,p_early_minutes:Number(marWindow.early),p_late_minutes:Number(marWindow.late)});setMarMessage(error?.message||'Facility MAR time window saved.');}}>Save facility window</Button></div>}
                     <div className="border-t pt-3"><h3 className="font-semibold">Enroll wristband barcode</h3><Input label="Scan wristband barcode" value={marForm.patientBarcode} onChange={(event)=>setMarForm({...marForm,patientBarcode:event.target.value})} onKeyDown={(event)=>{if(event.key==='Enter') event.preventDefault();}}/><Button size="sm" onClick={async()=>{const {error}=await window.OneMedSupabase.getClient().rpc('set_patient_wristband_barcode',{p_patient_id:administrationForm.patientId,p_barcode:marForm.patientBarcode});setMarMessage(error?.message||'Wristband barcode saved.');}}>Save wristband barcode</Button></div></div></Card>
-                    <Card title="Barcode verified administration" className="lg:col-span-2"><div className="grid gap-3 md:grid-cols-2"><Select label="Scheduled dose" value={marForm.scheduledDoseId} onChange={(event)=>{const dose=scheduledDoses.find((row)=>row.id===event.target.value);setMarForm((current)=>({...current,scheduledDoseId:event.target.value,dose:String(dose?.dose||''),doseUnit:dose?.dose_unit||'',route:dose?.route||''}));}} options={[{value:'',label:scheduledDoses.length?'Select scheduled dose':'No scheduled doses'},...scheduledDoses.map((dose)=>({value:dose.id,label:`${dose.formulary_items?.generic_name||'Medication'} · ${formatDateTime(dose.scheduled_at)} · ${dose.dose} ${dose.dose_unit}`}))]}/><Input label="Patient wristband scan (USB scanner)" value={marForm.patientBarcode} onChange={(event)=>setMarForm({...marForm,patientBarcode:event.target.value})}/><Input label="Medication / lot scan (USB scanner)" value={marForm.medicationBarcode} onChange={(event)=>setMarForm({...marForm,medicationBarcode:event.target.value})}/><Input label="Dose" type="number" min="0" step="any" value={marForm.dose} onChange={(event)=>setMarForm({...marForm,dose:event.target.value})}/><Input label="Dose unit" value={marForm.doseUnit} onChange={(event)=>setMarForm({...marForm,doseUnit:event.target.value})}/><Input label="Route" value={marForm.route} onChange={(event)=>setMarForm({...marForm,route:event.target.value})}/><Select label="Dose outcome" value={marForm.status} onChange={(event)=>setMarForm({...marForm,status:event.target.value})} options={['administered','missed','held','refused'].map((value)=>({value,label:value}))}/><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={marForm.override} onChange={(event)=>setMarForm({...marForm,override:event.target.checked})}/> Override an allergy block</label><Input label="Reason (required for override / missed / held / refused)" value={marForm.reason} onChange={(event)=>setMarForm({...marForm,reason:event.target.value})}/><Select label="Second nurse witness" value={marForm.witnessId} onChange={(event)=>setMarForm({...marForm,witnessId:event.target.value})} options={[{value:'',label:'Select witness'},...(getAppData().users||[]).filter((person)=>person.role==='nurse'&&person.id!==user?.id).map((person)=>({value:person.id,label:person.name}))]}/><Input label="Witness PIN" type="password" value={marForm.witnessPin} onChange={(event)=>setMarForm({...marForm,witnessPin:event.target.value})}/></div><Button size="sm" className="mt-2" onClick={async()=>{const {error}=await window.OneMedSupabase.getClient().rpc('set_mar_witness_pin',{p_pin:marForm.witnessPin});setMarMessage(error?.message||'Your MAR witness PIN was set.');}}>Set my witness PIN</Button><p className="mt-2 text-xs text-slate-500">Barcode scanners enter text through USB/keyboard wedge. No camera access is used. Controlled medicines and allergy overrides require a second nurse witness.</p>{marMessage&&<p className="mt-2 text-sm" role="status">{marMessage}</p>}<Button variant="primary" className="mt-3" onClick={saveAdministration}>Record MAR event</Button><DataTable columns={[{key:'patientId',title:'Patient',render:(row)=>patientName(row.patientId)},{key:'medicationName',title:'Medication'},{key:'dosage',title:'Dose'},{key:'administeredAt',title:'Administered',render:(row)=>formatDateTime(row.administeredAt)},{key:'witnessed_by',title:'Witness'}]} data={administrations}/><h3 className="mt-5 font-semibold">Scheduled-dose history</h3><DataTable columns={[{key:'scheduled_at',title:'Scheduled',render:(row)=>formatDateTime(row.scheduled_at)},{key:'formulary_items',title:'Medication',render:(row)=>row.formulary_items?.generic_name},{key:'dose',title:'Dose',render:(row)=>`${row.dose} ${row.dose_unit}`},{key:'status',title:'Outcome'},{key:'status_reason',title:'Reason'}]} data={marDoseHistory}/></Card></div>}
+                    <Card title="Barcode verified administration" className="lg:col-span-2"><div className="grid gap-3 md:grid-cols-2"><Select label="Scheduled dose" value={marForm.scheduledDoseId} onChange={(event)=>{const dose=scheduledDoses.find((row)=>row.id===event.target.value);setMarForm((current)=>({...current,scheduledDoseId:event.target.value,dose:String(dose?.dose||''),doseUnit:dose?.dose_unit||'',route:dose?.route||''}));}} options={[{value:'',label:scheduledDoses.length?'Select scheduled dose':'No scheduled doses'},...scheduledDoses.map((dose)=>({value:dose.id,label:`${dose.formulary_items?.generic_name||'Medication'} · ${formatDateTime(dose.scheduled_at)} · ${dose.dose} ${dose.dose_unit}`}))]}/><Input label="Patient wristband scan (USB scanner)" value={marForm.patientBarcode} onChange={(event)=>setMarForm({...marForm,patientBarcode:event.target.value})}/><Input label="Medication / lot scan (USB scanner)" value={marForm.medicationBarcode} onChange={(event)=>setMarForm({...marForm,medicationBarcode:event.target.value})}/><Input label="Dose" type="number" min="0" step="any" value={marForm.dose} onChange={(event)=>setMarForm({...marForm,dose:event.target.value})}/><Input label="Dose unit" value={marForm.doseUnit} onChange={(event)=>setMarForm({...marForm,doseUnit:event.target.value})}/><Input label="Route" value={marForm.route} onChange={(event)=>setMarForm({...marForm,route:event.target.value})}/><Select label="Dose outcome" value={marForm.status} onChange={(event)=>setMarForm({...marForm,status:event.target.value})} options={['administered','missed','held','refused'].map((value)=>({value,label:value}))}/><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={marForm.override} onChange={(event)=>setMarForm({...marForm,override:event.target.checked})}/> Override an allergy block</label><Input label="Reason (required for override / missed / held / refused)" value={marForm.reason} onChange={(event)=>setMarForm({...marForm,reason:event.target.value})}/><Select label="Second nurse witness" value={marForm.witnessId} onChange={(event)=>setMarForm({...marForm,witnessId:event.target.value})} options={[{value:'',label:'Select witness'},...(getStoreValue("users")||[]).filter((person)=>person.role==='nurse'&&person.id!==user?.id).map((person)=>({value:person.id,label:person.name}))]}/><Input label="Witness PIN" type="password" value={marForm.witnessPin} onChange={(event)=>setMarForm({...marForm,witnessPin:event.target.value})}/></div><Button size="sm" className="mt-2" onClick={async()=>{const {error}=await window.OneMedSupabase.getClient().rpc('set_mar_witness_pin',{p_pin:marForm.witnessPin});setMarMessage(error?.message||'Your MAR witness PIN was set.');}}>Set my witness PIN</Button><p className="mt-2 text-xs text-slate-500">Barcode scanners enter text through USB/keyboard wedge. No camera access is used. Controlled medicines and allergy overrides require a second nurse witness.</p>{marMessage&&<p className="mt-2 text-sm" role="status">{marMessage}</p>}<Button variant="primary" className="mt-3" onClick={saveAdministration}>Record MAR event</Button><DataTable columns={[{key:'patientId',title:'Patient',render:(row)=>patientName(row.patientId)},{key:'medicationName',title:'Medication'},{key:'dosage',title:'Dose'},{key:'administeredAt',title:'Administered',render:(row)=>formatDateTime(row.administeredAt)},{key:'witnessed_by',title:'Witness'}]} data={administrations}/><h3 className="mt-5 font-semibold">Scheduled-dose history</h3><DataTable columns={[{key:'scheduled_at',title:'Scheduled',render:(row)=>formatDateTime(row.scheduled_at)},{key:'formulary_items',title:'Medication',render:(row)=>row.formulary_items?.generic_name},{key:'dose',title:'Dose',render:(row)=>`${row.dose} ${row.dose_unit}`},{key:'status',title:'Outcome'},{key:'status_reason',title:'Reason'}]} data={marDoseHistory}/></Card></div>}
             </div>;
         };
 
         const DocumentsModule = () => {
-            const [documents, setDocuments] = useState(getAppData().documents || []);
+            const [documents, setDocuments] = useState(getStoreValue("documents") || []);
             const [patientId, setPatientId] = useState('');
             const [documentType, setDocumentType] = useState('Clinical Note');
             const [uploadError, setUploadError] = useState('');
@@ -619,7 +618,7 @@ const appData = getAppData();
                 const { data, error } = await window.OneMedSupabase.uploadPatientDocument(patientId, file, documentType);
                 if (error || !data) { setUploadError(error?.message || 'Upload failed.'); return; }
                 const next = [normalizeDocuments([data])[0], ...documents];
-                appData.documents = next;
+                setStoreValue("documents", next);
                 setDocuments(next);
                 event.target.value = '';
             };
@@ -647,7 +646,7 @@ const appData = getAppData();
 
                     <Card>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={patientId} onChange={(e) => setPatientId(e.target.value)} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Document type" value={documentType} onChange={(e) => setDocumentType(e.target.value)} options={['Clinical Note', 'Consent', 'Laboratory', 'Radiology', 'Discharge Summary', 'Referral'].map(value => ({ value, label: value }))} />
                             {uploadError && <p className="self-end text-sm text-red-600">{uploadError}</p>}
                         </div>
@@ -692,7 +691,7 @@ const NursingCareModule = () => {
     };
     useEffect(() => { refresh(); }, []);
     const save = async (kind) => {
-        const admission = (appData.admissions||[]).find(x=>x.id===form.admission);
+        const admission = (getStoreValue("admissions")||[]).find(x=>x.id===form.admission);
         const patientId = form.patient || admission?.patientId || admission?.patient_id;
         const { data: authData } = await client.auth.getUser();
         const base={patient_id:patientId,admission_id:form.admission||null,encounter_id:form.encounter,ward_id:form.ward,author_id:user?.id,auth_user_id:authData?.user?.id};
@@ -706,8 +705,8 @@ const NursingCareModule = () => {
     };
     return <div className="space-y-5 p-6"><Card title="Nursing ward board" subtitle="Assessments, care interventions, fluid balance and shift handover. Configurable scoring tools are placeholders; no score is calculated.">
       {!!rows.alerts.length && <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900" role="alert">{rows.alerts.length} handover(s) awaiting incoming nurse acknowledgement.</p>}
-      <div className="grid gap-3 md:grid-cols-2"><Select label="Admission" value={form.admission} onChange={e=>setForm({...form,admission:e.target.value})} options={[{value:'',label:'Select admission'},...(appData.admissions||[]).map(a=>({value:a.id,label:`${a.ward||'Ward'} · ${a.diagnosis||a.id}`}))]}/><Select label="Encounter" value={form.encounter} onChange={e=>setForm({...form,encounter:e.target.value})} options={[{value:'',label:'Select encounter'},...(appData.encounters||[]).map(e=>({value:e.id,label:`${e.encounterType||e.encounter_type||'Encounter'} · ${e.id.slice(0,8)}`}))]}/><Select label="Ward" value={form.ward} onChange={e=>setForm({...form,ward:e.target.value})} options={[{value:'',label:'Select ward'},...(appData.wards||[]).map(w=>({value:w.id,label:w.name}))]}/></div>
-      <div className="grid gap-4 lg:grid-cols-2"><section className="space-y-2"><h3 className="font-semibold">Admission assessment</h3><div className="grid gap-2 md:grid-cols-2">{[['Mobility','mobility'],['Nutrition','nutrition'],['Skin integrity','skinIntegrity'],['Elimination','elimination'],['Cognition','cognition'],['Communication','communication'],['Patient goals','goals']].map(([label,key])=><Input key={key} label={label} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/>)}</div><TextArea label="Additional assessment notes" value={form.assessment} onChange={e=>setForm({...form,assessment:e.target.value})}/><p className="text-xs text-slate-500">Scoring tool: configurable placeholder (not calculated)</p><Button onClick={()=>save('assessment')}>Append assessment</Button></section><section className="space-y-2"><h3 className="font-semibold">Care intervention</h3><TextArea label="Intervention performed" value={form.intervention} onChange={e=>setForm({...form,intervention:e.target.value})}/><Button onClick={()=>save('intervention')}>Append intervention</Button></section><section className="space-y-2"><h3 className="font-semibold">Fluid chart</h3><div className="flex gap-2"><Select label="Type" value={form.fluidType} onChange={e=>setForm({...form,fluidType:e.target.value})} options={['intake','output'].map(x=>({value:x,label:x}))}/><Input label="Amount (mL)" type="number" min="0" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/><Input label="Category" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/></div><Button onClick={()=>save('fluid')}>Append fluid entry</Button><p className="text-sm">Running balances: {rows.fluids.slice(0,5).map(x=>`${x.running_balance_ml} mL`).join(' · ')||'No entries'}</p></section><section className="space-y-2"><h3 className="font-semibold">Shift handover</h3><Select label="Incoming nurse" value={form.incomingNurse} onChange={e=>setForm({...form,incomingNurse:e.target.value})} options={[{value:'',label:'Select incoming nurse'},...(appData.users||[]).filter(x=>x.role==='nurse').map(x=>({value:x.id,label:x.name}))]}/><Input label="Situation" value={form.handover} onChange={e=>setForm({...form,handover:e.target.value})}/><Input label="Background" value={form.handoverBackground} onChange={e=>setForm({...form,handoverBackground:e.target.value})}/><Input label="Current assessment" value={form.handoverAssessment} onChange={e=>setForm({...form,handoverAssessment:e.target.value})}/><TextArea label="Next shift actions" value={form.handoverActions} onChange={e=>setForm({...form,handoverActions:e.target.value})}/><Button onClick={()=>save('handover')}>Submit handover</Button></section></div>
+      <div className="grid gap-3 md:grid-cols-2"><Select label="Admission" value={form.admission} onChange={e=>setForm({...form,admission:e.target.value})} options={[{value:'',label:'Select admission'},...(getStoreValue("admissions")||[]).map(a=>({value:a.id,label:`${a.ward||'Ward'} · ${a.diagnosis||a.id}`}))]}/><Select label="Encounter" value={form.encounter} onChange={e=>setForm({...form,encounter:e.target.value})} options={[{value:'',label:'Select encounter'},...(getStoreValue("encounters")||[]).map(e=>({value:e.id,label:`${e.encounterType||e.encounter_type||'Encounter'} · ${e.id.slice(0,8)}`}))]}/><Select label="Ward" value={form.ward} onChange={e=>setForm({...form,ward:e.target.value})} options={[{value:'',label:'Select ward'},...(getStoreValue("wards")||[]).map(w=>({value:w.id,label:w.name}))]}/></div>
+      <div className="grid gap-4 lg:grid-cols-2"><section className="space-y-2"><h3 className="font-semibold">Admission assessment</h3><div className="grid gap-2 md:grid-cols-2">{[['Mobility','mobility'],['Nutrition','nutrition'],['Skin integrity','skinIntegrity'],['Elimination','elimination'],['Cognition','cognition'],['Communication','communication'],['Patient goals','goals']].map(([label,key])=><Input key={key} label={label} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})}/>)}</div><TextArea label="Additional assessment notes" value={form.assessment} onChange={e=>setForm({...form,assessment:e.target.value})}/><p className="text-xs text-slate-500">Scoring tool: configurable placeholder (not calculated)</p><Button onClick={()=>save('assessment')}>Append assessment</Button></section><section className="space-y-2"><h3 className="font-semibold">Care intervention</h3><TextArea label="Intervention performed" value={form.intervention} onChange={e=>setForm({...form,intervention:e.target.value})}/><Button onClick={()=>save('intervention')}>Append intervention</Button></section><section className="space-y-2"><h3 className="font-semibold">Fluid chart</h3><div className="flex gap-2"><Select label="Type" value={form.fluidType} onChange={e=>setForm({...form,fluidType:e.target.value})} options={['intake','output'].map(x=>({value:x,label:x}))}/><Input label="Amount (mL)" type="number" min="0" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/><Input label="Category" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}/></div><Button onClick={()=>save('fluid')}>Append fluid entry</Button><p className="text-sm">Running balances: {rows.fluids.slice(0,5).map(x=>`${x.running_balance_ml} mL`).join(' · ')||'No entries'}</p></section><section className="space-y-2"><h3 className="font-semibold">Shift handover</h3><Select label="Incoming nurse" value={form.incomingNurse} onChange={e=>setForm({...form,incomingNurse:e.target.value})} options={[{value:'',label:'Select incoming nurse'},...(getStoreValue("users")||[]).filter(x=>x.role==='nurse').map(x=>({value:x.id,label:x.name}))]}/><Input label="Situation" value={form.handover} onChange={e=>setForm({...form,handover:e.target.value})}/><Input label="Background" value={form.handoverBackground} onChange={e=>setForm({...form,handoverBackground:e.target.value})}/><Input label="Current assessment" value={form.handoverAssessment} onChange={e=>setForm({...form,handoverAssessment:e.target.value})}/><TextArea label="Next shift actions" value={form.handoverActions} onChange={e=>setForm({...form,handoverActions:e.target.value})}/><Button onClick={()=>save('handover')}>Submit handover</Button></section></div>
       {message&&<p role="status" className="text-sm">{message}</p>}
       <h3 className="font-semibold">Unacknowledged handovers</h3>{rows.alerts.map(h=><article key={h.id} className="flex justify-between border-b py-2 text-sm"><span>Patient {h.patient_id} · {h.handed_over_at}</span><Button size="sm" onClick={async()=>{const {error}=await client.rpc('acknowledge_nursing_handover',{p_handover_id:h.id});setMessage(error?.message||'Handover acknowledged.');refresh();}}>Acknowledge</Button></article>)}
       <div className="grid gap-4 md:grid-cols-2"><section><h3 className="font-semibold">Recent assessments and interventions</h3>{[...rows.assessments.map(x=>({...x,_kind:'assessment',_detail:JSON.stringify(x.assessment)})),...rows.interventions.map(x=>({...x,_kind:'intervention',_detail:x.intervention}))].slice(0,12).map(x=><article key={x._kind+x.id} className="border-b py-2 text-sm"><strong>{x._kind}</strong><p>{x._detail}</p><p className="text-xs text-slate-500">{x.created_at}</p></article>)}</section><section><h3 className="font-semibold">Fluid chart entries</h3>{rows.fluids.slice(0,12).map(x=><article key={x.id} className="border-b py-2 text-sm">{x.recorded_at} · {x.entry_type} {x.amount_ml} mL · balance {x.running_balance_ml} mL · {x.category}</article>)}</section></div>

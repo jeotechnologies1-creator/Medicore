@@ -1,5 +1,4 @@
-import { getAppData } from './js/store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from './js/store.js';
 
         const UnauthorizedModule = () => {
             const { user } = useAuth();
@@ -30,7 +29,7 @@ const appData = getAppData();
             const [routeLoadError, setRouteLoadError] = useState(false);
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
             const [sidebarOpen, setSidebarOpen] = useState(false);
-            const [notifications, setNotifications] = useState(appData.notifications || []);
+            const [notifications, setNotifications] = useState(getStoreValue("notifications") || []);
             const [toasts, setToasts] = useState([]);
             const [dataVersion, setDataVersion] = useState(0);
             const [dataLoad, setDataLoad] = useState({ loading: false, failures: [] });
@@ -114,8 +113,8 @@ const appData = getAppData();
                 const channel = client.channel(`onemed-notifications-${user.id}`)
                     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
                         const notice = normalizeNotifications([payload.new])[0];
-                        const next = [notice, ...(appData.notifications || []).filter((item) => item.id !== notice.id)];
-                        appData.notifications = next;
+                        const next = [notice, ...(getStoreValue("notifications") || []).filter((item) => item.id !== notice.id)];
+                        setStoreValue("notifications", next);
                         setNotifications(next);
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'clinical_alerts' }, () => window.dispatchEvent(new CustomEvent('onemed:refresh-data', { detail: 'clinical_safety' })))
@@ -163,8 +162,8 @@ const appData = getAppData();
                         ]);
                         if (cancelled) return;
                         if (notificationResult?.data) {
-                            appData.notifications = normalizeNotifications(notificationResult.data);
-                            setNotifications(appData.notifications.slice());
+                            setStoreValue("notifications", normalizeNotifications(notificationResult.data));
+                            setNotifications(getStoreValue("notifications").slice());
                         }
                         setDataLoad({ loading: false, failures: result?.failures || [] });
                         setDataVersion((value) => value + 1);
@@ -194,10 +193,10 @@ const appData = getAppData();
                 const { error } = await client.from('notifications').update({ read }).in('id', ids);
                 if (error) return notifyPersistenceFailure('update notification status', error);
                 const idSet = new Set(ids);
-                const next = (appData.notifications || []).map((notification) =>
+                const next = (getStoreValue("notifications") || []).map((notification) =>
                     idSet.has(notification.id) ? { ...notification, read } : notification
                 );
-                appData.notifications = next;
+                setStoreValue("notifications", next);
                 setNotifications(next.slice());
                 return next;
             };

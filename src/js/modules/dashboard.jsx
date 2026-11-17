@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue } from '../store.js';
 
         // ==========================================
         // DASHBOARD MODULE
@@ -8,47 +7,47 @@ const appData = getAppData();
             const { user } = useAuth();
             
             const today = formatFacilityDate();
-            const kpis = appData.dashboardKpis || {};
+            const kpis = getStoreValue("dashboardKpis") || {};
             const stats = {
-                totalPatients: Number(kpis.patients ?? appData.patients.length),
-                todayAppointments: Number(kpis.appointments ?? appData.appointments.filter(a => a.date === today).length),
-                pendingLabs: Number(kpis.pending_labs ?? appData.labOrders.filter(l => l.status === 'pending').length),
-                occupiedBeds: Number(kpis.active_admissions ?? appData.admissions.filter(a => a.status === 'active').length),
-                criticalPatients: appData.admissions.filter(a => a.acuity === 'critical').length,
-                pendingBills: appData.billing.filter(b => b.status === 'pending' || b.status === 'partial').length,
-                staffOnline: appData.users.filter(u => u.status === 'active').length
+                totalPatients: Number(kpis.patients ?? getStoreValue("patients").length),
+                todayAppointments: Number(kpis.appointments ?? getStoreValue("appointments").filter(a => a.date === today).length),
+                pendingLabs: Number(kpis.pending_labs ?? getStoreValue("labOrders").filter(l => l.status === 'pending').length),
+                occupiedBeds: Number(kpis.active_admissions ?? getStoreValue("admissions").filter(a => a.status === 'active').length),
+                criticalPatients: getStoreValue("admissions").filter(a => a.acuity === 'critical').length,
+                pendingBills: getStoreValue("billing").filter(b => b.status === 'pending' || b.status === 'partial').length,
+                staffOnline: getStoreValue("users").filter(u => u.status === 'active').length
             };
 
-            const recentActivity = appData.auditLogs.slice(0, 10);
+            const recentActivity = getStoreValue("auditLogs").slice(0, 10);
 
             const appointmentData = Array.from({ length: 7 }, (_, index) => {
                 const date = new Date();
                 date.setDate(date.getDate() - (6 - index));
                 const dateKey = formatFacilityDate(date);
-                return { label: date.toLocaleDateString(undefined, { weekday: 'short' }), value: appData.appointments.filter(appointment => appointment.date === dateKey).length };
+                return { label: date.toLocaleDateString(undefined, { weekday: 'short' }), value: getStoreValue("appointments").filter(appointment => appointment.date === dateKey).length };
             });
-            const departmentCounts = appData.appointments.reduce((counts, appointment) => {
+            const departmentCounts = getStoreValue("appointments").reduce((counts, appointment) => {
                 const department = appointment.department || 'Unassigned';
                 counts[department] = (counts[department] || 0) + 1;
                 return counts;
             }, {});
-            const departmentTotal = Math.max(1, appData.appointments.length);
+            const departmentTotal = Math.max(1, getStoreValue("appointments").length);
             const departments = Object.entries(departmentCounts).slice(0, 4).map(([name, count], index) => ({ name, value: Math.round((count / departmentTotal) * 100), color: ['bg-medical-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'][index] }));
-            const inventoryValue = (appData.pharmacyInventory || []).reduce(
+            const inventoryValue = (getStoreValue("pharmacyInventory") || []).reduce(
                 (total, item) => total + Math.max(0, Number(item.stockQuantity) || 0) * Math.max(0, Number(item.unitPrice) || 0),
                 0
             );
             const careCoordinationSummary = {
-                highRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'critical' && entry.status === 'open').length,
-                moderateRiskCases: (appData.clinicalAlerts || []).filter((entry) => entry.severity === 'warning' && entry.status === 'open').length,
-                dischargePlans: (appData.documents || []).filter((entry) => String(entry.documentType || '').toLowerCase().includes('discharge')).length,
-                qualityReviews: (appData.clinicalAlerts || []).filter((entry) => ['acknowledged', 'resolved'].includes(entry.status)).length
+                highRiskCases: (getStoreValue("clinicalAlerts") || []).filter((entry) => entry.severity === 'critical' && entry.status === 'open').length,
+                moderateRiskCases: (getStoreValue("clinicalAlerts") || []).filter((entry) => entry.severity === 'warning' && entry.status === 'open').length,
+                dischargePlans: (getStoreValue("documents") || []).filter((entry) => String(entry.documentType || '').toLowerCase().includes('discharge')).length,
+                qualityReviews: (getStoreValue("clinicalAlerts") || []).filter((entry) => ['acknowledged', 'resolved'].includes(entry.status)).length
             };
             const careItemsRequiringFollowUp = careCoordinationSummary.highRiskCases + careCoordinationSummary.moderateRiskCases;
             const followUpReadiness = careItemsRequiringFollowUp
                 ? Math.min(100, Math.round(((careCoordinationSummary.dischargePlans + careCoordinationSummary.qualityReviews) / careItemsRequiringFollowUp) * 100))
                 : 0;
-            const qualityEntries = (appData.clinicalTasks || [])
+            const qualityEntries = (getStoreValue("clinicalTasks") || [])
                 .filter((task) => ['quality_review', 'care_coordination'].includes(task.taskType || task.task_type))
                 .map((task) => {
                     if ((task.taskType || task.task_type) !== 'quality_review') return task;
@@ -67,15 +66,15 @@ const appData = getAppData();
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <StatCard title="Today's Appointments" value={stats.todayAppointments} icon={Icons.Calendar} color="medical" />
-                                    <StatCard title="Patients Waiting" value={appData.appointments.filter(a => a.status === 'checked_in').length} icon={Icons.Users} color="amber" />
+                                    <StatCard title="Patients Waiting" value={getStoreValue("appointments").filter(a => a.status === 'checked_in').length} icon={Icons.Users} color="amber" />
                                     <StatCard title="Pending Labs" value={stats.pendingLabs} icon={Icons.FlaskConical} color="violet" />
-                                    <StatCard title="Prescriptions" value={appData.prescriptions.filter(p => p.status === 'active').length} icon={Icons.Pill} color="emerald" />
+                                    <StatCard title="Prescriptions" value={getStoreValue("prescriptions").filter(p => p.status === 'active').length} icon={Icons.Pill} color="emerald" />
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <Card title="Today's Schedule" className="lg:col-span-2" action={<Button variant="ghost" size="sm" icon={Icons.Calendar} onClick={() => navigateTo('appointments')}>View All</Button>}>
                                         <div className="space-y-3">
-                                            {appData.appointments.filter(a => a.date === today).slice(0, 5).map((apt) => {
-                                                const patient = appData.patients.find(p => p.id === apt.patientId);
+                                            {getStoreValue("appointments").filter(a => a.date === today).slice(0, 5).map((apt) => {
+                                                const patient = getStoreValue("patients").find(p => p.id === apt.patientId);
                                                 return (
                                                     <div key={apt.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
                                                         <div className="text-center min-w-[60px]">
@@ -109,15 +108,15 @@ const appData = getAppData();
                         return (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <StatCard title="Ward Occupancy" value={stats.occupiedBeds + '/' + appData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} icon={Icons.Bed} color="medical" />
-                                    <StatCard title="Vitals Recorded" value={appData.vitals.filter(v => String(v.timestamp || '').slice(0, 10) === today).length} icon={Icons.Activity} color="amber" />
-                                    <StatCard title="Active Medication Orders" value={appData.medicationOrders.filter(order => order.status === 'active').length} icon={Icons.Syringe} color="emerald" />
+                                    <StatCard title="Ward Occupancy" value={stats.occupiedBeds + '/' + getStoreValue("wards").reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} icon={Icons.Bed} color="medical" />
+                                    <StatCard title="Vitals Recorded" value={getStoreValue("vitals").filter(v => String(v.timestamp || '').slice(0, 10) === today).length} icon={Icons.Activity} color="amber" />
+                                    <StatCard title="Active Medication Orders" value={getStoreValue("medicationOrders").filter(order => order.status === 'active').length} icon={Icons.Syringe} color="emerald" />
                                     <StatCard title="Critical Patients" value={stats.criticalPatients} icon={Icons.AlertCircle} color="red" />
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <Card title="Bed Status" subtitle="Real-time ward occupancy">
                                         <div className="grid grid-cols-2 gap-4">
-                                            {appData.wards.map(ward => (
+                                            {getStoreValue("wards").map(ward => (
                                                 <div key={ward.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="font-medium text-slate-700">{ward.name}</span>
@@ -130,7 +129,7 @@ const appData = getAppData();
                                     </Card>
                                     <Card title="Vital Signs Alerts">
                                         <div className="space-y-3">
-                                            {appData.clinicalAlerts.filter(alert => alert.status === 'open' && alert.severity === 'critical').slice(0, 3).map((alert) => (
+                                            {getStoreValue("clinicalAlerts").filter(alert => alert.status === 'open' && alert.severity === 'critical').slice(0, 3).map((alert) => (
                                                 <div key={alert.id} className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
                                                     <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
                                                         <Icons.AlertCircle size={20} className="text-red-600" />
@@ -155,7 +154,7 @@ const appData = getAppData();
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <StatCard title="Total Patients" value={stats.totalPatients} subtitle="Registered patients" icon={Icons.Users} color="medical" />
                                     <StatCard title="Today's Appointments" value={stats.todayAppointments} subtitle="Scheduled visits" icon={Icons.Calendar} color="emerald" />
-                                    <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/' + appData.wards.reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
+                                    <StatCard title="Occupied Beds" value={stats.occupiedBeds + '/' + getStoreValue("wards").reduce((sum, ward) => sum + Number(ward.capacity || 0), 0)} subtitle="Current occupancy" icon={Icons.Bed} color="amber" />
                                     <StatCard title="Inventory Value" value={formatCurrency(inventoryValue)} subtitle="On-hand medication stock" icon={Icons.Package} color="violet" />
                                 </div>
 
@@ -247,7 +246,7 @@ const appData = getAppData();
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <Card title="Bed Occupancy by Ward">
                                         <div className="space-y-4">
-                                            {appData.wards.map(ward => (
+                                            {getStoreValue("wards").map(ward => (
                                                 <div key={ward.id} className="flex items-center justify-between">
                                                     <div>
                                                         <p className="text-sm font-medium text-slate-900">{ward.name}</p>
@@ -261,10 +260,10 @@ const appData = getAppData();
                                     <Card title="Lab Workload" className="lg:col-span-2">
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                             {[
-                                                { label: 'Pending', value: appData.labOrders.filter(l => l.status === 'pending').length, color: 'text-amber-600 bg-amber-50' },
-                                                { label: 'Processing', value: appData.labOrders.filter(l => l.status === 'processing').length, color: 'text-medical-600 bg-medical-50' },
-                                                { label: 'Completed', value: appData.labOrders.filter(l => l.status === 'completed').length, color: 'text-emerald-600 bg-emerald-50' },
-                                                { label: 'Critical', value: appData.labOrders.filter(l => l.status === 'critical').length, color: 'text-red-600 bg-red-50' },
+                                                { label: 'Pending', value: getStoreValue("labOrders").filter(l => l.status === 'pending').length, color: 'text-amber-600 bg-amber-50' },
+                                                { label: 'Processing', value: getStoreValue("labOrders").filter(l => l.status === 'processing').length, color: 'text-medical-600 bg-medical-50' },
+                                                { label: 'Completed', value: getStoreValue("labOrders").filter(l => l.status === 'completed').length, color: 'text-emerald-600 bg-emerald-50' },
+                                                { label: 'Critical', value: getStoreValue("labOrders").filter(l => l.status === 'critical').length, color: 'text-red-600 bg-red-50' },
                                             ].map(item => (
                                                 <div key={item.label} className={'p-4 rounded-xl ' + item.color + ' text-center'}>
                                                     <p className="text-2xl font-bold">{item.value}</p>
@@ -280,7 +279,7 @@ const appData = getAppData();
                                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'critical' ? 'danger' : row.status === 'completed' ? 'success' : 'warning'}>{row.status}</Badge> },
                                                     { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'stat' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority}</Badge> }
                                                 ]}
-                                                data={appData.labOrders.slice(0, 5)}
+                                                data={getStoreValue("labOrders").slice(0, 5)}
                                             />
                                         </div>
                                     </Card>

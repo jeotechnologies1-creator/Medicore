@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from '../store.js';
 
         // ==========================================
         // PATIENTS MODULE
@@ -18,7 +17,7 @@ const appData = getAppData();
             const [filterStatus, setFilterStatus] = useState('all');
             const [patientPage, setPatientPage] = useState(0);
             const [patientCount, setPatientCount] = useState(0);
-            const [patients, setPatients] = useState((getAppData().patients || []));
+            const [patients, setPatients] = useState((getStoreValue("patients") || []));
             const [formErrors, setFormErrors] = useState({});
             const [possibleDuplicates, setPossibleDuplicates] = useState([]);
             const [selectedExistingPatientId, setSelectedExistingPatientId] = useState('');
@@ -151,7 +150,7 @@ const appData = getAppData();
                         registrationDate: created.registration_date || created.registrationDate || formatFacilityDate()
                     };
                     const nextPatients = [...patients, mapped];
-                    appData.patients = nextPatients;
+                    setStoreValue("patients", nextPatients);
                     setPatients(nextPatients);
                     setForm({ firstName: '', lastName: '', dateOfBirth: '', gender: '', phone: '', email: '', nationalIdHash: '', address: '', bloodGroup: '', emergencyContactName: '', emergencyContactPhone: '' });
                     setFormErrors({});
@@ -230,7 +229,7 @@ const appData = getAppData();
                         emergencyContact: { name: data.emergency_contact_name || '', phone: data.emergency_contact_phone || '' }
                     };
                     const nextPatients = patients.map((patient) => patient.id === mapped.id ? mapped : patient);
-                    appData.patients = nextPatients;
+                    setStoreValue("patients", nextPatients);
                     setPatients(nextPatients);
                     setSelectedPatient((current) => current?.id === mapped.id ? mapped : current);
                     setShowRegistration(false);
@@ -270,17 +269,17 @@ const appData = getAppData();
 
             const PatientDetailView = ({ patient }) => {
                 const chart = patientChart?.patientId === patient.id ? patientChart.data : null;
-                const patientAppointments = chart ? normalizeAppointments(chart.appointments || []) : appData.appointments.filter(a => a.patientId === patient.id);
-                const patientLabs = chart ? normalizeLabOrders(chart.lab_orders || []) : appData.labOrders.filter(l => l.patientId === patient.id);
-                const patientPrescriptions = chart ? normalizePrescriptions(chart.prescriptions || []) : appData.prescriptions.filter(p => p.patientId === patient.id);
-                const patientVitals = (chart ? normalizeVitals(chart.vital_signs || []) : appData.vitals.filter(v => v.patientId === patient.id)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                const patientBilling = chart ? normalizeBilling(chart.billing || []) : appData.billing.filter(b => b.patientId === patient.id);
-                const patientAdmissions = chart ? normalizeAdmissions(chart.admissions || []) : appData.admissions.filter(a => a.patientId === patient.id);
-                const patientAllergies = chart ? normalizeAllergies(chart.patient_allergies || []) : (appData.allergies || []).filter(a => a.patientId === patient.id);
-                const patientConditions = chart ? normalizeConditions(chart.patient_conditions || []) : (appData.conditions || []).filter(c => c.patientId === patient.id);
-                const patientMedicationOrders = chart ? normalizeMedicationOrders(chart.medication_orders || []) : (appData.medicationOrders || []).filter(m => m.patientId === patient.id);
-                const patientCarePlans = chart ? normalizeCarePlans(chart.care_plans || []) : (appData.carePlans || []).filter(c => c.patientId === patient.id);
-                const encounterNotes = chart ? normalizeConsultations(chart.consultations || []) : (appData.consultations || []).filter(c => c.patientId === patient.id);
+                const patientAppointments = chart ? normalizeAppointments(chart.appointments || []) : getStoreValue("appointments").filter(a => a.patientId === patient.id);
+                const patientLabs = chart ? normalizeLabOrders(chart.lab_orders || []) : getStoreValue("labOrders").filter(l => l.patientId === patient.id);
+                const patientPrescriptions = chart ? normalizePrescriptions(chart.prescriptions || []) : getStoreValue("prescriptions").filter(p => p.patientId === patient.id);
+                const patientVitals = (chart ? normalizeVitals(chart.vital_signs || []) : getStoreValue("vitals").filter(v => v.patientId === patient.id)).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                const patientBilling = chart ? normalizeBilling(chart.billing || []) : getStoreValue("billing").filter(b => b.patientId === patient.id);
+                const patientAdmissions = chart ? normalizeAdmissions(chart.admissions || []) : getStoreValue("admissions").filter(a => a.patientId === patient.id);
+                const patientAllergies = chart ? normalizeAllergies(chart.patient_allergies || []) : (getStoreValue("allergies") || []).filter(a => a.patientId === patient.id);
+                const patientConditions = chart ? normalizeConditions(chart.patient_conditions || []) : (getStoreValue("conditions") || []).filter(c => c.patientId === patient.id);
+                const patientMedicationOrders = chart ? normalizeMedicationOrders(chart.medication_orders || []) : (getStoreValue("medicationOrders") || []).filter(m => m.patientId === patient.id);
+                const patientCarePlans = chart ? normalizeCarePlans(chart.care_plans || []) : (getStoreValue("carePlans") || []).filter(c => c.patientId === patient.id);
+                const encounterNotes = chart ? normalizeConsultations(chart.consultations || []) : (getStoreValue("consultations") || []).filter(c => c.patientId === patient.id);
                 const [selectedLabResult, setSelectedLabResult] = useState(null);
                 const [medicationSafetyFindings, setMedicationSafetyFindings] = useState([]);
                 const [medicationSafetyMessage, setMedicationSafetyMessage] = useState('');
@@ -386,7 +385,7 @@ const appData = getAppData();
                 const [documentBusy, setDocumentBusy] = useState(false);
                 const [documentMessage, setDocumentMessage] = useState('');
                 const [documentLink, setDocumentLink] = useState(null);
-                const patientDocuments = chart ? normalizeDocuments(chart.patient_documents || []) : (appData.documents || []).filter((document) => document.patientId === patient.id);
+                const patientDocuments = chart ? normalizeDocuments(chart.patient_documents || []) : (getStoreValue("documents") || []).filter((document) => document.patientId === patient.id);
                 const canUploadPatientDocument = ['super_admin', 'doctor', 'nurse'].includes(user?.role);
                 const [patientConsents, setPatientConsents] = useState([]);
                 const [consentForm, setConsentForm] = useState({ type: 'treatment', status: 'granted', witness: '', notes: '' });
@@ -439,7 +438,7 @@ const appData = getAppData();
                         const result = await window.OneMedSupabase?.uploadPatientDocument?.(patient.id, documentFile, documentType);
                         if (!result || result.error || !result.data) throw result?.error || new Error('The document could not be saved.');
                         const saved = normalizeDocuments([result.data])[0];
-                        appData.documents = [saved, ...(appData.documents || [])];
+                        setStoreValue("documents", [saved, ...(getStoreValue("documents") || [])]);
                         setDocumentFile(null);
                         setDocumentMessage('Document uploaded securely.');
                     } catch (error) {
@@ -506,8 +505,8 @@ const appData = getAppData();
                         indication: medicationForm.indication || null, status: 'active'
                     });
                     if (!saved) return;
-                    const next = [normalizeMedicationOrders([saved])[0], ...(appData.medicationOrders || [])];
-                    appData.medicationOrders = next;
+                    const next = [normalizeMedicationOrders([saved])[0], ...(getStoreValue("medicationOrders") || [])];
+                    setStoreValue("medicationOrders", next);
                     setMedicationForm({ formularyItemId: '', dose: '', doseUnit: '', frequency: 'Daily', indication: '' });
                     setMedicationSafetyMessage('Medication order saved after server safety checks.');
                 };
@@ -521,8 +520,8 @@ const appData = getAppData();
                         follow_up_date: encounterForm.followUpDate || null, status: 'completed'
                     });
                     if (!saved) return;
-                    const next = [normalizeConsultations([saved])[0], ...(appData.consultations || [])];
-                    appData.consultations = next;
+                    const next = [normalizeConsultations([saved])[0], ...(getStoreValue("consultations") || [])];
+                    setStoreValue("consultations", next);
                     setEncounterForm({ chiefComplaint: '', diagnosis: '', diagnosisCodeSystem: null, diagnosisCode: null, diagnosisDisplay: null, assessment: '', plan: '', followUpDate: '' });
                 };
 
@@ -533,8 +532,8 @@ const appData = getAppData();
                         target_date: carePlanForm.targetDate || null, review_date: carePlanForm.targetDate || null, status: 'active'
                     });
                     if (!saved) return;
-                    const next = [normalizeCarePlans([saved])[0], ...(appData.carePlans || [])];
-                    appData.carePlans = next;
+                    const next = [normalizeCarePlans([saved])[0], ...(getStoreValue("carePlans") || [])];
+                    setStoreValue("carePlans", next);
                     setCarePlanForm({ title: '', description: '', targetDate: '' });
                 };
 
@@ -545,8 +544,8 @@ const appData = getAppData();
                         verification_status: 'provisional', onset_date: problemForm.onsetDate || null
                     });
                     if (!saved) return;
-                    const next = [normalizeConditions([saved])[0], ...(appData.conditions || [])];
-                    appData.conditions = next;
+                    const next = [normalizeConditions([saved])[0], ...(getStoreValue("conditions") || [])];
+                    setStoreValue("conditions", next);
                     setProblemForm({ conditionName: '', codeSystem: null, code: null, display: null, status: 'active', onsetDate: '' });
                 };
 
@@ -557,7 +556,7 @@ const appData = getAppData();
                         diagnosis: admissionForm.diagnosis || null, code_system: admissionForm.diagnosisCodeSystem, code: admissionForm.diagnosisCode, display: admissionForm.diagnosisDisplay, status: 'active', acuity: admissionForm.acuity || 'stable'
                     });
                     if (!saved) return;
-                    appData.admissions = [normalizeAdmissions([saved])[0], ...(appData.admissions || [])];
+                    setStoreValue("admissions", [normalizeAdmissions([saved])[0], ...(getStoreValue("admissions") || [])]);
                     setAdmissionForm({
                         ward: '',
                         bedNumber: '',
@@ -572,7 +571,7 @@ const appData = getAppData();
 
                 const handleSaveDischargeSummary = async () => {
                     if (!dischargeForm.summary.trim() && !dischargeForm.followUp.trim() && !dischargeForm.instructions.trim()) return;
-                    const activeAdmission = (appData.admissions || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
+                    const activeAdmission = (getStoreValue("admissions") || []).find(entry => entry.patientId === patient.id && entry.status === 'active');
                     const client = window.OneMedSupabase?.getClient?.();
                     if (!activeAdmission || !client) return notifyPersistenceFailure('finalize discharge');
                     const { data: reconciliationData, error: reconciliationError } = await client.from('medication_reconciliations').insert({
@@ -584,10 +583,10 @@ const appData = getAppData();
                         notes: dischargeForm.instructions || dischargeForm.followUp || null
                     }).select();
                     if (reconciliationError || !reconciliationData?.[0]) return notifyPersistenceFailure('complete medication reconciliation before discharge', reconciliationError);
-                    appData.medicationReconciliations = [normalizeMedicationReconciliations(reconciliationData)[0], ...(appData.medicationReconciliations || [])];
+                    setStoreValue("medicationReconciliations", [normalizeMedicationReconciliations(reconciliationData)[0], ...(getStoreValue("medicationReconciliations") || [])]);
                     const { data, error } = await client.from('admissions').update({ status: 'discharged', discharge_date: dischargeForm.dischargeDate || formatFacilityDate(), diagnosis: activeAdmission.diagnosis || dischargeForm.summary }).eq('id', activeAdmission.id).select();
                     if (error || !data?.[0]) return notifyPersistenceFailure('finalize discharge', error);
-                    appData.admissions = (appData.admissions || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry);
+                    setStoreValue("admissions", (getStoreValue("admissions") || []).map(entry => entry.id === activeAdmission.id ? normalizeAdmissions(data)[0] : entry));
                     await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: 'Discharge summary', plan: [dischargeForm.summary, dischargeForm.followUp, dischargeForm.instructions].filter(Boolean).join('\n'), status: 'completed' });
 
                     setDischargeForm({
@@ -602,7 +601,7 @@ const appData = getAppData();
                     if (!followUpForm.reason.trim()) return;
                     const saved = await insertClinicalRecord('appointments', { patient_id: patient.id, appointment_date: followUpForm.nextVisitDate, appointment_time: '09:00', appointment_type: 'Follow-up', department: followUpForm.clinic, status: 'scheduled', notes: [followUpForm.reason, followUpForm.instructions].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    appData.appointments = [normalizeAppointments([saved])[0], ...(appData.appointments || [])];
+                    setStoreValue("appointments", [normalizeAppointments([saved])[0], ...(getStoreValue("appointments") || [])]);
 
                     setFollowUpForm({
                         clinic: '',
@@ -617,7 +616,7 @@ const appData = getAppData();
                     if (!referralForm.reason.trim()) return;
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Referral: ${referralForm.department}`, task_type: 'referral', due_at: referralForm.transferDate || null, priority: referralForm.urgency, notes: [referralForm.provider, referralForm.reason, referralForm.notes].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
+                    setStoreValue("clinicalTasks", [normalizeClinicalTasks([saved])[0], ...(getStoreValue("clinicalTasks") || [])]);
 
                     setReferralForm({
                         department: '',
@@ -633,7 +632,7 @@ const appData = getAppData();
                     if (!outcomeForm.summary.trim()) return;
                     const saved = await insertClinicalRecord('consultations', { patient_id: patient.id, chief_complaint: `Clinical outcome: ${outcomeForm.status}`, assessment: outcomeForm.summary, plan: outcomeForm.dischargeInstructions || null, status: 'completed' });
                     if (!saved) return;
-                    appData.consultations = [normalizeConsultations([saved])[0], ...(appData.consultations || [])];
+                    setStoreValue("consultations", [normalizeConsultations([saved])[0], ...(getStoreValue("consultations") || [])]);
 
                     setOutcomeForm({
                         status: 'recovered',
@@ -646,7 +645,7 @@ const appData = getAppData();
                 const handleSaveQualityCheck = async () => {
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: 'Quality and safety review', task_type: 'quality_review', priority: qualityForm.riskScore.toLowerCase() === 'high' ? 'urgent' : 'routine', status: 'completed', notes: JSON.stringify(qualityForm) });
                     if (!saved) return;
-                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
+                    setStoreValue("clinicalTasks", [normalizeClinicalTasks([saved])[0], ...(getStoreValue("clinicalTasks") || [])]);
 
                     setQualityForm({
                         idCheck: true,
@@ -662,7 +661,7 @@ const appData = getAppData();
                 const handleSaveCareCoordination = async () => {
                     const saved = await insertClinicalRecord('clinical_tasks', { patient_id: patient.id, title: `Care coordination: ${careCoordinationForm.readmissionRisk} readmission risk`, task_type: 'care_coordination', due_at: careCoordinationForm.plannedDischargeDate || null, priority: careCoordinationForm.readmissionRisk.toLowerCase() === 'high' ? 'urgent' : 'routine', notes: [careCoordinationForm.careCoordinator, careCoordinationForm.dischargePlan, careCoordinationForm.handoffNote].filter(Boolean).join('\n') });
                     if (!saved) return;
-                    appData.clinicalTasks = [normalizeClinicalTasks([saved])[0], ...(appData.clinicalTasks || [])];
+                    setStoreValue("clinicalTasks", [normalizeClinicalTasks([saved])[0], ...(getStoreValue("clinicalTasks") || [])]);
 
                     setCareCoordinationForm({
                         careCoordinator: 'Care Team',

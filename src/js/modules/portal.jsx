@@ -1,12 +1,11 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue } from '../store.js';
 
         // PATIENT PORTAL MODULE
         // ==========================================
         const PatientPortalModule = ({ initialTab = 'overview' }) => {
             const { user } = useAuth();
             const patientLookupId = user?.patientId || user?.id || null;
-            const patient = appData.patients.find(p => p.id === patientLookupId || p.patientNumber === patientLookupId);
+            const patient = getStoreValue("patients").find(p => p.id === patientLookupId || p.patientNumber === patientLookupId);
             const [activeTab, setActiveTab] = useState(initialTab);
             const [messageDraft, setMessageDraft] = useState('');
             const [appointmentDraft, setAppointmentDraft] = useState({
@@ -355,19 +354,19 @@ const appData = getAppData();
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Last visit</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((getStoreValue("appointments") || []).filter(a => a.patientId === patient.id).slice(-1)[0]?.date)}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Active meds</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(appData.medicationOrders || []).filter(m => m.patientId === patient.id && m.status === 'active').length}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(getStoreValue("medicationOrders") || []).filter(m => m.patientId === patient.id && m.status === 'active').length}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Open bills</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(appData.billing || []).filter(b => b.patientId === patient.id && Number(b.balance || 0) > 0).length}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{(getStoreValue("billing") || []).filter(b => b.patientId === patient.id && Number(b.balance || 0) > 0).length}</p>
                                         </div>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                             <p className="text-xs uppercase tracking-wide text-slate-500">Next review</p>
-                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((appData.appointments || []).filter(a => a.patientId === patient.id && a.date >= formatFacilityDate()).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatDate((getStoreValue("appointments") || []).filter(a => a.patientId === patient.id && a.date >= formatFacilityDate()).sort((a, b) => a.date.localeCompare(b.date))[0]?.date)}</p>
                                         </div>
                                     </div>
                                 </Card>
@@ -444,7 +443,7 @@ const appData = getAppData();
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : 'warning'}>{row.status}</Badge> },
                                         { key: 'results', title: 'Results', render: (row) => row.results && ['final', 'corrected'].includes(row.result_status) ? <Button variant="primary" size="sm" onClick={() => setSelectedLabResult(row)}>View</Button> : 'Pending review' }
                                     ]}
-                                    data={appData.labOrders.filter(l => l.patientId === patient.id && ['final', 'corrected'].includes(l.result_status))}
+                                    data={getStoreValue("labOrders").filter(l => l.patientId === patient.id && ['final', 'corrected'].includes(l.result_status))}
                                 />
                             </Card>
                         )}
@@ -458,7 +457,7 @@ const appData = getAppData();
                                         { key: 'medications', title: 'Medications', render: (row) => (row.medications || []).map(m => m.name || m.medicationName).join(', ') },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
-                                    data={appData.prescriptions.filter(p => p.patientId === patient.id)}
+                                    data={getStoreValue("prescriptions").filter(p => p.patientId === patient.id)}
                                 />
                             </Card>
                         )}
@@ -484,7 +483,7 @@ const appData = getAppData();
                                             return account ? <div className="text-xs text-slate-600"><span className="font-medium">{account.bankName}</span><br />{account.accountName}<br />{account.accountNumber}<br /><span>Use {row.invoiceNumber} as reference</span></div> : <span className="text-amber-700 text-xs">No account configured for this service</span>;
                                         } }
                                     ]}
-                                    data={appData.billing.filter(b => b.patientId === patient.id)}
+                                    data={getStoreValue("billing").filter(b => b.patientId === patient.id)}
                                 />
                                 {paymentGateways.length > 1 && <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">Payment provider<select className="rounded border border-slate-300 px-2 py-1" value={selectedPaymentGatewayId} onChange={(event) => setSelectedPaymentGatewayId(event.target.value)}>{paymentGateways.map((gateway) => <option key={gateway.id} value={gateway.id}>{gateway.provider_code}</option>)}</select></label>}
                                 {checkoutMessage && <p role="status" className="mt-3 text-sm text-slate-700">{checkoutMessage}{checkoutUrl && <> <a className="font-medium text-medical-700 underline" href={checkoutUrl} target="_blank" rel="noopener noreferrer">Continue to secure checkout</a></>}</p>}

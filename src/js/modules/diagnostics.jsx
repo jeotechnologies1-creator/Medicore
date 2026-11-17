@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue } from '../store.js';
 
         // ==========================================
         const AppointmentsModule = () => {
@@ -9,7 +8,7 @@ const appData = getAppData();
             const [selectedDate, setSelectedDate] = useState(formatFacilityDate());
             const [showNewAppointment, setShowNewAppointment] = useState(false);
             const [saveError, setSaveError] = useState('');
-            const [appointments, setAppointments] = useState(getAppData().appointments || []);
+            const [appointments, setAppointments] = useState(getStoreValue("appointments") || []);
             const [appointmentForm, setAppointmentForm] = useState({
                 patientId: '',
                 doctorId: '',
@@ -119,7 +118,7 @@ const appData = getAppData();
                                 columns={[
                                     { key: 'time', title: 'Time' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return (
                                             <div className="flex items-center gap-2">
                                                 <Avatar name={patient?.firstName + ' ' + patient?.lastName} size="sm" />
@@ -130,7 +129,7 @@ const appData = getAppData();
                                     { key: 'type', title: 'Type' },
                                     { key: 'department', title: 'Department' },
                                     { key: 'doctor', title: 'Doctor', render: (row) => {
-                                        const doctor = appData.users.find(u => u.id === row.doctorId);
+                                        const doctor = getStoreValue("users").find(u => u.id === row.doctorId);
                                         return doctor?.name || 'Unassigned';
                                     }},
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'completed' ? 'success' : row.status === 'in-progress' ? 'info' : row.status === 'cancelled' ? 'danger' : 'default'}>{row.status}</Badge> }
@@ -157,7 +156,7 @@ const appData = getAppData();
                                                     const dayAppointments = appointments.filter(appointment => appointment.date === formatFacilityDate(date) && appointment.time === time);
                                                     return <div key={i} className="border border-slate-100 rounded p-1 min-h-[40px] hover:bg-slate-50 transition-colors">
                                                         {dayAppointments.map(appointment => {
-                                                            const patient = appData.patients.find(p => p.id === appointment.patientId);
+                                                            const patient = getStoreValue("patients").find(p => p.id === appointment.patientId);
                                                             return <div key={appointment.id} className="bg-medical-100 text-medical-700 text-xs rounded px-1.5 py-0.5 truncate">{patient ? `${patient.firstName} ${patient.lastName}` : 'Appointment'}</div>;
                                                         })}
                                                     </div>;
@@ -184,9 +183,9 @@ const appData = getAppData();
                     >
                         <div className="space-y-4">
                             {saveError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{saveError}</div>}
-                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={appointmentForm.patientId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Department" value={appointmentForm.department} onChange={(e) => setAppointmentForm(prev => ({ ...prev, department: e.target.value }))} options={[{ value: '', label: 'Select department...' }, { value: 'medical', label: 'Medical' }, { value: 'surgical', label: 'Surgical' }, { value: 'obstetrics', label: 'Obstetrics' }, { value: 'specialist', label: 'Specialist' }]} />
-                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(appData.users || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
+                            <Select label="Doctor" value={appointmentForm.doctorId} onChange={(e) => setAppointmentForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Select doctor...' }, ...(getStoreValue("users") || []).filter(person => person.role === 'doctor').map(person => ({ value: person.id, label: person.name }))]} />
                             <div className="grid grid-cols-2 gap-4">
                                 <Input label="Date" type="date" value={appointmentForm.date} onChange={(e) => setAppointmentForm(prev => ({ ...prev, date: e.target.value }))} />
                                 <Input label="Time" type="time" value={appointmentForm.time} onChange={(e) => setAppointmentForm(prev => ({ ...prev, time: e.target.value }))} />
@@ -209,7 +208,7 @@ const appData = getAppData();
             const [showResultEntry, setShowResultEntry] = useState(false);
             const [showResultDetails, setShowResultDetails] = useState(false);
             const [showNewOrder, setShowNewOrder] = useState(false);
-            const [labOrders, setLabOrders] = useState(getAppData().labOrders || []);
+            const [labOrders, setLabOrders] = useState(getStoreValue("labOrders") || []);
             const [newOrderForm, setNewOrderForm] = useState({ patientId: '', responsibleClinicianId: ['doctor', 'specialist'].includes(user?.role) ? user.id : '', testType: 'CBC', testCodeSystem: null, testCode: null, testDisplay: null, category: 'Hematology', priority: 'routine' });
             const [resultForm, setResultForm] = useState({ comments: '', values: {}, correctionReason: '' });
             const [qcForm, setQcForm] = useState({ analyteCode: '', codeSystem: '', minimum: '', maximum: '', observedValue: '' });
@@ -265,7 +264,7 @@ const appData = getAppData();
                 };
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create laboratory order');
-                const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
+                const encounter = (getStoreValue("encounters") || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('lab_orders').insert([{
                     patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId,
                     responsible_clinician_id: payload.doctorId, test_type: payload.testType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
@@ -368,10 +367,10 @@ const appData = getAppData();
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            { label: 'Pending', value: appData.labOrders.filter(l => l.status === 'pending').length, color: 'amber' },
-                            { label: 'Processing', value: appData.labOrders.filter(l => l.status === 'processing').length, color: 'medical' },
-                            { label: 'Completed', value: appData.labOrders.filter(l => l.status === 'completed').length, color: 'emerald' },
-                            { label: 'Critical', value: appData.labOrders.filter(l => l.status === 'critical').length, color: 'red' },
+                            { label: 'Pending', value: getStoreValue("labOrders").filter(l => l.status === 'pending').length, color: 'amber' },
+                            { label: 'Processing', value: getStoreValue("labOrders").filter(l => l.status === 'processing').length, color: 'medical' },
+                            { label: 'Completed', value: getStoreValue("labOrders").filter(l => l.status === 'completed').length, color: 'emerald' },
+                            { label: 'Critical', value: getStoreValue("labOrders").filter(l => l.status === 'critical').length, color: 'red' },
                         ].map(stat => (
                             <Card key={stat.label} className="text-center">
                                 <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
@@ -388,7 +387,7 @@ const appData = getAppData();
                                 columns={[
                                     { key: 'id', title: 'Order ID', className: 'font-mono text-xs' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'testType', title: 'Test' },
@@ -401,7 +400,7 @@ const appData = getAppData();
                                 actions={(row) => (
                                     <>
                                         <Button variant="secondary" size="sm" onClick={() => printSpecimenLabel(row)}>Print label</Button>
-                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'lab_report', id: row.id, patientId: row.patientId, title: `Laboratory report · ${row.testType}`, author: appData.users.find((entry) => entry.id === row.result_verified_by || entry.id === row.technicianId)?.name, fields: [['Accession', row.accession_number], ['Test', row.testType], ['Category', row.category], ['Ordered', row.orderedDate], ['Result date', row.resultDate], ['Status', row.result_status || row.status], ['Results', row.results]] }).catch((error) => notifyPersistenceFailure('print lab report', error))}>Print report</Button>
+                                        <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'lab_report', id: row.id, patientId: row.patientId, title: `Laboratory report · ${row.testType}`, author: getStoreValue("users").find((entry) => entry.id === row.result_verified_by || entry.id === row.technicianId)?.name, fields: [['Accession', row.accession_number], ['Test', row.testType], ['Category', row.category], ['Ordered', row.orderedDate], ['Result date', row.resultDate], ['Status', row.result_status || row.status], ['Results', row.results]] }).catch((error) => notifyPersistenceFailure('print lab report', error))}>Print report</Button>
                                         {row.specimen_status !== 'rejected' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="ghost" size="sm" onClick={() => rejectSpecimen(row)}>Reject specimen</Button>}
                                         {row.status === 'pending' && ['super_admin','laboratory_scientist'].includes(user?.role) && <Button variant="secondary" size="sm" onClick={() => collectSpecimen(row)}>Specimen collected</Button>}
                                         {!['completed', 'critical'].includes(row.status) && (
@@ -420,7 +419,7 @@ const appData = getAppData();
                                 columns={[
                                     { key: 'testType', title: 'Test' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'resultDate', title: 'Result date', render: (row) => formatDate(row.resultDate) },
@@ -470,7 +469,7 @@ const appData = getAppData();
                             <div className="space-y-4">
                                 <div className="p-3 bg-slate-50 rounded-lg">
                                     <p className="text-sm text-slate-600">Patient: {(() => {
-                                        const p = appData.patients.find(p => p.id === selectedOrder.patientId);
+                                        const p = getStoreValue("patients").find(p => p.id === selectedOrder.patientId);
                                         return p ? p.firstName + ' ' + p.lastName : '';
                                     })()}</p>
                                     <p className="text-sm text-slate-600">Test: {selectedOrder.testType}</p>
@@ -497,7 +496,7 @@ const appData = getAppData();
 
                     <Modal isOpen={showResultDetails} onClose={() => setShowResultDetails(false)} title={`Laboratory result · ${selectedOrder?.testType || 'Order'}`} size="md">
                         {selectedOrder && (() => {
-                            const patient = (appData.patients || []).find((entry) => entry.id === selectedOrder.patientId);
+                            const patient = (getStoreValue("patients") || []).find((entry) => entry.id === selectedOrder.patientId);
                             const results = selectedOrder.results;
                             const values = Array.isArray(results?.values)
                                 ? results.values
@@ -532,8 +531,8 @@ const appData = getAppData();
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Responsible clinician" value={newOrderForm.responsibleClinicianId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, responsibleClinicianId: e.target.value }))} options={[{ value: '', label: 'Select clinician...' }, ...(appData.users || []).filter((person) => ['doctor', 'specialist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
+                            <Select label="Patient" value={newOrderForm.patientId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Responsible clinician" value={newOrderForm.responsibleClinicianId} onChange={(e) => setNewOrderForm(prev => ({ ...prev, responsibleClinicianId: e.target.value }))} options={[{ value: '', label: 'Select clinician...' }, ...(getStoreValue("users") || []).filter((person) => ['doctor', 'specialist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
                             <CodedConceptInput label="Test Type" value={newOrderForm.testType} codeSystem={newOrderForm.testCodeSystem} code={newOrderForm.testCode} display={newOrderForm.testDisplay} onChange={(term) => setNewOrderForm(prev => ({...prev,testType:term.value,testCodeSystem:term.codeSystem,testCode:term.code,testDisplay:term.display}))} />
                             <Input label="Category" value={newOrderForm.category} onChange={(e) => setNewOrderForm(prev => ({ ...prev, category: e.target.value }))} />
                             <Select label="Priority" value={newOrderForm.priority} onChange={(e) => setNewOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />
@@ -547,15 +546,15 @@ const appData = getAppData();
         // CLINICAL DECISION SUPPORT MODULE
         // ==========================================
         const ClinicalDecisionSupportModule = () => {
-            const patients = appData.patients || [];
-            const alerts = (appData.clinicalAlerts || []).filter(item => item.status === 'open').map((item) => {
+            const patients = getStoreValue("patients") || [];
+            const alerts = (getStoreValue("clinicalAlerts") || []).filter(item => item.status === 'open').map((item) => {
                 const patient = patients.find(entry => entry.id === item.patientId);
                 return { id: item.id, patient: patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record', condition: item.alertType, detail: item.message, risk: item.severity };
             });
             const guidance = [
                 { title: 'Open clinical alerts', message: 'Alerts generated from recorded clinical data that need acknowledgment.', value: alerts.length },
-                { title: 'Active medication orders', message: 'Current medication orders available for clinical review.', value: (appData.medicationOrders || []).filter(item => item.status === 'active').length },
-                { title: 'Active allergies', message: 'Structured allergies available for medication safety checks.', value: (appData.allergies || []).filter(item => item.clinicalStatus === 'active').length }
+                { title: 'Active medication orders', message: 'Current medication orders available for clinical review.', value: (getStoreValue("medicationOrders") || []).filter(item => item.status === 'active').length },
+                { title: 'Active allergies', message: 'Structured allergies available for medication safety checks.', value: (getStoreValue("allergies") || []).filter(item => item.clinicalStatus === 'active').length }
             ];
 
             return (
@@ -570,8 +569,8 @@ const appData = getAppData();
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Critical alerts" value={alerts.filter(item => item.risk === 'critical').length} icon={Icons.AlertCircle} color="red" />
-                        <StatCard title="Medication orders" value={(appData.medicationOrders || []).length} icon={Icons.Pill} color="medical" />
-                        <StatCard title="Allergies" value={(appData.allergies || []).length} icon={Icons.ClipboardList} color="emerald" />
+                        <StatCard title="Medication orders" value={(getStoreValue("medicationOrders") || []).length} icon={Icons.Pill} color="medical" />
+                        <StatCard title="Allergies" value={(getStoreValue("allergies") || []).length} icon={Icons.ClipboardList} color="emerald" />
                         <StatCard title="Open alerts" value={alerts.length} icon={Icons.Bell} color="amber" />
                     </div>
 
@@ -620,7 +619,7 @@ const appData = getAppData();
             const [reportStudy, setReportStudy] = useState(null);
             const [showNewOrder, setShowNewOrder] = useState(false);
             const [showReportEntry, setShowReportEntry] = useState(false);
-            const [studies, setStudies] = useState(getAppData().radiologyOrders || []);
+            const [studies, setStudies] = useState(getStoreValue("radiologyOrders") || []);
             const [orderForm, setOrderForm] = useState({ patientId: '', radiologistId: '', studyType: '', studyCodeSystem: null, studyCode: null, studyDisplay: null, modality: '', priority: 'routine', scheduledDate: '', report: '' });
             const [reportDraft, setReportDraft] = useState('');
             const [reportState, setReportState] = useState('final');
@@ -648,7 +647,7 @@ const appData = getAppData();
 
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('create radiology order');
-                const encounter = (appData.encounters || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
+                const encounter = (getStoreValue("encounters") || []).find((item) => item.patientId === payload.patientId && !item.endedAt);
                 const { data, error } = await client.from('radiology_orders').insert([{
                     patient_id: payload.patientId, encounter_id: encounter?.id || null, doctor_id: payload.doctorId, radiologist_id: payload.radiologistId || null, study_type: payload.studyType, code_system: payload.codeSystem, code: payload.code, display: payload.display,
                     modality: payload.modality, priority: payload.priority, status: payload.status,
@@ -712,7 +711,7 @@ const appData = getAppData();
                             columns={[
                                 { key: 'id', title: 'Order ID', className: 'font-mono text-xs' },
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = appData.patients.find(p => p.id === row.patientId);
+                                    const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                     return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                 }},
                                 { key: 'studyType', title: 'Study' },
@@ -724,7 +723,7 @@ const appData = getAppData();
                             data={studies}
                             actions={(row) => (
                                 <>
-                                    <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'radiology_report', id: row.id, patientId: row.patientId, title: `Radiology report · ${row.studyType}`, author: appData.users.find((entry) => entry.id === row.radiologistId || entry.id === row.doctorId)?.name, fields: [['Study', row.studyType], ['Modality', row.modality], ['Ordered', row.orderedDate], ['Status', row.report_status || row.status], ['Report', row.report]] }).catch((error) => notifyPersistenceFailure('print radiology report', error))}>Print</Button>
+                                    <Button variant="secondary" size="sm" onClick={() => window.printEMRDocument({ type: 'radiology_report', id: row.id, patientId: row.patientId, title: `Radiology report · ${row.studyType}`, author: getStoreValue("users").find((entry) => entry.id === row.radiologistId || entry.id === row.doctorId)?.name, fields: [['Study', row.studyType], ['Modality', row.modality], ['Ordered', row.orderedDate], ['Status', row.report_status || row.status], ['Report', row.report]] }).catch((error) => notifyPersistenceFailure('print radiology report', error))}>Print</Button>
                                     <Button variant="primary" size="sm" onClick={() => setSelectedStudy(row)}>View study</Button>
                                     {row.status !== 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(row.report || ''); setReportState('final'); setCriticalFinding(Boolean(row.critical_finding)); setShowReportEntry(true); }}>Report</Button>}
                                     {row.status === 'reported' && <Button variant="secondary" size="sm" onClick={() => { setReportStudy(row); setReportDraft(''); setReportState('addendum'); setCriticalFinding(Boolean(row.critical_finding)); setShowReportEntry(true); }}>Addendum</Button>}
@@ -746,8 +745,8 @@ const appData = getAppData();
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Assigned radiologist" value={orderForm.radiologistId} onChange={(e) => setOrderForm(prev => ({ ...prev, radiologistId: e.target.value }))} options={[{ value: '', label: 'Select radiologist...' }, ...(appData.users || []).filter((person) => ['radiographer', 'radiologist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
+                            <Select label="Patient" value={orderForm.patientId} onChange={(e) => setOrderForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Assigned radiologist" value={orderForm.radiologistId} onChange={(e) => setOrderForm(prev => ({ ...prev, radiologistId: e.target.value }))} options={[{ value: '', label: 'Select radiologist...' }, ...(getStoreValue("users") || []).filter((person) => ['radiographer', 'radiologist'].includes(String(person.role || '').toLowerCase()) && person.status === 'active').map((person) => ({ value: person.id, label: person.fullName || person.full_name || person.name || person.email }))]} />
                             <CodedConceptInput label="Study Type" value={orderForm.studyType} codeSystem={orderForm.studyCodeSystem} code={orderForm.studyCode} display={orderForm.studyDisplay} onChange={(term) => setOrderForm(prev => ({...prev,studyType:term.value,studyCodeSystem:term.codeSystem,studyCode:term.code,studyDisplay:term.display}))} />
                             <Select label="Modality" value={orderForm.modality} onChange={(e) => setOrderForm(prev => ({ ...prev, modality: e.target.value }))} options={[{ value: 'X-Ray', label: 'X-Ray' }, { value: 'MRI', label: 'MRI' }, { value: 'CT', label: 'CT' }, { value: 'Ultrasound', label: 'Ultrasound' }, { value: 'ECG', label: 'ECG' }]} />
                             <Select label="Priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} options={[{ value: 'routine', label: 'Routine' }, { value: 'urgent', label: 'Urgent' }, { value: 'stat', label: 'Stat' }]} />

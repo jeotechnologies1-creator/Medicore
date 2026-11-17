@@ -1,7 +1,5 @@
 
-        import { getAppData } from './store.js';
-
-        const appData = getAppData();
+        import { setStoreValue, setStoreValues } from './store.js';
         const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
         // ==========================================
@@ -476,12 +474,12 @@
 
 
         const initializeEmptyStore = () => {
-            Object.assign(appData, createEmptyStore());
+            setStoreValues(createEmptyStore());
         };
 
         const persistStoreTable = (table, rows) => {
             const nextRows = Array.isArray(rows) ? rows : [];
-            if (appData) appData[table] = nextRows;
+            setStoreValue(table, nextRows);
             return nextRows;
         };
 
@@ -603,11 +601,11 @@
                 }
                 return { appTable: entry.appTable, rows: entry.mapper(data || []), count };
             }));
-            loadedTables.forEach(({ appTable, rows }) => { appData[appTable] = rows; });
+            loadedTables.forEach(({ appTable, rows }) => { setStoreValue(appTable, rows); });
             if (moduleId === 'dashboard') {
                 const today = formatFacilityDate();
                 const { data, error } = await client.rpc('get_screen_kpis', { p_facility_id: null, p_from: today, p_to: today });
-                if (!error && data) appData.dashboardKpis = data;
+                if (!error && data) setStoreValue("dashboardKpis", data);
                 else if (error) loadedTables.push({ failure: { table: 'dashboard_kpis', message: error.message || 'Dashboard totals could not be loaded.' } });
             }
             return {

@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue } from '../store.js';
 
         // ==========================================
         // REPORTS MODULE
@@ -24,45 +23,45 @@ const appData = getAppData();
                 const date = toDate(value);
                 return date && !Number.isNaN(date.valueOf()) && date >= threshold;
             };
-            const patientAges = appData.patients.map(patient => calculateAge(patient.dateOfBirth))
+            const patientAges = getStoreValue("patients").map(patient => calculateAge(patient.dateOfBirth))
                 .filter(Boolean)
                 .map(age => age.years + age.months / 12 + age.days / 365.2425);
             const patientAgeGroups = [
                 { label: '0-18', min: 0, max: 19 }, { label: '19-35', min: 19, max: 36 }, { label: '36-50', min: 36, max: 51 },
                 { label: '51-65', min: 51, max: 66 }, { label: '66+', min: 66, max: Infinity }
             ].map(group => ({ ...group, value: patientAges.filter(age => age >= group.min && age <= group.max).length }));
-            const totalRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
-            const outstandingRevenue = appData.billing.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
-            const insuranceClaimTotal = appData.insuranceClaims.reduce((sum, claim) => sum + Number(claim.amountApproved || claim.amountClaimed || 0), 0);
+            const totalRevenue = getStoreValue("billing").reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
+            const outstandingRevenue = getStoreValue("billing").reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
+            const insuranceClaimTotal = getStoreValue("insuranceClaims").reduce((sum, claim) => sum + Number(claim.amountApproved || claim.amountClaimed || 0), 0);
             const revenueTrend = Array.from({ length: 6 }, (_, index) => {
                 const month = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
                 return {
                     label: month.toLocaleDateString(undefined, { month: 'short' }),
-                    value: appData.billing.filter(invoice => {
+                    value: getStoreValue("billing").filter(invoice => {
                         const date = toDate(invoice.date);
                         return date && date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
                     }).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0)
                 };
             });
-            const expiringSoon = appData.pharmacyInventory.filter(item => {
+            const expiringSoon = getStoreValue("pharmacyInventory").filter(item => {
                 const expiry = toDate(item.expiryDate);
                 const limit = new Date(now);
                 limit.setDate(limit.getDate() + 90);
                 return expiry && expiry >= now && expiry <= limit;
             }).length;
-            const monthlyLabOrders = appData.labOrders.filter(order => isOnOrAfter(order.orderedDate, startOfMonth));
-            const labTurnaroundHours = appData.labOrders.map(order => {
+            const monthlyLabOrders = getStoreValue("labOrders").filter(order => isOnOrAfter(order.orderedDate, startOfMonth));
+            const labTurnaroundHours = getStoreValue("labOrders").map(order => {
                 const ordered = toDate(order.orderedDate);
                 const completed = toDate(order.resultDate);
                 return ordered && completed && completed >= ordered ? (completed - ordered) / 3600000 : null;
             }).filter(hours => hours !== null);
-            const labTypeData = Object.entries(appData.labOrders.reduce((counts, order) => {
+            const labTypeData = Object.entries(getStoreValue("labOrders").reduce((counts, order) => {
                 const type = order.testType || 'Unspecified';
                 counts[type] = (counts[type] || 0) + 1;
                 return counts;
             }, {})).map(([label, value]) => ({ label, value })).slice(0, 6);
-            const dischargedThisWeek = appData.admissions.filter(admission => admission.status === 'discharged' && isOnOrAfter(admission.dischargeDate, startOfWeek)).length;
-            const stayLengths = appData.admissions.map(admission => {
+            const dischargedThisWeek = getStoreValue("admissions").filter(admission => admission.status === 'discharged' && isOnOrAfter(admission.dischargeDate, startOfWeek)).length;
+            const stayLengths = getStoreValue("admissions").map(admission => {
                 const start = toDate(admission.admissionDate);
                 const end = toDate(admission.dischargeDate);
                 return start && end && end >= start ? (end - start) / 86400000 : null;
@@ -71,17 +70,17 @@ const appData = getAppData();
                 const date = new Date(now);
                 date.setDate(date.getDate() - (6 - index));
                 const label = date.toLocaleDateString(undefined, { weekday: 'short' });
-                const admissions = appData.admissions.filter((entry) => entry.admissionDate === formatFacilityDate(date)).length;
-                const discharges = appData.admissions.filter((entry) => entry.dischargeDate === formatFacilityDate(date)).length;
+                const admissions = getStoreValue("admissions").filter((entry) => entry.admissionDate === formatFacilityDate(date)).length;
+                const discharges = getStoreValue("admissions").filter((entry) => entry.dischargeDate === formatFacilityDate(date)).length;
                 return { label, admissions, discharges };
             });
-            const caseMix = Object.entries(appData.patients.reduce((counts, patient) => {
+            const caseMix = Object.entries(getStoreValue("patients").reduce((counts, patient) => {
                 const age = calculateAge(patient.dateOfBirth);
                 const bucket = age?.years >= 65 ? 'Older adults' : age?.years >= 18 ? 'Adults' : 'Children';
                 counts[bucket] = (counts[bucket] || 0) + 1;
                 return counts;
             }, {})).map(([label, value]) => ({ label, value }));
-            const facilityUtilization = (appData.wards || []).map((ward) => ({
+            const facilityUtilization = (getStoreValue("wards") || []).map((ward) => ({
                 name: ward.name,
                 occupancy: Math.round((Number(ward.occupied || 0) / Math.max(1, Number(ward.capacity || 0))) * 100),
                 capacity: ward.capacity || 0,
@@ -90,11 +89,11 @@ const appData = getAppData();
 
             const handleExport = () => {
                 const typeData = {
-                    patients: appData.patients,
-                    revenue: appData.billing,
-                    pharmacy: appData.pharmacyInventory,
-                    lab: appData.labOrders,
-                    admissions: appData.admissions
+                    patients: getStoreValue("patients"),
+                    revenue: getStoreValue("billing"),
+                    pharmacy: getStoreValue("pharmacyInventory"),
+                    lab: getStoreValue("labOrders"),
+                    admissions: getStoreValue("admissions")
                 }[reportType] || [];
 
                 if (!typeData.length) return;
@@ -143,11 +142,11 @@ const appData = getAppData();
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Total Patients</p>
-                                        <p className="text-2xl font-bold text-slate-900">{appData.patients.length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{getStoreValue("patients").length}</p>
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">New This Month</p>
-                                        <p className="text-2xl font-bold text-slate-900">{appData.patients.filter(patient => isOnOrAfter(patient.registrationDate, startOfMonth)).length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{getStoreValue("patients").filter(patient => isOnOrAfter(patient.registrationDate, startOfMonth)).length}</p>
                                     </div>
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Average Age</p>
@@ -193,7 +192,7 @@ const appData = getAppData();
                                                         <span className="text-slate-700">{group.label}</span>
                                                         <span className="font-semibold text-slate-900">{group.value}</span>
                                                     </div>
-                                                    <ProgressBar value={Math.min(100, Math.round((group.value / Math.max(1, appData.patients.length)) * 100))} max={100} color={group.label === 'Older adults' ? 'amber' : group.label === 'Adults' ? 'medical' : 'emerald'} size="sm" />
+                                                    <ProgressBar value={Math.min(100, Math.round((group.value / Math.max(1, getStoreValue("patients").length)) * 100))} max={100} color={group.label === 'Older adults' ? 'amber' : group.label === 'Adults' ? 'medical' : 'emerald'} size="sm" />
                                                 </div>
                                             ))}
                                         </div>
@@ -207,11 +206,11 @@ const appData = getAppData();
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Items in Stock</p>
-                                        <p className="text-2xl font-bold text-slate-900">{appData.pharmacyInventory.length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{getStoreValue("pharmacyInventory").length}</p>
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Low Stock Items</p>
-                                        <p className="text-2xl font-bold text-red-900">{appData.pharmacyInventory.filter(d => d.status === 'low_stock').length}</p>
+                                        <p className="text-2xl font-bold text-red-900">{getStoreValue("pharmacyInventory").filter(d => d.status === 'low_stock').length}</p>
                                     </div>
                                     <div className="p-4 bg-amber-50 rounded-xl">
                                         <p className="text-xs text-amber-600 uppercase">Expiring Soon</p>
@@ -221,9 +220,9 @@ const appData = getAppData();
                                 <DataTable
                                     columns={[
                                         { key: 'category', title: 'Category' },
-                                        { key: 'count', title: 'Items', render: (row) => appData.pharmacyInventory.filter(item => item.category === row.category).length },
+                                        { key: 'count', title: 'Items', render: (row) => getStoreValue("pharmacyInventory").filter(item => item.category === row.category).length },
                                     ]}
-                                    data={Array.from(new Set(appData.pharmacyInventory.map(item => item.category).filter(Boolean))).map(category => ({ category }))}
+                                    data={Array.from(new Set(getStoreValue("pharmacyInventory").map(item => item.category).filter(Boolean))).map(category => ({ category }))}
                                 />
                             </div>
                         )}
@@ -241,7 +240,7 @@ const appData = getAppData();
                                     </div>
                                     <div className="p-4 bg-red-50 rounded-xl">
                                         <p className="text-xs text-red-600 uppercase">Critical Results</p>
-                                        <p className="text-2xl font-bold text-red-900">{appData.labOrders.filter(l => l.status === 'critical').length}</p>
+                                        <p className="text-2xl font-bold text-red-900">{getStoreValue("labOrders").filter(l => l.status === 'critical').length}</p>
                                     </div>
                                 </div>
                                 <BarChart 
@@ -258,7 +257,7 @@ const appData = getAppData();
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-xs text-slate-500 uppercase">Current Admissions</p>
-                                        <p className="text-2xl font-bold text-slate-900">{appData.admissions.filter(a => a.status === 'active').length}</p>
+                                        <p className="text-2xl font-bold text-slate-900">{getStoreValue("admissions").filter(a => a.status === 'active').length}</p>
                                     </div>
                                     <div className="p-4 bg-emerald-50 rounded-xl">
                                         <p className="text-xs text-emerald-600 uppercase">Discharged This Week</p>

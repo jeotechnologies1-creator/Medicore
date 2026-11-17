@@ -1,5 +1,4 @@
-import { getAppData } from '../store.js';
-const appData = getAppData();
+import { getStoreValue, setStoreValue } from '../store.js';
 
 const AssetMaintenancePanel = () => {
     const { user } = useAuth();
@@ -143,8 +142,8 @@ const AssetMaintenancePanel = () => {
                 return () => { active = false; window.clearInterval(timer); };
             }, [user?.role]);
 
-            const activeAdmissions = (appData.admissions || []).filter(item => item.status === 'active');
-            const managementDepartments = (appData.wards || []).map((ward) => ({
+            const activeAdmissions = (getStoreValue("admissions") || []).filter(item => item.status === 'active');
+            const managementDepartments = (getStoreValue("wards") || []).map((ward) => ({
                 name: ward.name,
                 patients: activeAdmissions.filter(item => item.ward === ward.name).length,
                 occupancy: ward.capacity ? Math.round((Number(ward.occupied || 0) / Number(ward.capacity)) * 100) : 0
@@ -158,21 +157,21 @@ const AssetMaintenancePanel = () => {
             const totalPatients = filteredDepartments.reduce((sum, item) => sum + item.patients, 0);
             const today = formatFacilityDate();
             const operationsPulse = [
-                { label: 'Admissions today', value: (appData.admissions || []).filter(item => item.admissionDate === today).length },
-                { label: 'Discharges today', value: (appData.admissions || []).filter(item => item.dischargeDate === today).length },
-                { label: 'Emergency appointments', value: (appData.appointments || []).filter(item => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length },
-                { label: 'Cancelled appointments', value: (appData.appointments || []).filter(item => item.date === today && item.status === 'cancelled').length }
+                { label: 'Admissions today', value: (getStoreValue("admissions") || []).filter(item => item.admissionDate === today).length },
+                { label: 'Discharges today', value: (getStoreValue("admissions") || []).filter(item => item.dischargeDate === today).length },
+                { label: 'Emergency appointments', value: (getStoreValue("appointments") || []).filter(item => item.date === today && String(item.department || '').toLowerCase().includes('emergency')).length },
+                { label: 'Cancelled appointments', value: (getStoreValue("appointments") || []).filter(item => item.date === today && item.status === 'cancelled').length }
             ];
             const resourceLoad = [
-                { name: 'Active doctors', value: (appData.users || []).filter(item => item.role === 'doctor' && item.status === 'active').length },
-                { name: 'Active nurses', value: (appData.users || []).filter(item => item.role === 'nurse' && item.status === 'active').length },
-                { name: 'Pending laboratory orders', value: (appData.labOrders || []).filter(item => item.status !== 'completed').length },
-                { name: 'Pending imaging orders', value: (appData.radiologyOrders || []).filter(item => item.status !== 'reported').length }
+                { name: 'Active doctors', value: (getStoreValue("users") || []).filter(item => item.role === 'doctor' && item.status === 'active').length },
+                { name: 'Active nurses', value: (getStoreValue("users") || []).filter(item => item.role === 'nurse' && item.status === 'active').length },
+                { name: 'Pending laboratory orders', value: (getStoreValue("labOrders") || []).filter(item => item.status !== 'completed').length },
+                { name: 'Pending imaging orders', value: (getStoreValue("radiologyOrders") || []).filter(item => item.status !== 'reported').length }
             ];
             const logistics = [
-                { title: 'Low-stock medicines', value: (appData.pharmacyInventory || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
-                { title: 'Expiring inventory', value: (appData.pharmacyInventory || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
-                { title: 'Pending refill requests', value: (appData.refillRequests || []).filter(item => item.status === 'pending').length }
+                { title: 'Low-stock medicines', value: (getStoreValue("pharmacyInventory") || []).filter(item => Number(item.stockQuantity) <= Number(item.reorderLevel)).length },
+                { title: 'Expiring inventory', value: (getStoreValue("pharmacyInventory") || []).filter(item => item.expiryDate && new Date(item.expiryDate) <= new Date(Date.now() + 30 * 86400000)).length },
+                { title: 'Pending refill requests', value: (getStoreValue("refillRequests") || []).filter(item => item.status === 'pending').length }
             ];
 
             const tabs = [
@@ -205,7 +204,7 @@ const AssetMaintenancePanel = () => {
                         <StatCard title="Active Patients" value={totalPatients} icon={Icons.Users} color="medical" />
                         <StatCard title="Active admissions" value={activeAdmissions.length} icon={Icons.Clock} color="amber" />
                         <StatCard title="Occupancy" value={`${avgOccupancy}%`} icon={Icons.Bed} color="emerald" />
-                        <StatCard title="Open appointments" value={(appData.appointments || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
+                        <StatCard title="Open appointments" value={(getStoreValue("appointments") || []).filter(item => item.status === 'scheduled' || item.status === 'requested').length} icon={Icons.Activity} color="violet" />
                     </div>
 
                     {user?.role === 'super_admin' && activeSuperAdminCount !== null && activeSuperAdminCount < 2 && (
@@ -341,7 +340,7 @@ const AssetMaintenancePanel = () => {
         // ==========================================
         const ProcurementModule = () => {
             const [activeTab, setActiveTab] = useState('orders');
-            const inventory = appData.pharmacyInventory || [];
+            const inventory = getStoreValue("pharmacyInventory") || [];
             const supplierInventory = Object.entries(inventory.reduce((groups, item) => {
                 const supplier = item.supplier || 'Unassigned supplier';
                 groups[supplier] = groups[supplier] || { supplier, items: 0, stockValue: 0, lowStock: 0 };
@@ -419,8 +418,8 @@ const AssetMaintenancePanel = () => {
                 setReferralForm({ patientId: '', destination: '', reason: '', summary: '' });
             };
 
-            const followUpTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'follow_up' || task.taskType === 'followup');
-            const handoffTasks = (appData.clinicalTasks || []).filter((task) => task.taskType === 'handoff');
+            const followUpTasks = (getStoreValue("clinicalTasks") || []).filter((task) => task.taskType === 'follow_up' || task.taskType === 'followup');
+            const handoffTasks = (getStoreValue("clinicalTasks") || []).filter((task) => task.taskType === 'handoff');
 
             const tabs = [
                 { id: 'referrals', label: 'Referrals' },
@@ -448,7 +447,7 @@ const AssetMaintenancePanel = () => {
 
                     {activeTab === 'referrals' && (
                         <Card title="Create clinical referral letter">
-                            <div className="max-w-2xl space-y-3"><Select label="Patient" value={referralForm.patientId} onChange={(event) => setReferralForm((form) => ({ ...form, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient' }, ...(appData.patients || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} /><Input label="Referred to" value={referralForm.destination} onChange={(event) => setReferralForm((form) => ({ ...form, destination: event.target.value }))} /><Input label="Reason for referral" value={referralForm.reason} onChange={(event) => setReferralForm((form) => ({ ...form, reason: event.target.value }))} /><TextArea label="Clinical summary" value={referralForm.summary} onChange={(event) => setReferralForm((form) => ({ ...form, summary: event.target.value }))} rows={5} />{referralError && <p className="text-sm text-red-700" role="alert">{referralError}</p>}<Button variant="primary" disabled={!referralForm.patientId || !referralForm.destination || !referralForm.reason || !referralForm.summary} onClick={saveReferralLetter}>Save and print referral</Button></div>
+                            <div className="max-w-2xl space-y-3"><Select label="Patient" value={referralForm.patientId} onChange={(event) => setReferralForm((form) => ({ ...form, patientId: event.target.value }))} options={[{ value: '', label: 'Select patient' }, ...(getStoreValue("patients") || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} /><Input label="Referred to" value={referralForm.destination} onChange={(event) => setReferralForm((form) => ({ ...form, destination: event.target.value }))} /><Input label="Reason for referral" value={referralForm.reason} onChange={(event) => setReferralForm((form) => ({ ...form, reason: event.target.value }))} /><TextArea label="Clinical summary" value={referralForm.summary} onChange={(event) => setReferralForm((form) => ({ ...form, summary: event.target.value }))} rows={5} />{referralError && <p className="text-sm text-red-700" role="alert">{referralError}</p>}<Button variant="primary" disabled={!referralForm.patientId || !referralForm.destination || !referralForm.reason || !referralForm.summary} onClick={saveReferralLetter}>Save and print referral</Button></div>
                         </Card>
                     )}
 
@@ -476,12 +475,12 @@ const AssetMaintenancePanel = () => {
         // ==========================================
         const WorkforceModule = () => {
             const { user } = useAuth();
-            const staff = appData.users || [];
+            const staff = getStoreValue("users") || [];
             const activeStaff = staff.filter((user) => user.status === 'active');
-            const completedTasks = (appData.clinicalTasks || []).filter((task) => task.status === 'completed').length;
-            const openTasks = (appData.clinicalTasks || []).filter((task) => task.status === 'open' || task.status === 'in_progress').length;
+            const completedTasks = (getStoreValue("clinicalTasks") || []).filter((task) => task.status === 'completed').length;
+            const openTasks = (getStoreValue("clinicalTasks") || []).filter((task) => task.status === 'open' || task.status === 'in_progress').length;
             const productivityRate = activeStaff.length ? Math.round((completedTasks / activeStaff.length) * 100) : 0;
-            const staffingCoverage = (appData.users || []).length
+            const staffingCoverage = (getStoreValue("users") || []).length
                 ? [
                     { unit: 'Clinical Teams', scheduled: staff.length, actual: activeStaff.length, occupancy: Math.min(100, Math.round((activeStaff.length / Math.max(1, staff.length)) * 100)) }
                 ]
@@ -551,8 +550,8 @@ const AssetMaintenancePanel = () => {
 
                         <Card title="Roster Status">
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Active staff profiles</span><span className="text-sm font-semibold text-slate-900">{(appData.users || []).filter((user) => user.status === 'active').length}</span></div>
-                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Inactive staff profiles</span><span className="text-sm font-semibold text-slate-900">{(appData.users || []).filter((user) => user.status !== 'active').length}</span></div>
+                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Active staff profiles</span><span className="text-sm font-semibold text-slate-900">{(getStoreValue("users") || []).filter((user) => user.status === 'active').length}</span></div>
+                                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="text-sm text-slate-600">Inactive staff profiles</span><span className="text-sm font-semibold text-slate-900">{(getStoreValue("users") || []).filter((user) => user.status !== 'active').length}</span></div>
                                 <p className="text-xs text-slate-500">Shift, certification, leave, and overtime indicators require their respective live integrations.</p>
                             </div>
                         </Card>
@@ -570,7 +569,7 @@ const AssetMaintenancePanel = () => {
             const canManageInventory = ['super_admin', 'pharmacist'].includes(user?.role);
             const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
-            const [inventory, setInventory] = useState(getAppData().pharmacyInventory || []);
+            const [inventory, setInventory] = useState(getStoreValue("pharmacyInventory") || []);
             const [prescriptionItems, setPrescriptionItems] = useState({});
             const [controlledApprovals, setControlledApprovals] = useState([]);
             const [formulary, setFormulary] = useState([]);
@@ -591,7 +590,7 @@ const AssetMaintenancePanel = () => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !facilityId) return () => { current = false; };
                 loadPharmacyInventoryFromLedger(client, facilityId).then((rows) => {
-                    if (current) { setInventory(rows); appData.pharmacyInventory = rows; }
+                    if (current) { setInventory(rows); setStoreValue("pharmacyInventory", rows); }
                 }).catch((error) => {
                     if (current) setStockMessage(`Ledger inventory could not be loaded: ${error?.message || 'Connection failed.'}`);
                 });
@@ -664,10 +663,10 @@ const AssetMaintenancePanel = () => {
                         : item;
                 });
 
-                appData.pharmacyInventory = nextInventory;
+                setStoreValue("pharmacyInventory", nextInventory);
                 persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
-                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
+                const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
                 persistStoreTable('prescriptions', nextPrescriptions);
             };
 
@@ -682,10 +681,10 @@ const AssetMaintenancePanel = () => {
                     const result = byLot.get(item.id);
                     return result ? { ...item, stockQuantity: result.remainingStock, status: result.status } : item;
                 });
-                appData.pharmacyInventory = nextInventory;
+                setStoreValue("pharmacyInventory", nextInventory);
                 persistStoreTable('pharmacyInventory', nextInventory);
                 setInventory(nextInventory);
-                const nextPrescriptions = (appData.prescriptions || []).map((item) => item.id === approval.prescription_id ? { ...item, status: 'dispensed' } : item);
+                const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === approval.prescription_id ? { ...item, status: 'dispensed' } : item);
                 persistStoreTable('prescriptions', nextPrescriptions);
             };
 
@@ -719,22 +718,22 @@ const AssetMaintenancePanel = () => {
                                     columns={[
                                         { key: 'id', title: 'Rx ID', className: 'font-mono text-xs' },
                                         { key: 'patient', title: 'Patient', render: (row) => {
-                                            const patient = appData.patients.find(p => p.id === row.patientId);
+                                            const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'diagnosis', title: 'Diagnosis' },
                                         { key: 'medications', title: 'Structured items', render: (row) => (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''} · ${item.quantity} · lot selected FEFO`).join('; ') || 'No structured items' },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
-                                    data={appData.prescriptions.filter(p => p.status === 'active')}
+                                    data={getStoreValue("prescriptions").filter(p => p.status === 'active')}
                                 actions={(row) => (
                                         <Button variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
                                     )}
                                 />
                                 {controlledApprovals.length > 0 && <div className="mt-6"><h3 className="mb-3 font-semibold text-slate-800">Controlled medicine verification</h3><DataTable columns={[
                                     { key: 'prescription_id', title: 'Prescription', className: 'font-mono text-xs' },
-                                    { key: 'patient', title: 'Patient', render: (row) => { const patient = appData.patients.find((item) => item.id === row.prescriptions?.patient_id); return patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record'; } },
-                                    { key: 'requested_by', title: 'Requested by', render: (row) => appData.users.find((member) => member.id === row.requested_by)?.name || 'Pharmacy staff' },
+                                    { key: 'patient', title: 'Patient', render: (row) => { const patient = getStoreValue("patients").find((item) => item.id === row.prescriptions?.patient_id); return patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record'; } },
+                                    { key: 'requested_by', title: 'Requested by', render: (row) => getStoreValue("users").find((member) => member.id === row.requested_by)?.name || 'Pharmacy staff' },
                                     { key: 'created_at', title: 'Requested' }
                                 ]} data={controlledApprovals} actions={(row) => <Button variant="primary" size="sm" onClick={() => handleVerifyControlledDispense(row)}>Verify & dispense</Button>} /></div>}
                             </Card>
@@ -808,11 +807,11 @@ const AssetMaintenancePanel = () => {
                                 columns={[
                                     { key: 'id', title: 'Rx ID' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'doctor', title: 'Doctor', render: (row) => {
-                                        const doctor = appData.users.find(u => u.id === row.doctorId);
+                                        const doctor = getStoreValue("users").find(u => u.id === row.doctorId);
                                         return doctor?.name || 'Unknown';
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
@@ -821,8 +820,8 @@ const AssetMaintenancePanel = () => {
                                     { key: 'medications', title: 'Medication orders', render: (row) => (row.medications || []).map((medication) => `${medication.name} × ${medication.quantity}`).join(', ') || 'No items' },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : row.status === 'dispensed' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
-                                data={appData.prescriptions}
-                                actions={(row) => <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'prescription', id: row.id, patientId: row.patientId, title: 'Prescription', author: appData.users.find((entry) => entry.id === row.doctorId)?.name, fields: [['Diagnosis', row.diagnosis], ['Date', row.prescriptionDate], ['Medications', row.medications], ['Notes', row.notes]] }).catch((error) => notifyPersistenceFailure('print prescription', error))}>Print</Button>}
+                                data={getStoreValue("prescriptions")}
+                                actions={(row) => <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'prescription', id: row.id, patientId: row.patientId, title: 'Prescription', author: getStoreValue("users").find((entry) => entry.id === row.doctorId)?.name, fields: [['Diagnosis', row.diagnosis], ['Date', row.prescriptionDate], ['Medications', row.medications], ['Notes', row.notes]] }).catch((error) => notifyPersistenceFailure('print prescription', error))}>Print</Button>}
                             />
                         </Card>
                     )}
@@ -878,7 +877,7 @@ const AssetMaintenancePanel = () => {
             const [activeTab, setActiveTab] = useState(initialTab);
             const [showPaymentModal, setShowPaymentModal] = useState(false);
             const [showInsuranceModal, setShowInsuranceModal] = useState(false);
-            const [invoices, setInvoices] = useState(getAppData().billing || []);
+            const [invoices, setInvoices] = useState(getStoreValue("billing") || []);
             const [insuranceFilter, setInsuranceFilter] = useState('all');
             const [paymentForm, setPaymentForm] = useState(() => ({ invoiceId: '', amount: 0, method: 'Card', reference: '', idempotencyKey: newPaymentIdempotencyKey() }));
             const [bankAccounts, setBankAccounts] = useState([]);
@@ -1303,7 +1302,7 @@ const AssetMaintenancePanel = () => {
             };
 
             const requestEligibilityCheck = async (membership) => {
-                const facilityId = appData.patients.find((patient) => patient.id === membership.patient_id)?.home_facility_id;
+                const facilityId = getStoreValue("patients").find((patient) => patient.id === membership.patient_id)?.home_facility_id;
                 const payerPlan = payerPlans.find((plan) => plan.id === membership.payer_plan_id);
                 const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === (payerPlan?.payer_code || (membership.provider || '').toLowerCase()) && item.facility_id === facilityId);
                 const { data, error } = await window.OneMedSupabase.getClient().rpc('request_payer_eligibility', { p_membership_id: membership.id, p_service_type: verificationReferences[`${membership.id}:service`] || 'general', p_encounter_id: null, p_connection_id: connection?.id || null });
@@ -1317,7 +1316,7 @@ const AssetMaintenancePanel = () => {
                 const amountText = window.prompt('Requested amount (optional)', '');
                 const amount = amountText === '' || amountText === null ? null : Number(amountText);
                 if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return setMembershipMessage('Enter a non-negative requested amount.');
-                const facilityId = appData.patients.find((patient) => patient.id === membership.patient_id)?.home_facility_id;
+                const facilityId = getStoreValue("patients").find((patient) => patient.id === membership.patient_id)?.home_facility_id;
                 const payerPlan = payerPlans.find((plan) => plan.id === membership.payer_plan_id);
                 const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === (payerPlan?.payer_code || (membership.provider || '').toLowerCase()) && item.facility_id === facilityId);
                 const { data, error } = await window.OneMedSupabase.getClient().rpc('request_preauthorization', { p_membership_id: membership.id, p_service_type: serviceType.trim(), p_requested_amount: amount, p_request: {}, p_encounter_id: null, p_connection_id: connection?.id || null });
@@ -1335,7 +1334,7 @@ const AssetMaintenancePanel = () => {
 
             const createAndSubmitClaimBatch = async (plan) => {
                 const client = window.OneMedSupabase.getClient();
-                const claims = insuranceClaims.filter((claim) => claim.status === 'pending' && claim.provider === plan.payer_code && appData.patients.find((patient) => patient.id === claim.patientId)?.home_facility_id === plan.facility_id);
+                const claims = insuranceClaims.filter((claim) => claim.status === 'pending' && claim.provider === plan.payer_code && getStoreValue("patients").find((patient) => patient.id === claim.patientId)?.home_facility_id === plan.facility_id);
                 if (!claims.length) return setIntegrationMessage(`No pending claims are ready for ${plan.display_name}.`);
                 const connection = integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === plan.payer_code && item.facility_id === plan.facility_id);
                 if (!connection) return setIntegrationMessage(`No active payer connection matches ${plan.display_name}.`);
@@ -1365,7 +1364,7 @@ const AssetMaintenancePanel = () => {
                 const amount = Number(paymentForm.amount || 0);
                 if (!client || !invoice || amount <= 0 || amount > Number(invoice.balance || 0)) return notifyPersistenceFailure('submit payment for approval');
                 if (paymentForm.method === 'Online Gateway Checkout') {
-                    const facilityId = appData.patients.find((patient) => patient.id === invoice.patientId)?.home_facility_id;
+                    const facilityId = getStoreValue("patients").find((patient) => patient.id === invoice.patientId)?.home_facility_id;
                     const connection = integrationConnections.find((item) => item.integration_type === 'payment_gateway' && item.facility_id === facilityId);
                     if (!connection) return setIntegrationMessage('No active payment gateway is available for this account.');
                     const { data, error } = await client.rpc('request_payment_checkout', { p_billing_id: invoice.id, p_connection_id: connection.id, p_amount: amount, p_idempotency_key: paymentForm.idempotencyKey, p_currency: 'NGN' });
@@ -1385,7 +1384,7 @@ const AssetMaintenancePanel = () => {
 
             const submitClaimToPayer = async (claim, connectionId = null) => {
                 const client = window.OneMedSupabase?.getClient?.();
-                const facilityId = appData.patients.find((patient) => patient.id === claim.patientId)?.home_facility_id;
+                const facilityId = getStoreValue("patients").find((patient) => patient.id === claim.patientId)?.home_facility_id;
                 const connection = integrationConnections.find((item) => item.id === connectionId && item.facility_id === facilityId) || integrationConnections.find((item) => item.integration_type === 'payer' && item.provider_code === claim.provider && item.facility_id === facilityId);
                 if (!client || !connection) return setIntegrationMessage('No matching active payer connection is configured for this claim.');
                 const { error } = await client.rpc('submit_insurance_claim', { p_claim_id: claim.id, p_connection_id: connection.id });
@@ -1417,9 +1416,9 @@ const AssetMaintenancePanel = () => {
                     window.dispatchEvent(new CustomEvent('onemed:refresh-data'));
                     return;
                 }
-                const next = [...(appData.insuranceClaims || []), savedClaim];
+                const next = [...(getStoreValue("insuranceClaims") || []), savedClaim];
                 persistStoreTable('insuranceClaims', next);
-                appData.insuranceClaims = next;
+                setStoreValue("insuranceClaims", next);
                 setShowInsuranceModal(false);
                 setClaimForm({ patientId: '', invoiceId: '', membershipId: '', connectionId: '', claimNumber: 'CLM-' + Date.now(), amountClaimed: 0 });
                 setIntegrationMessage('Claim queued with the payer; watch the queue for its response.');
@@ -1428,7 +1427,7 @@ const AssetMaintenancePanel = () => {
             const totalRevenue = invoices.reduce((s, b) => s + parseFloat(b.total || 0), 0);
             const totalCollected = invoices.reduce((s, b) => s + parseFloat(b.paid || 0), 0);
             const totalOutstanding = invoices.reduce((s, b) => s + parseFloat(b.balance || 0), 0);
-            const insuranceClaims = appData.insuranceClaims || [];
+            const insuranceClaims = getStoreValue("insuranceClaims") || [];
             const pendingClaims = insuranceClaims.filter(c => ['pending', 'queued', 'submitted', 'accepted', 'under_review'].includes(c.status)).length;
             const approvedClaims = insuranceClaims.filter(c => ['adjudicated', 'approved', 'paid'].includes(c.status)).length;
             const deniedClaims = insuranceClaims.filter(c => c.status === 'denied').length;
@@ -1476,7 +1475,7 @@ const AssetMaintenancePanel = () => {
                                 columns={[
                                     { key: 'invoiceNumber', title: 'Invoice', className: 'font-mono text-xs' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
@@ -1521,7 +1520,7 @@ const AssetMaintenancePanel = () => {
                         </Card>}
                         <Card title="Create an itemized invoice" subtitle="Invoice lines capture the approved code, description, price, and effective price version at issue time.">
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                <Select label="Patient" value={catalogueInvoice.patientId} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, patientId: event.target.value })} options={[{ value: '', label: 'Select patient' }, ...(appData.patients || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} />
+                                <Select label="Patient" value={catalogueInvoice.patientId} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, patientId: event.target.value })} options={[{ value: '', label: 'Select patient' }, ...(getStoreValue("patients") || []).map((patient) => ({ value: patient.id, label: `${patient.firstName} ${patient.lastName}` }))]} />
                                 <Select label="Active catalogue charge" value={catalogueInvoice.itemId} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, itemId: event.target.value })} options={[{ value: '', label: 'Select charge' }, ...chargeCatalogue.filter((item) => item.active && item.service_charge_prices?.some((price) => price.status === 'active')).map((item) => ({ value: item.id, label: `${item.code} · ${item.name}` }))]} />
                                 <Input label="Quantity" type="number" min="0.001" step="0.001" value={catalogueInvoice.quantity} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, quantity: event.target.value })} />
                                 <Input label="Invoice number" value={catalogueInvoice.invoiceNumber} onChange={(event) => setCatalogueInvoice({ ...catalogueInvoice, invoiceNumber: event.target.value })} />
@@ -1543,7 +1542,7 @@ const AssetMaintenancePanel = () => {
                             <DataTable
                                 columns={[
                                     { key: 'invoiceNumber', title: 'Invoice' },
-                                    { key: 'patient', title: 'Patient', render: (row) => appData.patients.find(p => p.id === row.patientId)?.firstName + ' ' + (appData.patients.find(p => p.id === row.patientId)?.lastName || 'Unknown') },
+                                    { key: 'patient', title: 'Patient', render: (row) => getStoreValue("patients").find(p => p.id === row.patientId)?.firstName + ' ' + (getStoreValue("patients").find(p => p.id === row.patientId)?.lastName || 'Unknown') },
                                     { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) },
                                     { key: 'paymentMethod', title: 'Method' },
                                     { key: 'reference', title: 'Reference' },
@@ -1551,7 +1550,7 @@ const AssetMaintenancePanel = () => {
                                     { key: 'date', title: 'Date', render: (row) => formatDate(row.createdAt) },
                                     { key: 'actions', title: 'Accounts review', render: row => row.status === 'pending' && ['accountant', 'super_admin'].includes(user?.role) ? <div className="flex gap-2"><Button size="sm" variant="primary" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'approved' }); if (error) notifyPersistenceFailure('approve payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Approve</Button><Button size="sm" variant="danger" onClick={async () => { const { error } = await window.OneMedSupabase.getClient().rpc('review_payment_submission', { p_payment_id: row.id, p_decision: 'rejected' }); if (error) notifyPersistenceFailure('reject payment', error); else window.dispatchEvent(new CustomEvent('onemed:refresh-data')); }}>Reject</Button></div> : null }
                                 ]}
-                                data={(appData.paymentSubmissions || []).map(payment => ({ ...payment, invoiceNumber: invoices.find(invoice => invoice.id === payment.invoiceId)?.invoiceNumber || 'Invoice unavailable' }))}
+                                data={(getStoreValue("paymentSubmissions") || []).map(payment => ({ ...payment, invoiceNumber: invoices.find(invoice => invoice.id === payment.invoiceId)?.invoiceNumber || 'Invoice unavailable' }))}
                             />
                         </Card>
                         <Card title="External payment checkouts"><DataTable columns={[
@@ -1573,7 +1572,7 @@ const AssetMaintenancePanel = () => {
                             { key: 'invoice', title: 'Invoice', render: (row) => invoices.find((invoice) => invoice.id === row.billing_id)?.invoiceNumber || 'Invoice unavailable' },
                             { key: 'amount', title: 'Posted amount', render: (row) => formatCurrency(row.amount) },
                             { key: 'payment_method', title: 'Method' }, { key: 'external_reference', title: 'Reference' }
-                        ]} data={paymentPostings} actions={(row) => { const invoice = invoices.find((entry) => entry.id === row.billing_id); return <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'receipt', id: row.id, patientId: row.patient_id, title: 'Payment Receipt', author: appData.users.find((entry) => entry.id === row.recorded_by)?.name, fields: [['Receipt reference', row.id], ['Invoice', invoice?.invoiceNumber], ['Amount', formatCurrency(row.amount)], ['Payment method', row.payment_method], ['External reference', row.external_reference], ['Paid at', formatDateTime(row.recorded_at)]] }).catch((error) => notifyPersistenceFailure('print receipt', error))}>Print receipt</Button>; }} /></Card>
+                        ]} data={paymentPostings} actions={(row) => { const invoice = invoices.find((entry) => entry.id === row.billing_id); return <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'receipt', id: row.id, patientId: row.patient_id, title: 'Payment Receipt', author: getStoreValue("users").find((entry) => entry.id === row.recorded_by)?.name, fields: [['Receipt reference', row.id], ['Invoice', invoice?.invoiceNumber], ['Amount', formatCurrency(row.amount)], ['Payment method', row.payment_method], ['External reference', row.external_reference], ['Paid at', formatDateTime(row.recorded_at)]] }).catch((error) => notifyPersistenceFailure('print receipt', error))}>Print receipt</Button>; }} /></Card>
                         <Card title="Refund approval queue"><DataTable columns={[
                             { key: 'payment_posting_id', title: 'Payment', render: (row) => paymentPostings.find((posting) => posting.id === row.payment_posting_id)?.external_reference || row.payment_posting_id },
                             { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount) }, { key: 'reason', title: 'Reason' },
@@ -1665,7 +1664,7 @@ const AssetMaintenancePanel = () => {
                                     columns={[
                                         { key: 'claimNumber', title: 'Claim #' },
                                         { key: 'patient', title: 'Patient', render: (row) => {
-                                            const patient = appData.patients.find(p => p.id === row.patientId);
+                                            const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                             return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                         }},
                                         { key: 'provider', title: 'Provider' },
@@ -1766,7 +1765,7 @@ const AssetMaintenancePanel = () => {
                         <div className="space-y-6">
                             <Card title="Configure payer plan rules" subtitle="Set required claim fields for a facility payer plan. Provider codes and routes are configured separately; no payer-specific endpoints or tariffs are embedded here.">
                                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-                                    <Select label="Facility" value={payerPlanDraft.facilityId} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,facilityId:event.target.value}))} options={[{value:'',label:'Select facility...'},...Array.from(new Set((appData.patients || []).map((patient) => patient.home_facility_id).filter(Boolean))).map((id) => ({value:id,label:id}))]} />
+                                    <Select label="Facility" value={payerPlanDraft.facilityId} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,facilityId:event.target.value}))} options={[{value:'',label:'Select facility...'},...Array.from(new Set((getStoreValue("patients") || []).map((patient) => patient.home_facility_id).filter(Boolean))).map((id) => ({value:id,label:id}))]} />
                                     <Input label="Payer provider code" value={payerPlanDraft.payerCode} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,payerCode:event.target.value}))} />
                                     <Input label="Plan code" value={payerPlanDraft.planCode} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,planCode:event.target.value}))} />
                                     <Input label="Plan display name" value={payerPlanDraft.displayName} onChange={(event) => setPayerPlanDraft((draft) => ({...draft,displayName:event.target.value}))} />
@@ -1778,11 +1777,11 @@ const AssetMaintenancePanel = () => {
                             </Card>
                             <Card title="Record insurance membership" subtitle="Coverage remains pending until eligibility is checked with the insurer. Emergency care must follow facility policy regardless of verification state.">
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                                    <Select label="Patient" value={membershipForm.patientId} onChange={(event) => setMembershipForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(appData.patients || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} />
+                                    <Select label="Patient" value={membershipForm.patientId} onChange={(event) => setMembershipForm((form) => ({...form,patientId:event.target.value}))} options={[{value:'',label:'Select patient...'},...(getStoreValue("patients") || []).map((patient) => ({value:patient.id,label:`${patient.firstName} ${patient.lastName}`}))]} />
                                     <Input label="Insurer/provider" value={membershipForm.provider} onChange={(event) => setMembershipForm((form) => ({...form,provider:event.target.value}))} />
                                     <Input label="Scheme" value={membershipForm.scheme} onChange={(event) => setMembershipForm((form) => ({...form,scheme:event.target.value}))} />
                                     <Input label="Plan" value={membershipForm.planName} onChange={(event) => setMembershipForm((form) => ({...form,planName:event.target.value}))} />
-                                    <Select label="Configured payer plan" value={membershipForm.payerPlanId} onChange={(event) => setMembershipForm((form) => ({...form,payerPlanId:event.target.value}))} options={[{value:'',label:'Optional plan link'},...payerPlans.filter((plan) => !membershipForm.patientId || plan.facility_id === appData.patients.find((patient) => patient.id === membershipForm.patientId)?.home_facility_id).map((plan) => ({value:plan.id,label:`${plan.display_name} (${plan.payer_code})`}))]} />
+                                    <Select label="Configured payer plan" value={membershipForm.payerPlanId} onChange={(event) => setMembershipForm((form) => ({...form,payerPlanId:event.target.value}))} options={[{value:'',label:'Optional plan link'},...payerPlans.filter((plan) => !membershipForm.patientId || plan.facility_id === getStoreValue("patients").find((patient) => patient.id === membershipForm.patientId)?.home_facility_id).map((plan) => ({value:plan.id,label:`${plan.display_name} (${plan.payer_code})`}))]} />
                                     <Input label="Policy / membership number" value={membershipForm.policyNumber} onChange={(event) => setMembershipForm((form) => ({...form,policyNumber:event.target.value}))} />
                                     <Input label="Principal member" value={membershipForm.principalMember} onChange={(event) => setMembershipForm((form) => ({...form,principalMember:event.target.value}))} />
                                     <Select label="Dependent relationship" value={membershipForm.dependentRelationship} onChange={(event) => setMembershipForm((form) => ({...form,dependentRelationship:event.target.value}))} options={[{value:'',label:'Principal / unspecified'},...['spouse','child','parent','other'].map((value) => ({value,label:value}))]} />
@@ -1796,7 +1795,7 @@ const AssetMaintenancePanel = () => {
                             </Card>
                             <Card title="Membership and manual eligibility queue">
                                 {insuranceMemberships.length ? <div className="divide-y divide-slate-100">{insuranceMemberships.map((membership) => {
-                                    const patient = (appData.patients || []).find((item) => item.id === membership.patient_id);
+                                    const patient = (getStoreValue("patients") || []).find((item) => item.id === membership.patient_id);
                                     return <div key={membership.id} className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr] gap-3 py-4 items-center"><div><p className="font-semibold text-slate-900">{patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record unavailable'}</p><p className="text-sm text-slate-600">{membership.provider} · {membership.scheme || 'Scheme not specified'} · {membership.policy_number}</p><p className="text-xs text-slate-500">{membership.plan_name || 'No plan'} · {membership.dependent_relationship || 'Principal/unspecified'} · {membership.effective_from || 'Start unknown'} to {membership.effective_to || 'No end date'}</p></div><div><Badge variant={membership.verification_status === 'verified_manual' ? 'success' : membership.verification_status === 'rejected_manual' ? 'danger' : 'warning'}>{membership.verification_status}</Badge><p className="mt-1 text-xs text-slate-500">{membership.verification_reference || 'No reference'}</p></div><div className="flex flex-wrap items-end gap-2"><Select label="Service" value={verificationReferences[`${membership.id}:service`] || 'general'} onChange={(event) => setVerificationReferences((values) => ({...values,[`${membership.id}:service`]:event.target.value}))} options={['general','consultation','pharmacy','laboratory','surgery','inpatient'].map((value) => ({value,label:value}))} /><Input label="Insurer reference" value={verificationReferences[membership.id] || ''} onChange={(event) => setVerificationReferences((values) => ({...values,[membership.id]:event.target.value}))} /><Button size="sm" variant="primary" onClick={() => requestEligibilityCheck(membership)}>Request eligibility</Button><Button size="sm" variant="secondary" onClick={() => requestPreauthorization(membership)}>Request pre-authorization</Button><Button size="sm" variant="ghost" onClick={() => recordManualEligibility(membership,'verified_manual')}>Record eligible manually</Button><Button size="sm" variant="danger" onClick={() => recordManualEligibility(membership,'rejected_manual')}>Record ineligible manually</Button></div></div>;
                                 })}</div> : <p className="text-sm text-slate-500">No insurance memberships have been recorded.</p>}
                                 <p className="mt-3 text-xs text-slate-500">Results entered here are staff-recorded manual checks; no external insurer integration is configured.</p>
@@ -1881,10 +1880,10 @@ const AssetMaintenancePanel = () => {
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value, invoiceId: '', membershipId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Patient" value={claimForm.patientId} onChange={(e) => setClaimForm(prev => ({ ...prev, patientId: e.target.value, invoiceId: '', membershipId: '' }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
                             <Select label="Outstanding invoice" value={claimForm.invoiceId} onChange={(e) => setClaimForm(prev => ({ ...prev, invoiceId: e.target.value }))} options={[{ value: '', label: 'Select invoice...' }, ...invoices.filter((invoice) => invoice.patientId === claimForm.patientId && Number(invoice.balance || 0) > 0).map((invoice) => ({ value: invoice.id, label: `${invoice.invoiceNumber} · ${formatCurrency(invoice.balance)} due` }))]} />
                             <Select label="Verified insurance membership" value={claimForm.membershipId} onChange={(e) => setClaimForm(prev => ({ ...prev, membershipId: e.target.value }))} options={[{ value: '', label: 'No membership / choose later' }, ...insuranceMemberships.filter((membership) => membership.patient_id === claimForm.patientId && membership.coverage_status === 'active' && membership.verification_status === 'verified_manual').map((membership) => ({ value: membership.id, label: `${membership.provider} · ${membership.policy_number}` }))]} />
-                            <Select label="Payer connection" value={claimForm.connectionId} onChange={(e) => setClaimForm(prev => ({ ...prev, connectionId: e.target.value }))} options={[{ value: '', label: 'Select payer...' }, ...integrationConnections.filter((connection) => connection.integration_type === 'payer' && connection.facility_id === appData.patients.find((patient) => patient.id === claimForm.patientId)?.home_facility_id).map((connection) => ({ value: connection.id, label: connection.provider_code }))]} />
+                            <Select label="Payer connection" value={claimForm.connectionId} onChange={(e) => setClaimForm(prev => ({ ...prev, connectionId: e.target.value }))} options={[{ value: '', label: 'Select payer...' }, ...integrationConnections.filter((connection) => connection.integration_type === 'payer' && connection.facility_id === getStoreValue("patients").find((patient) => patient.id === claimForm.patientId)?.home_facility_id).map((connection) => ({ value: connection.id, label: connection.provider_code }))]} />
                             <Input label="Claim Number" value={claimForm.claimNumber} onChange={(e) => setClaimForm(prev => ({ ...prev, claimNumber: e.target.value }))} />
                             <Input label="Amount Claimed" type="number" value={claimForm.amountClaimed} onChange={(e) => setClaimForm(prev => ({ ...prev, amountClaimed: e.target.value }))} />
                             <p className="text-sm text-slate-600">Payer decisions and approved amounts come from verified payer responses. Remittances remain pending until Accounts reconciliation.</p>
@@ -1902,7 +1901,7 @@ const AssetMaintenancePanel = () => {
             const { user } = useAuth();
             const [selectedWard, setSelectedWard] = useState(null);
             const [showNewAdmission, setShowNewAdmission] = useState(false);
-            const [admissions, setAdmissions] = useState(getAppData().admissions || []);
+            const [admissions, setAdmissions] = useState(getStoreValue("admissions") || []);
             const [admissionForm, setAdmissionForm] = useState({ patientId: '', encounterId: '', wardId: '', doctorId: user?.id || '', diagnosis: '', codeSystem: null, code: null, display: null, acuity: 'stable', priority: 'routine' });
             const [dispositionAdmission, setDispositionAdmission] = useState(null);
             const [allocationAdmission, setAllocationAdmission] = useState(null);
@@ -1969,7 +1968,7 @@ const AssetMaintenancePanel = () => {
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {(appData.wards || []).map(ward => (
+                        {(getStoreValue("wards") || []).map(ward => (
                             <Card 
                                 key={ward.id} 
                                 className="cursor-pointer hover:border-medical-300 transition-colors"
@@ -1994,7 +1993,7 @@ const AssetMaintenancePanel = () => {
                         <DataTable
                             columns={[
                                 { key: 'patient', title: 'Patient', render: (row) => {
-                                    const patient = appData.patients.find(p => p.id === row.patientId);
+                                    const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                     return (
                                         <div className="flex items-center gap-2">
                                             <Avatar name={patient?.firstName + ' ' + patient?.lastName} size="sm" />
@@ -2007,7 +2006,7 @@ const AssetMaintenancePanel = () => {
                                 { key: 'admissionDate', title: 'Admitted', render: (row) => formatDate(row.admissionDate) },
                                 { key: 'diagnosis', title: 'Diagnosis' },
                                 { key: 'doctor', title: 'Doctor', render: (row) => {
-                                    const doctor = appData.users.find(u => u.id === row.doctorId);
+                                    const doctor = getStoreValue("users").find(u => u.id === row.doctorId);
                                     return doctor?.name || 'Unknown';
                                 }},
                                 { key: 'acuity', title: 'Acuity', render: (row) => <Badge variant={row.acuity === 'critical' ? 'danger' : row.acuity === 'moderate' ? 'warning' : 'success'}>{row.acuity}</Badge> }
@@ -2016,7 +2015,7 @@ const AssetMaintenancePanel = () => {
                             actions={(row) => ['super_admin','doctor','nurse'].includes(user?.role) ? <Button variant="secondary" size="sm" onClick={async () => { setWorkflowError(''); setDischargeOverrideReason(''); setDispositionForm({type:user?.role==='nurse'?'transferred':'discharged',summary:'',instructions:'',followUp:'',condition:''}); setDischargeChecklist({medication_reconciliation_completed:false,follow_up_booked:false,patient_instructions_given:false}); setDischargeChecklistItems([]); setDischargeChecklistId(null); setDispositionAdmission(row); if (user?.role !== 'nurse') { const client=window.OneMedSupabase.getClient(); const {data,error}=await client.rpc('ensure_discharge_checklist',{p_admission_id:row.id}); if (error) setWorkflowError(error.message); else { setDischargeChecklistId(data); const {data:checklist}=await client.from('discharge_checklists').select('items').eq('id',data).single(); const items=checklist?.items||[]; setDischargeChecklistItems(items); setDischargeChecklist(Object.fromEntries(items.map((item)=>[item.key,false]))); } } }}>{user?.role==='nurse'?'Transfer':'Discharge / Transfer'}</Button> : null}
                         />
                     </Card>
-                    {['doctor','nurse','super_admin'].includes(user?.role) && <Card title="Admission requests awaiting bed allocation"><DataTable columns={[{key:'patientId',title:'Patient',render:(row)=>{const patient=appData.patients.find((item)=>item.id===row.patientId);return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';}},{key:'ward',title:'Requested ward'},{key:'diagnosis',title:'Admission indication'},{key:'admissionPriority',title:'Priority'},{key:'createdAt',title:'Requested',render:(row)=>formatDateTime(row.createdAt)}]} data={admissions.filter((row)=>row.status==='awaiting_bed')} actions={(row)=>['nurse','super_admin'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={()=>{setWorkflowError('');setAllocationAdmission(row);setAllocationBedId('');}}>Allocate available bed</Button> : null} /></Card>}
+                    {['doctor','nurse','super_admin'].includes(user?.role) && <Card title="Admission requests awaiting bed allocation"><DataTable columns={[{key:'patientId',title:'Patient',render:(row)=>{const patient=getStoreValue("patients").find((item)=>item.id===row.patientId);return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown';}},{key:'ward',title:'Requested ward'},{key:'diagnosis',title:'Admission indication'},{key:'admissionPriority',title:'Priority'},{key:'createdAt',title:'Requested',render:(row)=>formatDateTime(row.createdAt)}]} data={admissions.filter((row)=>row.status==='awaiting_bed')} actions={(row)=>['nurse','super_admin'].includes(user?.role) ? <Button size="sm" variant="primary" onClick={()=>{setWorkflowError('');setAllocationAdmission(row);setAllocationBedId('');}}>Allocate available bed</Button> : null} /></Card>}
 
                     <Modal
                         isOpen={showNewAdmission}
@@ -2031,10 +2030,10 @@ const AssetMaintenancePanel = () => {
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Requested ward" value={admissionForm.wardId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, wardId: e.target.value, bedId: '' }))} options={[{ value: '', label: 'Select ward...' }, ...(appData.wards || []).filter((ward) => ward.status === 'active').map((ward) => ({ value: ward.id, label: ward.name }))]} />
-                            <Select label="Active encounter" value={admissionForm.encounterId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'No encounter selected' }, ...(appData.encounters || []).filter((encounter) => encounter.patientId === admissionForm.patientId && !encounter.endedAt).map((encounter) => ({ value: encounter.id, label: `${encounter.encounterType} · ${encounter.reasonForVisit}` }))]} />
-                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
+                            <Select label="Patient" value={admissionForm.patientId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Requested ward" value={admissionForm.wardId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, wardId: e.target.value, bedId: '' }))} options={[{ value: '', label: 'Select ward...' }, ...(getStoreValue("wards") || []).filter((ward) => ward.status === 'active').map((ward) => ({ value: ward.id, label: ward.name }))]} />
+                            <Select label="Active encounter" value={admissionForm.encounterId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{ value: '', label: 'No encounter selected' }, ...(getStoreValue("encounters") || []).filter((encounter) => encounter.patientId === admissionForm.patientId && !encounter.endedAt).map((encounter) => ({ value: encounter.id, label: `${encounter.encounterType} · ${encounter.reasonForVisit}` }))]} />
+                            <Select label="Doctor" value={admissionForm.doctorId} onChange={(e) => setAdmissionForm(prev => ({ ...prev, doctorId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getStoreValue("users") || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <CodedConceptInput label="Diagnosis" value={admissionForm.diagnosis} codeSystem={admissionForm.codeSystem} code={admissionForm.code} display={admissionForm.display} onChange={(term) => setAdmissionForm(prev => ({...prev,diagnosis:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />
                             <Select label="Admission priority" value={admissionForm.priority} onChange={(e) => setAdmissionForm(prev => ({ ...prev, priority: e.target.value }))} options={['routine','urgent','emergency'].map((value) => ({value,label:value}))} />
                             <Select label="Acuity" value={admissionForm.acuity} onChange={(e) => setAdmissionForm(prev => ({ ...prev, acuity: e.target.value }))} options={[{ value: 'stable', label: 'Stable' }, { value: 'moderate', label: 'Moderate' }, { value: 'critical', label: 'Critical' }]} />
@@ -2042,7 +2041,7 @@ const AssetMaintenancePanel = () => {
                         </div>
                     </Modal>
 
-                    <Modal isOpen={!!allocationAdmission} onClose={()=>setAllocationAdmission(null)} title="Allocate ward bed" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={()=>setAllocationAdmission(null)}>Cancel</Button><Button variant="primary" onClick={allocateRequestedBed}>Allocate bed</Button></div>}><div className="space-y-4"><p className="text-sm text-slate-600">Requested ward: {allocationAdmission?.ward || 'Any available ward'}</p><Select label="Available bed" value={allocationBedId} onChange={(event)=>setAllocationBedId(event.target.value)} options={[{value:'',label:'Select an available bed'},...(appData.beds || []).filter((bed)=>bed.status==='available' && (!allocationAdmission?.requested_ward_id || bed.wardId===allocationAdmission.requested_ward_id)).map((bed)=>({value:bed.id,label:`${(appData.wards || []).find((ward)=>ward.id===bed.wardId)?.name || 'Ward'} · ${bed.bedNumber}`}))]} />{workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}</div></Modal>
+                    <Modal isOpen={!!allocationAdmission} onClose={()=>setAllocationAdmission(null)} title="Allocate ward bed" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={()=>setAllocationAdmission(null)}>Cancel</Button><Button variant="primary" onClick={allocateRequestedBed}>Allocate bed</Button></div>}><div className="space-y-4"><p className="text-sm text-slate-600">Requested ward: {allocationAdmission?.ward || 'Any available ward'}</p><Select label="Available bed" value={allocationBedId} onChange={(event)=>setAllocationBedId(event.target.value)} options={[{value:'',label:'Select an available bed'},...(getStoreValue("beds") || []).filter((bed)=>bed.status==='available' && (!allocationAdmission?.requested_ward_id || bed.wardId===allocationAdmission.requested_ward_id)).map((bed)=>({value:bed.id,label:`${(getStoreValue("wards") || []).find((ward)=>ward.id===bed.wardId)?.name || 'Ward'} · ${bed.bedNumber}`}))]} />{workflowError && <p className="text-sm text-red-700" role="alert">{workflowError}</p>}</div></Modal>
 
                     <Modal isOpen={!!dispositionAdmission} onClose={() => setDispositionAdmission(null)} title="Complete inpatient disposition" size="md" footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setDispositionAdmission(null)}>Cancel</Button><Button variant="primary" onClick={completeDisposition}>Save, sign and complete</Button></div>}>
                         <div className="space-y-4"><Select label="Disposition" value={dispositionForm.type} onChange={(event) => setDispositionForm((value) => ({ ...value, type: event.target.value }))} options={user?.role==='nurse' ? [{value:'transferred',label:'Transferred'}] : [{value:'discharged',label:'Discharged'}, {value:'transferred',label:'Transferred'}]} />
@@ -2058,7 +2057,7 @@ const AssetMaintenancePanel = () => {
                     >
                         {selectedWard && (
                             <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                                {(appData.beds || []).filter(b => b.wardId === selectedWard.id).map(bed => (
+                                {(getStoreValue("beds") || []).filter(b => b.wardId === selectedWard.id).map(bed => (
                                     <div 
                                         key={bed.id} 
                                         className={'p-4 rounded-xl border-2 text-center cursor-pointer transition-all ' + (bed.status === 'occupied' ? 'border-red-200 bg-red-50' : bed.status === 'available' ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-200 bg-slate-50')}
@@ -2081,7 +2080,7 @@ const AssetMaintenancePanel = () => {
         const SurgeriesModule = () => {
             const { user } = useAuth();
             const [showSchedule, setShowSchedule] = useState(false);
-            const [surgeries, setSurgeries] = useState(getAppData().surgeries || []);
+            const [surgeries, setSurgeries] = useState(getStoreValue("surgeries") || []);
             const [surgeryForm, setSurgeryForm] = useState({ patientId: '', encounterId: '', surgeonId: '', procedure: '', indication: '', diagnosis: '', codeSystem: null, code: null, display: null, scheduledDate: '', scheduledTime: '', duration: '', otRoom: '', anesthesia: '', priority: 'elective' });
             const [selectedSurgery, setSelectedSurgery] = useState(null);
             const [surgeryUpdate, setSurgeryUpdate] = useState({ status: 'accepted', reviewReason: '', consentStatus: 'pending', preoperativeNotes: '', operativeNotes: '', postoperativePlan: '', complications: '', scheduledDate: '', scheduledTime: '', otRoom: '' });
@@ -2124,7 +2123,7 @@ const AssetMaintenancePanel = () => {
                 callSurgerySafety('set_surgical_checklist_template', { p_facility_id: safetyForm.facilityId, p_phase: safetyForm.phase, p_items: items }, 'Checklist template saved.');
             };
 
-            const selectedSurgeryPatient = (appData.patients || []).find((patient) => patient.id === selectedSurgery?.patientId);
+            const selectedSurgeryPatient = (getStoreValue("patients") || []).find((patient) => patient.id === selectedSurgery?.patientId);
             const surgeryFacilityId = selectedSurgeryPatient?.home_facility_id || selectedSurgeryPatient?.homeFacilityId || user?.facility_id || user?.facilityId || '';
 
             const handleScheduleSurgery = async () => {
@@ -2207,11 +2206,11 @@ const AssetMaintenancePanel = () => {
                                     { key: 'scheduledTime', title: 'Time' },
                                     { key: 'procedure', title: 'Procedure' },
                                     { key: 'patient', title: 'Patient', render: (row) => {
-                                        const patient = appData.patients.find(p => p.id === row.patientId);
+                                        const patient = getStoreValue("patients").find(p => p.id === row.patientId);
                                         return patient ? patient.firstName + ' ' + patient.lastName : 'Unknown';
                                     }},
                                     { key: 'surgeon', title: 'Surgeon', render: (row) => {
-                                        const surgeon = appData.users.find(u => u.id === row.surgeonId);
+                                        const surgeon = getStoreValue("users").find(u => u.id === row.surgeonId);
                                         return surgeon?.name || 'Unknown';
                                     }},
                                     { key: 'duration', title: 'Duration', render: (row) => row.duration || 'Not specified' },
@@ -2257,9 +2256,9 @@ const AssetMaintenancePanel = () => {
                         }
                     >
                         <div className="space-y-4">
-                            <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getAppData().patients || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
-                            <Select label="Encounter" value={surgeryForm.encounterId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{value:'',label:'Optional encounter'},...(appData.encounters || []).filter((encounter) => encounter.patientId === surgeryForm.patientId && !encounter.endedAt).map((encounter) => ({value:encounter.id,label:`${encounter.encounterType} · ${encounter.reasonForVisit}`}))]} />
-                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(appData.users || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
+                            <Select label="Patient" value={surgeryForm.patientId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, patientId: e.target.value }))} options={[{ value: '', label: 'Select patient...' }, ...(getStoreValue("patients") || []).map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName}` }))]} />
+                            <Select label="Encounter" value={surgeryForm.encounterId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, encounterId: e.target.value }))} options={[{value:'',label:'Optional encounter'},...(getStoreValue("encounters") || []).filter((encounter) => encounter.patientId === surgeryForm.patientId && !encounter.endedAt).map((encounter) => ({value:encounter.id,label:`${encounter.encounterType} · ${encounter.reasonForVisit}`}))]} />
+                            <Select label="Surgeon" value={surgeryForm.surgeonId} onChange={(e) => setSurgeryForm(prev => ({ ...prev, surgeonId: e.target.value }))} options={[{ value: '', label: 'Unassigned' }, ...(getStoreValue("users") || []).filter(user => user.role === 'doctor').map(user => ({ value: user.id, label: user.name }))]} />
                             <Input label="Procedure" value={surgeryForm.procedure} onChange={(e) => setSurgeryForm(prev => ({ ...prev, procedure: e.target.value }))} />
                             <Input label="Indication" value={surgeryForm.indication} onChange={(e) => setSurgeryForm(prev => ({ ...prev, indication: e.target.value }))} />
                             <CodedConceptInput label="Diagnosis" value={surgeryForm.diagnosis} codeSystem={surgeryForm.codeSystem} code={surgeryForm.code} display={surgeryForm.display} onChange={(term) => setSurgeryForm(prev => ({...prev,diagnosis:term.value,codeSystem:term.codeSystem,code:term.code,display:term.display}))} />

@@ -44,10 +44,10 @@ async function preparePrintHarness(page, auditFails = false) {
       const manifest = await manifestResponse.json();
       const entry = manifest['src/js/store.js'] || Object.values(manifest).find((candidate) => candidate.src === 'src/js/store.js');
       if (!entry?.file) throw new Error('The bundled app store module is absent from the Vite manifest.');
-      const { getAppData } = await import(`/${entry.file}`);
+      const { setStoreValue } = await import(`/${entry.file}`);
       const patientId = '20000000-0000-4000-8000-000000000001';
       const facilityId = 'a1000000-0000-4000-8000-000000000001';
-      getAppData().patients = [{
+      setStoreValue('patients', [{
         id: patientId,
         home_facility_id: facilityId,
         firstName: 'Synthetic',
@@ -55,7 +55,7 @@ async function preparePrintHarness(page, auditFails = false) {
         patientNumber: 'PRINT-TEST-ONLY',
         medicalRecordNumber: 'MRN-TEST-ONLY',
         dateOfBirth: '1990-01-01'
-      }];
+      }]);
     });
   });
   await page.evaluate(async () => window.__storeSeedReady);
