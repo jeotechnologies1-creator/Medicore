@@ -3,8 +3,9 @@ select plan(11);
 
 select has_function('public','prevent_clinical_hard_delete',array[]::text[],'hard delete guard exists');
 
--- Every listed clinical or retained relation present on this schema must have
--- a row-level DELETE trigger. RLS alone is not sufficient for service callers.
+-- The restrictive RLS matrix can still expose DELETE for privileged roles.
+-- Assert the table boundary guard separately, since RLS alone is not
+-- sufficient for service callers and policy changes must not permit erasure.
 select ok(not exists(
  select 1 from unnest(array[
   'patients','appointments','admissions','encounters','consultations','consultation_signatures','consultation_addenda',
