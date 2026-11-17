@@ -101,6 +101,7 @@ const routeModules = {
   admissions: ['./js/modules/operations.jsx'],
   surgeries: ['./js/modules/operations.jsx'],
   clinical_safety: ['./js/modules/clinical.jsx'],
+  incident_safety: ['./js/modules/incident-safety.jsx'],
   reports: ['./js/modules/admin.jsx'],
   audit: ['./js/modules/system.jsx'],
   settings: ['./js/modules/system.jsx'],

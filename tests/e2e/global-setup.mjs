@@ -49,6 +49,19 @@ export default async function globalSetup() {
   if (!nurseUserId) throw new Error('Could not locate the non-records browser test identity.');
   const { error: nurseProfileError } = await admin.from('profiles').update({ role: 'nurse', status: 'active', facility_id: 'a1000000-0000-4000-8000-000000000001' }).eq('auth_user_id', nurseUserId);
   if (nurseProfileError) throw nurseProfileError;
+  const unrelatedEmail = 'ci-accountant-safety-denied@example.test';
+  const unrelatedPassword = 'CI-only-Accountant-Safety-2026!';
+  const { data: unrelatedCreated, error: unrelatedCreateError } = await admin.auth.admin.createUser({ email: unrelatedEmail, password: unrelatedPassword, email_confirm: true });
+  if (unrelatedCreateError && !/already been registered|already exists/i.test(unrelatedCreateError.message)) throw unrelatedCreateError;
+  let unrelatedUserId = unrelatedCreated.user?.id;
+  if (!unrelatedUserId) {
+    const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) throw error;
+    unrelatedUserId = data.users.find((user) => user.email === unrelatedEmail)?.id;
+  }
+  if (!unrelatedUserId) throw new Error('Could not locate the unrelated-role safety access test identity.');
+  const { error: unrelatedProfileError } = await admin.from('profiles').update({ role: 'accountant', status: 'active', facility_id: 'a1000000-0000-4000-8000-000000000001' }).eq('auth_user_id', unrelatedUserId);
+  if (unrelatedProfileError) throw unrelatedProfileError;
   const codingEmail = 'ci-coding-workspace@example.test';
   const codingPassword = 'CI-only-Coding-Password-2026!';
   const { data: codingCreated, error: codingCreateError } = await admin.auth.admin.createUser({ email: codingEmail, password: codingPassword, email_confirm: true });
@@ -94,6 +107,8 @@ export default async function globalSetup() {
   process.env.CI_E2E_SECOND_PASSWORD = secondPassword;
   process.env.CI_E2E_NURSE_EMAIL = nurseEmail;
   process.env.CI_E2E_NURSE_PASSWORD = nursePassword;
+  process.env.CI_E2E_UNRELATED_EMAIL = unrelatedEmail;
+  process.env.CI_E2E_UNRELATED_PASSWORD = unrelatedPassword;
   process.env.CI_E2E_CODING_EMAIL = codingEmail;
   process.env.CI_E2E_CODING_PASSWORD = codingPassword;
   process.env.CI_E2E_CLINICIAN_EMAIL = clinicianEmail;

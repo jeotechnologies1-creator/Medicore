@@ -144,7 +144,9 @@
                 const role = rawRole === 'health_information_management_officer' ? 'records_officer' : rawRole;
                 const staffRoles = ['super_admin', 'hr_officer', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'maintenance_officer', 'safety_officer'];
                 const personalLeave = staffRoles.includes(role) ? [{ id: 'staff_leave', label: 'My Leave', icon: Icons.UserCheck }] : [];
-                const roleItems = [...(roleMenus[role] || []), ...personalLeave];
+                const incidentRoles = ['super_admin', 'safety_officer', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'laboratory_scientist', 'radiographer', 'accountant', 'records_officer', 'surgeon', 'specialist', 'theatre_staff', 'maintenance_officer', 'hr_officer'];
+                const incidentMenu = incidentRoles.includes(role) ? [{ id: 'incident_safety', label: role === 'safety_officer' || role === 'super_admin' ? 'Safety & Infection Control' : role === 'accountant' || role === 'hr_officer' || role === 'maintenance_officer' ? 'My CAPA Actions' : 'Report a Safety Incident', icon: Icons.Shield }] : [];
+                const roleItems = [...(roleMenus[role] || []), ...personalLeave, ...incidentMenu];
                 const allowed = new Set(roleItems.map((item) => item.id));
                 return [...common, ...roleItems].filter((item) =>
                     (item.id === 'dashboard' || allowed.has(item.id)) && hasModuleAccess(item.id)
