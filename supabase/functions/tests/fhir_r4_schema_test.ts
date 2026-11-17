@@ -1,5 +1,5 @@
 import Ajv from 'npm:ajv@8.17.1';
-import { capabilityStatement, mapResource } from '../fhir-r4/index.ts';
+import { bundleForPage, capabilityStatement, mapResource, type FhirResourceType } from '../fhir-r4/index.ts';
 
 Deno.test('FHIR R4 exported core resource shapes validate against HL7 JSON schema', async () => {
   const [schemaResponse, metaResponse] = await Promise.all([
@@ -13,7 +13,7 @@ Deno.test('FHIR R4 exported core resource shapes validate against HL7 JSON schem
   const validate = ajv.compile(schema);
   const capability = JSON.parse(JSON.stringify(capabilityStatement()));
   if (!validate(capability)) throw new Error(`CapabilityStatement failed HL7 FHIR R4 schema validation: ${JSON.stringify(validate.errors)}`);
-  const cases: [string, Record<string, unknown>][] = [
+  const cases: [FhirResourceType, Record<string, unknown>][] = [
     ['Patient', { id:'p1',patient_number:'MRN-1',first_name:'Synthetic',last_name:'Patient',date_of_birth:'1980-01-02',status:'active',gender:'unknown' }],
     ['Encounter', { id:'e1',patient_id:'p1',status:'completed',encounter_type:'outpatient',started_at:'2026-01-01T10:00:00Z' }],
     ['Observation', { id:'v1',patient_id:'p1',recorded_at:'2026-01-01T10:00:00Z',_fhir_field:'temperature',temperature:36.8 }],
@@ -28,4 +28,7 @@ Deno.test('FHIR R4 exported core resource shapes validate against HL7 JSON schem
     const resource = JSON.parse(JSON.stringify(mapResource(type, row)));
     if (!resource || !validate(resource)) throw new Error(`${type} failed HL7 FHIR R4 schema validation: ${JSON.stringify(validate.errors)}`);
   }
+  const patient = mapResource('Patient', { id: 'p1', first_name: 'Synthetic', last_name: 'Patient', status: 'active' });
+  const bundle = bundleForPage(patient ? [patient] : [], new URL('https://example.test/fhir/Patient?_id=p1'), { count: 10, offset: 0 });
+  if (!validate(JSON.parse(JSON.stringify(bundle)))) throw new Error(`Search Bundle failed HL7 FHIR R4 schema validation: ${JSON.stringify(validate.errors)}`);
 });

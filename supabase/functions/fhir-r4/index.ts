@@ -1,83 +1,346 @@
 import { createClient } from '../_shared/supabase.ts';
 
-const resources = ['Patient', 'Encounter', 'Observation', 'AllergyIntolerance', 'Condition', 'MedicationRequest', 'DiagnosticReport'];
-const headers = { 'content-type': 'application/fhir+json; charset=utf-8', 'cache-control': 'no-store' };
-const ref = (type: string, id: string) => ({ reference: `${type}/${id}` });
-const coding = (system: unknown, code: unknown, display?: unknown) => system && code ? [{ system, code, ...(display ? { display } : {}) }] : undefined;
-const cc = (text: unknown, system?: unknown, code?: unknown) => ({ ...(coding(system, code, text) ? { coding: coding(system, code, text) } : {}), ...(text ? { text } : {}) });
-const date = (value: unknown) => typeof value === 'string' ? value.slice(0, 10) : undefined;
-const quantity = (value: unknown, unit?: string, system?: string, code?: string) => value == null ? undefined : ({ value: Number(value), ...(unit ? { unit } : {}), ...(system ? { system } : {}), ...(code ? { code } : {}) });
-export const capabilityStatement = () => ({ resourceType:'CapabilityStatement',status:'active',date:new Date().toISOString(),kind:'instance',fhirVersion:'4.0.1',format:['json'],rest:[{mode:'server',resource:resources.map((name)=>({type:name,interaction:[{code:'read'},{code:'search-type'}],searchParam:[{name:'_id',type:'token'},{name:'patient',type:'reference'}]}))}] });
-
-export function mapResource(type: string, row: Record<string, any>) {
-  const base = { resourceType: type, id: row._fhir_id || row.id };
-  if (type === 'Patient') return { ...base, identifier: row.patient_number ? [{ value: row.patient_number }] : undefined, active: row.status === 'active', name: [{ family: row.last_name, given: [row.first_name] }], telecom: row.phone ? [{ system: 'phone', value: row.phone }] : undefined, gender: ['male','female','other','unknown'].includes(String(row.gender).toLowerCase()) ? String(row.gender).toLowerCase() : undefined, birthDate: date(row.date_of_birth), address: row.address ? [{ text: row.address }] : undefined };
-  if (type === 'Encounter') return { ...base, status: ({ planned:'planned', arrived:'arrived', triaged:'in-progress', in_progress:'in-progress', completed:'finished', cancelled:'cancelled' } as Record<string,string>)[row.status] || 'unknown', class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: ({ emergency:'EMER',inpatient:'IMP',outpatient:'AMB',telehealth:'VR',home_visit:'HH' } as Record<string,string>)[row.encounter_type] || 'AMB' }, subject: ref('Patient', row.patient_id), type: [{ text: row.encounter_type }], period: { start: row.started_at, ...(row.ended_at ? { end: row.ended_at } : {}) }, reasonCode: row.reason_for_visit ? [{ text: row.reason_for_visit }] : undefined, serviceProvider: row.facility_id ? ref('Organization', row.facility_id) : undefined };
-  if (type === 'Observation') {
-    const isVital = 'recorded_at' in row;
-    if (isVital) {
-      const map: [string,string,string,string?][] = [['temperature','8310-5','Body temperature','Cel'],['heart_rate','8867-4','Heart rate','/min'],['blood_pressure_systolic','8480-6','Systolic blood pressure','mm[Hg]'],['blood_pressure_diastolic','8462-4','Diastolic blood pressure','mm[Hg]'],['respiratory_rate','9279-1','Respiratory rate','/min'],['oxygen_saturation','2708-6','Oxygen saturation','%'],['weight','29463-7','Body weight','kg'],['height','8302-2','Body height','cm'],['bmi','39156-5','Body mass index','kg/m2']];
-      const field = row._fhir_field as string | undefined;
-      const [_, code, display, unit] = map.find(([k]) => k === field) || [];
-      if (!field) return null;
-      const value = { valueQuantity: quantity(row[field], unit, unit ? 'http://unitsofmeasure.org' : undefined, unit) };
-      if (field === 'blood_pressure_systolic' || field === 'blood_pressure_diastolic') return { ...base, status: 'final', category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }], code: { coding: [{ system: 'http://loinc.org', code: '85354-9', display: 'Blood pressure panel' }] }, subject: ref('Patient', row.patient_id), effectiveDateTime: row.recorded_at, component: [['8480-6','Systolic blood pressure',row.blood_pressure_systolic],['8462-4','Diastolic blood pressure',row.blood_pressure_diastolic]].filter((v) => v[2] != null).map(([c,d,v]) => ({ code: { coding: [{ system:'http://loinc.org',code:c,display:d }] }, valueQuantity: quantity(v,'mm[Hg]','http://unitsofmeasure.org','mm[Hg]') })) };
-      return { ...base, ...value, status: 'final', category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'vital-signs' }] }], code: { coding: [{ system: 'http://loinc.org', code, display }] }, subject: ref('Patient', row.patient_id), effectiveDateTime: row.recorded_at };
-    }
-    const result = row.results && typeof row.results === 'object' ? row.results : {};
-    const val = result.value ?? result.result;
-    if (val == null) return null;
-    const status = row.result_status || row.status; const numericValue = typeof val === 'number' ? val : typeof val === 'string' && val.trim() !== '' ? Number(val) : Number.NaN;
-    return { ...base, status: ['final','amended','corrected','cancelled','entered-in-error','unknown','preliminary'].includes(status) ? status : 'unknown', category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: 'laboratory' }] }], code: cc(result.display || row.test_type, result.code_system || row.code_system, result.code || row.code), subject: ref('Patient', row.patient_id), effectiveDateTime: row.result_date ? `${row.result_date}T00:00:00Z` : row.ordered_date ? `${row.ordered_date}T00:00:00Z` : undefined, valueQuantity: Number.isFinite(numericValue) ? quantity(numericValue, result.unit, result.unit_system, result.unit_code) : undefined, valueString: !Number.isFinite(numericValue) && typeof val === 'string' ? val : undefined, interpretation: result.interpretation ? [{ text: result.interpretation }] : undefined };
-  }
-  if (type === 'AllergyIntolerance') return { ...base, clinicalStatus: { coding: [{ system:'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical',code: (row.clinical_status || 'active').replaceAll('_','-') }] }, verificationStatus: { coding: [{ system:'http://terminology.hl7.org/CodeSystem/allergyintolerance-verification',code: (row.verification_status || 'unconfirmed').replaceAll('_','-') }] }, type: 'allergy', category: ['food','environment','medication','biologic'].includes(row.category) ? [row.category] : undefined, criticality: ['low','high'].includes(row.criticality) ? row.criticality : 'unable-to-assess', code: cc(row.substance, row.code_system, row.code), patient: ref('Patient', row.patient_id), onsetDateTime: date(row.onset_date), reaction: row.reaction ? [{ manifestation: [{ text: row.reaction }], ...(row.severity ? { severity: row.severity } : {}) }] : undefined };
-  if (type === 'Condition') return { ...base, clinicalStatus: { coding: [{ system:'http://terminology.hl7.org/CodeSystem/condition-clinical',code: (row.clinical_status || 'active').replaceAll('_','-') }] }, verificationStatus: { coding: [{ system:'http://terminology.hl7.org/CodeSystem/condition-ver-status',code: (row.verification_status || 'provisional').replaceAll('_','-') }] }, code: cc(row.condition_name,row.code_system,row.code), subject: ref('Patient',row.patient_id), onsetDateTime: date(row.onset_date), abatementDateTime: date(row.abatement_date) };
-  if (type === 'MedicationRequest') { const status=String(row.status||'unknown').replaceAll('_','-'); return { ...base, status: ['active','on-hold','cancelled','completed','entered-in-error','stopped','draft','unknown'].includes(status) ? status : 'unknown', intent: 'order', medicationCodeableConcept: cc(row.medication_name || row.generic_name || 'Medication',row.formulary_system,row.formulary_code), subject: ref('Patient',row.patient_id), authoredOn: row.created_at || row.start_date, dosageInstruction: [{ text: [row.dose,row.dose_unit,row.route,row.frequency].filter(Boolean).join(' ') }], dispenseRequest: { numberOfRepeatsAllowed: row.refills || 0, quantity: quantity(row.dispense_quantity, row.dose_unit) } }; }
-  if (type === 'DiagnosticReport') { const status=row.result_status||row.status; return { ...base, status: ['registered','partial','preliminary','final','amended','corrected','appended','cancelled','entered-in-error','unknown'].includes(status) ? status : 'unknown', code: cc(row.test_type || row.study_type,row.code_system,row.code), subject: ref('Patient',row.patient_id), effectiveDateTime: row.result_date ? `${row.result_date}T00:00:00Z` : row.ordered_date ? `${row.ordered_date}T00:00:00Z` : undefined, conclusion: row.report || undefined }; }
-  return null;
-}
-
-const handler = async (request: Request) => {
-  if (request.method !== 'GET') return Response.json({ resourceType:'OperationOutcome', issue:[{severity:'error',code:'not-supported',diagnostics:'Read-only FHIR endpoint'}] }, { status:405,headers });
-  const auth = request.headers.get('authorization'); if (!auth?.startsWith('Bearer ')) return Response.json({ error:'Bearer token required' },{status:401,headers});
-  const url = Deno.env.get('SUPABASE_URL'); const anon = Deno.env.get('SUPABASE_ANON_KEY'); if (!url || !anon) return Response.json({error:'FHIR service is not configured'},{status:500,headers});
-  const db = createClient(url,anon,{global:{headers:{Authorization:auth}}});
-  const { data: { user }, error: authError } = await db.auth.getUser(); if (authError || !user) return Response.json({error:'Invalid bearer token'},{status:401,headers});
-  const u = new URL(request.url); const path = u.pathname.replace(/\/$/,'').split('/').filter(Boolean); const at = path.indexOf('fhir');
-  const type = path[at + 2]; const id = path[at + 3];
-  if (type === 'metadata') return Response.json(capabilityStatement(),{headers});
-  if (typeof type!=='string' || !resources.includes(type) || (id && path[at + 3] === '_search')) return Response.json({resourceType:'OperationOutcome',issue:[{severity:'error',code:'not-found'}]},{status:404,headers});
-  const table: Record<string,string> = { Patient:'patients',Encounter:'encounters',Observation:'vital_signs',AllergyIntolerance:'patient_allergies',Condition:'patient_conditions',MedicationRequest:'medication_orders',DiagnosticReport:'lab_orders' };
-  const patientId=u.searchParams.get('patient')?.replace(/^Patient\//,'');
-  if (!id && type==='Patient' && !u.searchParams.get('_id')) return Response.json({resourceType:'OperationOutcome',issue:[{severity:'error',code:'required',diagnostics:'_id is required for Patient reads'}]},{status:400,headers});
-  if (!id && type!=='Patient' && !patientId) return Response.json({resourceType:'OperationOutcome',issue:[{severity:'error',code:'required',diagnostics:'patient search parameter is required'}]},{status:400,headers});
-  const tables = type==='Observation' ? ['vital_signs','lab_orders'] : type==='DiagnosticReport' ? ['lab_orders','radiology_orders'] : [table[type]];
-  const rows: Record<string,any>[]=[];
-  const dbId=id && type==='Observation' ? id.match(/^([0-9a-f-]{36})(?:-(?:temperature|heart_rate|blood-pressure|respiratory_rate|oxygen_saturation|weight|height|bmi|\d+))?$/i)?.[1] || id : id;
-  for(const tableName of tables){let select='*';if(type==='MedicationRequest')select='*,formulary_items(atc_code,generic_name)';let q=db.from(tableName).select(select); if(id) q=q.eq('id',dbId); else if(type==='Patient') q=q.eq('id',u.searchParams.get('_id')); else q=q.eq('patient_id',patientId).limit(100); const {data,error}=await q; if(error) return Response.json({error:'Resource query denied or unavailable'},{status:403,headers}); rows.push(...((data||[]) as Record<string,any>[]).map((r)=>({...r,_source_table:tableName})));}
-  const results=[];
-  for(const row of rows){
-    const patientId=type==='Patient'?row.id:row.patient_id;
-    const {data:authorized,error:authzError}=await db.rpc('authorize_fhir_read',{p_patient_id:patientId,p_resource_type:type});
-    if(authzError||authorized!==true) continue;
-    let mapped;
-    if(type==='Observation'&&'recorded_at' in row){
-      const obs=['temperature','heart_rate','respiratory_rate','oxygen_saturation','weight','height','bmi'].filter((field)=>row[field]!=null).map((field)=>mapResource(type,{...row,_fhir_field:field,_fhir_id:`${row.id}-${field}`})).filter(Boolean);
-      if(row.blood_pressure_systolic!=null || row.blood_pressure_diastolic!=null) obs.push(mapResource(type,{...row,_fhir_field:'blood_pressure_systolic',_fhir_id:`${row.id}-blood-pressure`}));
-      results.push(...obs); continue;
-    }
-    if(type==='Observation' && row._source_table==='lab_orders') {
-      const values=Array.isArray(row.results?.values)?row.results.values:[];
-      for(const [i,value] of values.entries()) { const observation=mapResource(type,{...row,results:value,_fhir_id:`${row.id}-${i+1}`}); if(observation)results.push(observation); }
-      if(!values.length){const observation=mapResource(type,row);if(observation)results.push(observation);}
-      continue;
-    }
-    if(type==='MedicationRequest'&&row.formulary_items?.atc_code){row.formulary_system='http://www.whocc.no/atc';row.formulary_code=row.formulary_items.atc_code;}
-    if(type==='DiagnosticReport') { row.test_type=row.study_type||row.test_type; }
-    mapped=mapResource(type,row); if(mapped) results.push(mapped);
-  }
-  if(id){const resource=results.find((entry)=>entry.id===id); return resource?Response.json(resource,{headers}):Response.json({resourceType:'OperationOutcome',issue:[{severity:'error',code:'not-found'}]},{status:404,headers});}
-  return Response.json({resourceType:'Bundle',type:'searchset',total:results.length,entry:results.map((resource)=>({resource,search:{mode:'match'}}))},{headers});
+export const RESOURCE_TYPES = ['Patient', 'Encounter', 'Observation', 'AllergyIntolerance', 'Condition', 'MedicationRequest', 'DiagnosticReport'] as const;
+export type FhirResourceType = typeof RESOURCE_TYPES[number];
+type Row = Record<string, unknown>;
+type FhirResource = Record<string, unknown> & { resourceType: string; id?: string };
+type DbResult = { data: unknown; error: unknown; count?: number | null };
+type Query = PromiseLike<DbResult> & {
+  select(columns?: string, options?: Record<string, unknown>): Query;
+  eq(column: string, value: unknown): Query;
+  order(column: string, options?: Record<string, unknown>): Query;
+  range(from: number, to: number): Query;
+};
+type FhirDb = {
+  auth: { getUser(): Promise<{ data: { user: unknown | null }; error: unknown }> };
+  from(table: string): Query;
+  rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
 };
 
+const PAGE_SIZE = 200;
+export const DEFAULT_COUNT = 50;
+export const MAX_COUNT = 100;
+export const MAX_OFFSET = 100_000;
+export const headers = { 'content-type': 'application/fhir+json; charset=utf-8', 'cache-control': 'no-store' };
+const tableFor: Record<FhirResourceType, string[]> = {
+  Patient: ['patients'], Encounter: ['encounters'], Observation: ['vital_signs', 'lab_orders'],
+  AllergyIntolerance: ['patient_allergies'], Condition: ['patient_conditions'],
+  MedicationRequest: ['medication_orders'], DiagnosticReport: ['lab_orders', 'radiology_orders'],
+};
+
+const stringValue = (value: unknown): string | undefined => typeof value === 'string' && value.length ? value : undefined;
+const numberValue = (value: unknown): number | undefined => value == null || value === '' || !Number.isFinite(Number(value)) ? undefined : Number(value);
+const rowString = (row: Row, key: string): string | undefined => stringValue(row[key]);
+const rowNumber = (row: Row, key: string): number | undefined => numberValue(row[key]);
+const asRecord = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+const reference = (type: string, id: unknown) => typeof id === 'string' && id ? { reference: `${type}/${id}` } : undefined;
+const datePart = (value: unknown) => typeof value === 'string' ? value.slice(0, 10) : undefined;
+const coding = (system: unknown, code: unknown, display?: unknown) => typeof system === 'string' && typeof code === 'string' && system && code
+  ? [{ system, code, ...(typeof display === 'string' && display ? { display } : {}) }]
+  : undefined;
+const codeableConcept = (text: unknown, system?: unknown, code?: unknown): Row => ({
+  ...(coding(system, code, text) ? { coding: coding(system, code, text) } : {}),
+  ...(typeof text === 'string' && text ? { text } : {}),
+});
+const quantity = (value: unknown, unit?: unknown, system?: unknown, code?: unknown) => {
+  const numeric = numberValue(value);
+  if (numeric === undefined) return undefined;
+  return { value: numeric, ...(typeof unit === 'string' && unit ? { unit } : {}), ...(typeof system === 'string' && system ? { system } : {}), ...(typeof code === 'string' && code ? { code } : {}) };
+};
+const baseResource = (type: FhirResourceType, row: Row): FhirResource => ({ resourceType: type, id: rowString(row, '_fhir_id') || rowString(row, 'id') });
+
+export const mapPatient = (row: Row): FhirResource => {
+  const given = rowString(row, 'first_name');
+  const family = rowString(row, 'last_name');
+  const gender = rowString(row, 'gender')?.toLowerCase();
+  return {
+    ...baseResource('Patient', row),
+    ...(rowString(row, 'patient_number') ? { identifier: [{ value: rowString(row, 'patient_number') }] } : {}),
+    active: row.status === 'active',
+    ...(given || family ? { name: [{ ...(family ? { family } : {}), ...(given ? { given: [given] } : {}) }] } : {}),
+    ...(rowString(row, 'phone') ? { telecom: [{ system: 'phone', value: rowString(row, 'phone') }] } : {}),
+    ...(gender && ['male', 'female', 'other', 'unknown'].includes(gender) ? { gender } : {}),
+    ...(datePart(row.date_of_birth) ? { birthDate: datePart(row.date_of_birth) } : {}),
+    ...(rowString(row, 'address') ? { address: [{ text: rowString(row, 'address') }] } : {}),
+  };
+};
+
+export const mapEncounter = (row: Row): FhirResource => {
+  const status: Record<string, string> = { planned: 'planned', arrived: 'arrived', triaged: 'in-progress', in_progress: 'in-progress', completed: 'finished', cancelled: 'cancelled' };
+  const encounterClass: Record<string, string> = { emergency: 'EMER', inpatient: 'IMP', outpatient: 'AMB', telehealth: 'VR', home_visit: 'HH' };
+  const encounterType = rowString(row, 'encounter_type');
+  const start = rowString(row, 'started_at');
+  const end = rowString(row, 'ended_at');
+  return {
+    ...baseResource('Encounter', row), status: status[rowString(row, 'status') || ''] || 'unknown',
+    class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code: encounterClass[encounterType || ''] || 'AMB' },
+    ...(reference('Patient', row.patient_id) ? { subject: reference('Patient', row.patient_id) } : {}),
+    ...(encounterType ? { type: [{ text: encounterType }] } : {}),
+    ...(start ? { period: { start, ...(end ? { end } : {}) } } : {}),
+    ...(rowString(row, 'reason_for_visit') ? { reasonCode: [{ text: rowString(row, 'reason_for_visit') }] } : {}),
+    ...(reference('Organization', row.facility_id) ? { serviceProvider: reference('Organization', row.facility_id) } : {}),
+  };
+};
+
+const observationCategory = (category: string) => [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/observation-category', code: category }] }];
+const mapVitalObservation = (row: Row): FhirResource | null => {
+  const field = rowString(row, '_fhir_field');
+  if (!field) return null;
+  const vitalMap: Record<string, { code: string; display: string; unit?: string }> = {
+    temperature: { code: '8310-5', display: 'Body temperature', unit: 'Cel' },
+    heart_rate: { code: '8867-4', display: 'Heart rate', unit: '/min' },
+    respiratory_rate: { code: '9279-6', display: 'Respiratory rate', unit: '/min' },
+    oxygen_saturation: { code: '2708-6', display: 'Oxygen saturation', unit: '%' },
+    weight: { code: '29463-7', display: 'Body weight', unit: 'kg' },
+    height: { code: '8302-2', display: 'Body height', unit: 'cm' },
+    bmi: { code: '39156-5', display: 'Body mass index', unit: 'kg/m2' },
+  };
+  const base = baseResource('Observation', row);
+  const subject = reference('Patient', row.patient_id);
+  const effective = rowString(row, 'recorded_at');
+  if (field === 'blood_pressure_systolic') {
+    const components = [
+      ['8480-6', 'Systolic blood pressure', rowNumber(row, 'blood_pressure_systolic')],
+      ['8462-4', 'Diastolic blood pressure', rowNumber(row, 'blood_pressure_diastolic')],
+    ].filter((component) => component[2] !== undefined).map(([code, display, value]) => ({
+      code: { coding: [{ system: 'http://loinc.org', code, display }] },
+      valueQuantity: quantity(value, 'mm[Hg]', 'http://unitsofmeasure.org', 'mm[Hg]'),
+    }));
+    return {
+      ...base, status: 'final', category: observationCategory('vital-signs'),
+      code: { coding: [{ system: 'http://loinc.org', code: '85354-9', display: 'Blood pressure panel' }] },
+      ...(subject ? { subject } : {}), ...(effective ? { effectiveDateTime: effective } : {}), component: components,
+    };
+  }
+  const mapped = vitalMap[field];
+  if (!mapped) return null;
+  return {
+    ...base, status: 'final', category: observationCategory('vital-signs'),
+    code: { coding: [{ system: 'http://loinc.org', code: mapped.code, display: mapped.display }] },
+    ...(subject ? { subject } : {}), ...(effective ? { effectiveDateTime: effective } : {}),
+    valueQuantity: quantity(row[field], mapped.unit, mapped.unit ? 'http://unitsofmeasure.org' : undefined, mapped.unit),
+  };
+};
+
+export const mapObservation = (row: Row): FhirResource | null => {
+  if ('recorded_at' in row) return mapVitalObservation(row);
+  const result = asRecord(row.results);
+  const value = result.value ?? result.result;
+  if (value == null) return null;
+  const valueText = typeof value === 'string' ? value : undefined;
+  const numeric = numberValue(value);
+  const status = rowString(row, 'result_status') || rowString(row, 'status') || '';
+  const allowedStatus = ['final', 'amended', 'corrected', 'cancelled', 'entered-in-error', 'unknown', 'preliminary'];
+  const effectiveDate = rowString(row, 'result_date') || rowString(row, 'ordered_date');
+  const subject = reference('Patient', row.patient_id);
+  return {
+    ...baseResource('Observation', row), status: allowedStatus.includes(status) ? status : 'unknown', category: observationCategory('laboratory'),
+    code: codeableConcept(result.display || row.test_type, result.code_system || row.code_system, result.code || row.code),
+    ...(subject ? { subject } : {}), ...(effectiveDate ? { effectiveDateTime: `${effectiveDate}T00:00:00Z` } : {}),
+    ...(numeric !== undefined ? { valueQuantity: quantity(numeric, result.unit, result.unit_system, result.unit_code) } : {}),
+    ...(numeric === undefined && valueText !== undefined ? { valueString: valueText } : {}),
+    ...(rowString(result, 'interpretation') ? { interpretation: [{ text: rowString(result, 'interpretation') }] } : {}),
+  };
+};
+
+export const mapAllergyIntolerance = (row: Row): FhirResource => {
+  const subject = reference('Patient', row.patient_id);
+  const onset = datePart(row.onset_date);
+  const category = rowString(row, 'category');
+  const criticality = rowString(row, 'criticality');
+  const reaction = rowString(row, 'reaction');
+  const severity = rowString(row, 'severity');
+  return {
+    ...baseResource('AllergyIntolerance', row),
+    clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical', code: (rowString(row, 'clinical_status') || 'active').replaceAll('_', '-') }] },
+    verificationStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-verification', code: (rowString(row, 'verification_status') || 'unconfirmed').replaceAll('_', '-') }] },
+    type: 'allergy', ...(category && ['food', 'environment', 'medication', 'biologic'].includes(category) ? { category: [category] } : {}),
+    criticality: criticality && ['low', 'high'].includes(criticality) ? criticality : 'unable-to-assess',
+    code: codeableConcept(row.substance, row.code_system, row.code), ...(subject ? { patient: subject } : {}),
+    ...(onset ? { onsetDateTime: onset } : {}),
+    ...(reaction ? { reaction: [{ manifestation: [{ text: reaction }], ...(severity ? { severity } : {}) }] } : {}),
+  };
+};
+
+export const mapCondition = (row: Row): FhirResource => {
+  const subject = reference('Patient', row.patient_id);
+  const onset = datePart(row.onset_date);
+  const abatement = datePart(row.abatement_date);
+  return {
+    ...baseResource('Condition', row),
+    clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: (rowString(row, 'clinical_status') || 'active').replaceAll('_', '-') }] },
+    verificationStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status', code: (rowString(row, 'verification_status') || 'provisional').replaceAll('_', '-') }] },
+    code: codeableConcept(row.condition_name, row.code_system, row.code), ...(subject ? { subject } : {}),
+    ...(onset ? { onsetDateTime: onset } : {}), ...(abatement ? { abatementDateTime: abatement } : {}),
+  };
+};
+
+export const mapMedicationRequest = (row: Row): FhirResource => {
+  const status = (rowString(row, 'status') || 'unknown').replaceAll('_', '-');
+  const allowedStatus = ['active', 'on-hold', 'cancelled', 'completed', 'entered-in-error', 'stopped', 'draft', 'unknown'];
+  const subject = reference('Patient', row.patient_id);
+  const authoredOn = rowString(row, 'created_at') || rowString(row, 'start_date');
+  const dosageText = [rowString(row, 'dose'), rowString(row, 'dose_unit'), rowString(row, 'route'), rowString(row, 'frequency')].filter(Boolean).join(' ');
+  const formulary = asRecord(row.formulary_items);
+  return {
+    ...baseResource('MedicationRequest', row), status: allowedStatus.includes(status) ? status : 'unknown', intent: 'order',
+    medicationCodeableConcept: codeableConcept(row.medication_name || row.generic_name || 'Medication', row.formulary_system || (formulary.atc_code ? 'http://www.whocc.no/atc' : undefined), row.formulary_code || formulary.atc_code),
+    ...(subject ? { subject } : {}), ...(authoredOn ? { authoredOn } : {}),
+    ...(dosageText ? { dosageInstruction: [{ text: dosageText }] } : {}),
+    dispenseRequest: { numberOfRepeatsAllowed: rowNumber(row, 'refills') || 0, ...(quantity(row.dispense_quantity, row.dose_unit) ? { quantity: quantity(row.dispense_quantity, row.dose_unit) } : {}) },
+  };
+};
+
+export const mapDiagnosticReport = (row: Row): FhirResource => {
+  const status = rowString(row, 'result_status') || rowString(row, 'status') || '';
+  const allowedStatus = ['registered', 'partial', 'preliminary', 'final', 'amended', 'corrected', 'appended', 'cancelled', 'entered-in-error', 'unknown'];
+  const effectiveDate = rowString(row, 'result_date') || rowString(row, 'ordered_date');
+  const subject = reference('Patient', row.patient_id);
+  return {
+    ...baseResource('DiagnosticReport', row), status: allowedStatus.includes(status) ? status : 'unknown',
+    code: codeableConcept(row.study_type || row.test_type, row.code_system, row.code), ...(subject ? { subject } : {}),
+    ...(effectiveDate ? { effectiveDateTime: `${effectiveDate}T00:00:00Z` } : {}),
+    ...(rowString(row, 'report') ? { conclusion: rowString(row, 'report') } : {}),
+  };
+};
+
+const mappers: Record<FhirResourceType, (row: Row) => FhirResource | null> = {
+  Patient: mapPatient, Encounter: mapEncounter, Observation: mapObservation, AllergyIntolerance: mapAllergyIntolerance,
+  Condition: mapCondition, MedicationRequest: mapMedicationRequest, DiagnosticReport: mapDiagnosticReport,
+};
+
+export const mapResource = (type: FhirResourceType, row: Row): FhirResource | null => mappers[type](row);
+
+export const capabilityStatement = (now = new Date()) => ({
+  resourceType: 'CapabilityStatement', status: 'active', date: now.toISOString(), kind: 'instance', fhirVersion: '4.0.1', format: ['json'],
+  rest: [{ mode: 'server', resource: RESOURCE_TYPES.map((name) => ({
+    type: name, interaction: [{ code: 'read' }, { code: 'search-type' }], searchParam: [{ name: '_id', type: 'token' }, { name: 'patient', type: 'reference' }, { name: '_count', type: 'number' }],
+  })) }],
+});
+
+export type PageRequest = { count: number; offset: number };
+export const parsePageRequest = (url: URL): PageRequest | null => {
+  const countText = url.searchParams.get('_count');
+  const offsetText = url.searchParams.get('_offset');
+  if ((countText !== null && !/^\d+$/.test(countText)) || (offsetText !== null && !/^\d+$/.test(offsetText))) return null;
+  const requestedCount = countText === null ? DEFAULT_COUNT : Number(countText);
+  const offset = offsetText === null ? 0 : Number(offsetText);
+  if (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || !Number.isSafeInteger(offset) || offset < 0 || offset > MAX_OFFSET) return null;
+  return { count: Math.min(requestedCount, MAX_COUNT), offset };
+};
+
+export const bundleForPage = (resources: FhirResource[], url: URL, page: PageRequest) => {
+  const entries = resources.slice(page.offset, page.offset + page.count);
+  const hasNext = resources.length > page.offset + page.count;
+  const links: { relation: string; url: string }[] = [{ relation: 'self', url: url.toString() }];
+  if (hasNext) {
+    const nextUrl = new URL(url.toString());
+    nextUrl.searchParams.set('_count', String(page.count));
+    nextUrl.searchParams.set('_offset', String(page.offset + page.count));
+    links.push({ relation: 'next', url: nextUrl.toString() });
+  }
+  return { resourceType: 'Bundle', type: 'searchset', link: links, entry: entries.map((resource) => ({ resource, search: { mode: 'match' } })) };
+};
+
+const outcome = (severity: string, code: string, diagnostics: string) => ({ resourceType: 'OperationOutcome', issue: [{ severity, code, diagnostics }] });
+const isUuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const mapRowToResources = (type: FhirResourceType, sourceTable: string, sourceRow: Row): FhirResource[] => {
+  const row = { ...sourceRow, _source_table: sourceTable };
+  if (type === 'Observation' && sourceTable === 'vital_signs') {
+    const fields = ['temperature', 'heart_rate', 'respiratory_rate', 'oxygen_saturation', 'weight', 'height', 'bmi'];
+    const observations = fields.filter((field) => row[field] != null).map((field) => mapObservation({ ...row, _fhir_field: field, _fhir_id: `${row.id}-${field}` })).filter((resource): resource is FhirResource => resource !== null);
+    if (row.blood_pressure_systolic != null || row.blood_pressure_diastolic != null) {
+      const bloodPressure = mapObservation({ ...row, _fhir_field: 'blood_pressure_systolic', _fhir_id: `${row.id}-blood-pressure` });
+      if (bloodPressure) observations.push(bloodPressure);
+    }
+    return observations;
+  }
+  if (type === 'Observation' && sourceTable === 'lab_orders') {
+    const result = asRecord(row.results);
+    const values = Array.isArray(result.values) ? result.values : [];
+    if (values.length) return values.map((value, index) => mapObservation({ ...row, results: value, _fhir_id: `${row.id}-${index + 1}` })).filter((resource): resource is FhirResource => resource !== null);
+  }
+  if (type === 'DiagnosticReport' && row.study_type) row.test_type = row.study_type;
+  const mapped = mappers[type](row);
+  return mapped ? [mapped] : [];
+};
+
+const loadResources = async (db: FhirDb, type: FhirResourceType, tables: string[], patientId: string | undefined, recordId: string | undefined, searchId: string | undefined, page: PageRequest): Promise<{ resources: FhirResource[]; error: unknown }> => {
+  const resources: FhirResource[] = [];
+  for (const tableName of tables) {
+    let from = 0;
+    while (true) {
+      let query = db.from(tableName).select(type === 'MedicationRequest' ? '*,formulary_items(atc_code,generic_name)' : '*').order('id', { ascending: true });
+      if (recordId || searchId) query = query.eq('id', recordId || searchId);
+      else if (type === 'Patient') query = query.eq('id', patientId);
+      else query = query.eq('patient_id', patientId);
+      query = query.range(from, from + PAGE_SIZE - 1);
+      const { data, error } = await query;
+      if (error) return { resources: [], error };
+      const rows = Array.isArray(data) ? data as Row[] : [];
+      for (const row of rows) resources.push(...mapRowToResources(type, tableName, row));
+      if (recordId || searchId || rows.length < PAGE_SIZE || resources.length > page.offset + page.count) break;
+      from += PAGE_SIZE;
+    }
+    if (recordId || searchId || resources.length > page.offset + page.count) break;
+  }
+  return { resources, error: null };
+};
+
+export const createFhirHandler = (
+  dbFactory: (url: string, anon: string, options: Record<string, unknown>) => FhirDb = createClient as unknown as (url: string, anon: string, options: Record<string, unknown>) => FhirDb,
+  getEnv: (name: string) => string | undefined = (name) => Deno.env.get(name),
+) => async (request: Request): Promise<Response> => {
+  if (request.method !== 'GET') return Response.json(outcome('error', 'not-supported', 'Read-only FHIR endpoint'), { status: 405, headers });
+  const authorization = request.headers.get('authorization');
+  if (!authorization?.startsWith('Bearer ')) return Response.json(outcome('error', 'login', 'Bearer token required'), { status: 401, headers });
+  const url = getEnv('SUPABASE_URL');
+  const anon = getEnv('SUPABASE_ANON_KEY');
+  if (!url || !anon) return Response.json({ error: 'FHIR service is not configured' }, { status: 500, headers });
+  const db = dbFactory(url, anon, { global: { headers: { Authorization: authorization } } });
+  const { data: { user }, error: authError } = await db.auth.getUser();
+  if (authError || !user) return Response.json(outcome('error', 'login', 'Invalid bearer token'), { status: 401, headers });
+
+  const requestUrl = new URL(request.url);
+  const segments = requestUrl.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+  const fhirIndex = segments.indexOf('fhir');
+  const resourceIndex = fhirIndex >= 0 ? fhirIndex + 1 : segments.findIndex((part) => RESOURCE_TYPES.includes(part as FhirResourceType) || part === 'metadata');
+  const typeSegment = segments[resourceIndex];
+  if (typeSegment === 'metadata') return Response.json(capabilityStatement(), { headers });
+  const type = RESOURCE_TYPES.includes(typeSegment as FhirResourceType) ? typeSegment as FhirResourceType : null;
+  const recordId = segments[resourceIndex + 1];
+  if (!type || recordId === '_search') return Response.json(outcome('error', 'not-found', 'FHIR resource type not found'), { status: 404, headers });
+  const page = parsePageRequest(requestUrl);
+  if (!page) return Response.json(outcome('error', 'value', `Paging must use positive _count up to ${MAX_COUNT} and _offset no greater than ${MAX_OFFSET}`), { status: 400, headers });
+  const patientSearch = requestUrl.searchParams.get('patient')?.replace(/^Patient\//, '');
+  const idSearch = requestUrl.searchParams.get('_id');
+  const patientSearchId = type === 'Patient' ? undefined : patientSearch;
+  if (!recordId && !patientSearchId && !idSearch) return Response.json(outcome('error', 'required', type === 'Patient' ? '_id is required for Patient searches' : 'patient or _id search parameter is required'), { status: 400, headers });
+  if ((patientSearchId && !isUuid(patientSearchId)) || (idSearch && !isUuid(idSearch))) return Response.json(outcome('error', 'value', 'FHIR patient and _id searches require a UUID'), { status: 400, headers });
+  const dbRecordId = recordId && type === 'Observation' ? recordId.match(/^([0-9a-f-]{36})(?:-(?:temperature|heart_rate|blood-pressure|respiratory_rate|oxygen_saturation|weight|height|bmi|\d+))?$/i)?.[1] || recordId : recordId;
+  const dbSearchId = idSearch && type === 'Observation' ? idSearch.match(/^([0-9a-f-]{36})(?:-(?:temperature|heart-rate|blood-pressure|respiratory-rate|oxygen-saturation|weight|height|bmi|\d+))?$/i)?.[1] || idSearch : idSearch;
+  const { resources, error } = await loadResources(db, type, tableFor[type], patientSearchId, dbRecordId, dbSearchId, page);
+  if (error) return Response.json(outcome('error', 'forbidden', 'Resource query denied or unavailable'), { status: 403, headers });
+  const resourcesForAuthorization = recordId ? resources : resources.slice(page.offset, page.offset + page.count);
+  const patientIdsFromRows = resourcesForAuthorization.map((resource) => type === 'Patient' ? resource.id : (resource.subject as Row | undefined)?.reference || (resource.patient as Row | undefined)?.reference)
+    .filter((value): value is string => typeof value === 'string').map((referenceValue) => referenceValue.split('/').at(-1) || '').filter(isUuid);
+  const requestedPatientId = patientSearchId || (type === 'Patient' ? idSearch : undefined);
+  const distinctPatientIds = [...new Set([...patientIdsFromRows, ...(requestedPatientId ? [requestedPatientId] : [])])];
+  const { data: authorizedData, error: authorizationError } = await db.rpc('authorize_fhir_read_batch', { p_patient_ids: distinctPatientIds, p_resource_type: type });
+  if (authorizationError || !Array.isArray(authorizedData)) return Response.json(outcome('error', 'forbidden', 'FHIR access denied by patient, facility, or consent controls'), { status: 403, headers });
+  const authorized = new Set(authorizedData.filter(isUuid));
+  const authorizedResources = resources.filter((resource) => {
+    const referenceValue = type === 'Patient' ? resource.id : (resource.subject as Row | undefined)?.reference || (resource.patient as Row | undefined)?.reference;
+    return typeof referenceValue === 'string' && authorized.has(referenceValue.split('/').at(-1) || '');
+  });
+  if (!authorizedResources.length && distinctPatientIds.length) return Response.json(outcome('error', 'forbidden', 'FHIR access denied by patient, facility, or consent controls'), { status: 403, headers });
+  if (recordId) {
+    const resource = authorizedResources.find((entry) => entry.id === recordId || entry.id === dbRecordId);
+    return resource ? Response.json(resource, { headers }) : Response.json(outcome('error', 'not-found', 'FHIR resource not found'), { status: 404, headers });
+  }
+  return Response.json(bundleForPage(authorizedResources, requestUrl, page), { headers });
+};
+
+const handler = createFhirHandler();
 if (import.meta.main) Deno.serve(handler);
