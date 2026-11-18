@@ -3,6 +3,16 @@
         // ==========================================
         const AuthContext = React.createContext(null);
         const aal2RequiredRoles = ['super_admin', 'accountant', 'doctor', 'pharmacist', 'surgeon', 'specialist'];
+        const MFA_TRUST_WINDOW_MS = 24 * 60 * 60 * 1000;
+        const hasRecentTotpVerification = (assurance) => {
+            if (assurance?.currentLevel !== 'aal2') return false;
+            const latestTotp = (assurance.currentAuthenticationMethods || [])
+                .filter((entry) => entry?.method === 'totp')
+                .map((entry) => Number(entry.timestamp) * 1000)
+                .filter((timestamp) => Number.isFinite(timestamp) && timestamp <= Date.now() + 60_000)
+                .sort((left, right) => right - left)[0];
+            return Number.isFinite(latestTotp) && Date.now() - latestTotp < MFA_TRUST_WINDOW_MS;
+        };
         const canonicalModuleKeys = [
             'dashboard', 'patients', 'records', 'appointments', 'doctors', 'laboratory', 'radiology', 'clinical_workflows',
             'clinical_decision_support', 'operations', 'procurement', 'referrals', 'workforce', 'pharmacy', 'billing', 'insurance', 'payments', 'documents', 'compliance', 'admissions', 'surgeries', 'clinical_safety', 'inventory',
@@ -344,7 +354,7 @@
                 const { error } = await client.auth.mfa.challengeAndVerify({ factorId: mfaGate.factorId, code: normalizedCode });
                 if (error) throw new Error('The authenticator code could not be verified. Check the code and try again.');
                 const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-                if (assuranceError || assurance?.currentLevel !== 'aal2') throw new Error('AAL2 could not be confirmed. Sign in again and retry.');
+                if (assuranceError || !hasRecentTotpVerification(assurance)) throw new Error('Recent authenticator verification could not be confirmed. Sign in again and retry.');
                 const profile = mfaGate.profile;
                 const safeUser = {
                     ...profile,
@@ -369,11 +379,41 @@
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !await requiresMfa(profile, client)) return false;
                 const { data: assurance, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-                if (!error && assurance?.currentLevel === 'aal2') return false;
+                if (!error && hasRecentTotpVerification(assurance)) return false;
                 await setMfaChallenge(profile, client);
                 setUser(null);
                 return true;
             }, [requiresMfa, setMfaChallenge]);
+
+            // Re-prompt when the last TOTP verification reaches 24 hours, even
+            // if the browser's Supabase session remains active.
+            useEffect(() => {
+                if (!user?.auth_user_id || mfaGate) return undefined;
+                const role = String(user.role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+                if (!aal2RequiredRoles.includes(role)) return undefined;
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) return undefined;
+                let timer;
+                let active = true;
+                const checkMfaExpiry = async () => {
+                    if (!await requiresMfa(user, client)) return;
+                    const { data: assurance, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+                    if (!active) return;
+                    if (error || !hasRecentTotpVerification(assurance)) {
+                        await setMfaChallenge(user, client);
+                        if (active) setUser(null);
+                        return;
+                    }
+                    const latestTotp = Math.max(...(assurance.currentAuthenticationMethods || [])
+                        .filter((entry) => entry?.method === 'totp')
+                        .map((entry) => Number(entry.timestamp) * 1000)
+                        .filter(Number.isFinite));
+                    const delay = Math.max(0, latestTotp + MFA_TRUST_WINDOW_MS - Date.now() + 250);
+                    timer = window.setTimeout(checkMfaExpiry, Math.min(delay, 2_147_000_000));
+                };
+                void checkMfaExpiry();
+                return () => { active = false; window.clearTimeout(timer); };
+            }, [user, mfaGate, requiresMfa, setMfaChallenge]);
 
             useEffect(() => {
                 if (!user?.id) return undefined;
@@ -521,7 +561,7 @@
                         if (await requiresMfa(data, client)) {
                             const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
                             if (!active || revision !== sessionRevision) return;
-                            if (assuranceError || assurance?.currentLevel !== 'aal2') {
+                            if (assuranceError || !hasRecentTotpVerification(assurance)) {
                                 await setMfaChallenge(data, client);
                                 if (active && revision === sessionRevision) setUser(null);
                                 return;
@@ -626,7 +666,7 @@
                         if (!client) throw new Error('Authentication is unavailable.');
                         if (await requiresMfa(safeUser, client)) {
                             const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-                            if (assuranceError || assurance?.currentLevel !== 'aal2') {
+                            if (assuranceError || !hasRecentTotpVerification(assurance)) {
                                 setUser(null);
                                 await setMfaChallenge(safeUser, client);
                                 return { mfaRequired: true };

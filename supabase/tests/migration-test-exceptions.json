@@ -126,5 +126,9 @@
   {
     "migration": "20261112000048_printable_documents_audit.sql",
     "reason": "No test filename matches this migration or feature under the checker. Any related coverage is not mapped here, so this exception records unverified migration-specific coverage; replace it with a dedicated test or an explicit gate mapping."
+  },
+  {
+    "migration": "20261118000093_mfa_24_hour_device_window.sql",
+    "reason": "No migration-specific test was added for this implementation; verify the signed JWT TOTP timestamp at both sides of the 24-hour boundary before release."
   }
 ]
