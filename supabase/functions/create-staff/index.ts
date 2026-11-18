@@ -1,5 +1,5 @@
 import { createClient } from '../_shared/supabase.ts';
-import { checkRateLimit, corsHeadersFor, recordAccountAudit, reportSafeEdgeError } from '../_shared/security.ts';
+import { assuranceLevelFromVerifiedAccessToken, checkRateLimit, corsHeadersFor, recordAccountAudit, reportSafeEdgeError } from '../_shared/security.ts';
 
 Deno.serve(async (request) => {
   const corsHeaders = corsHeadersFor(request);
@@ -18,6 +18,7 @@ Deno.serve(async (request) => {
   const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: { user }, error: userError } = await requesterClient.auth.getUser();
   if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+  const accessToken = authHeader.replace(/^Bearer\s+/i, '').trim();
   const adminClient = createClient(url, serviceKey);
   try {
     if (!await checkRateLimit(adminClient, request, 'create-staff', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
@@ -28,8 +29,7 @@ Deno.serve(async (request) => {
   const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
   const enforceMfa = mfaSettingError || mfaSetting?.setting_value?.enabled !== false;
   if (enforceMfa) {
-    const { data: assurance, error: assuranceError } = await requesterClient.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (assuranceError || assurance?.currentLevel !== 'aal2') {
+    if (assuranceLevelFromVerifiedAccessToken(accessToken, user.id) !== 'aal2') {
       return Response.json({ error: 'Complete authenticator verification before creating staff accounts.' }, { status: 403, headers: corsHeaders });
     }
   }

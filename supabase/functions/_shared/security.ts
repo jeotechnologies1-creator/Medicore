@@ -12,6 +12,24 @@ export const corsHeadersFor = (request: Request, methods = 'POST, OPTIONS'): Rec
   return headers;
 };
 
+// Call only after Supabase Auth has verified this bearer token with getUser().
+// Edge Function clients have no browser-persisted session, so auth.mfa's
+// getAuthenticatorAssuranceLevel() cannot inspect the request session there.
+export const assuranceLevelFromVerifiedAccessToken = (token: string, expectedUserId: string): string | null => {
+  try {
+    const payloadSegment = token.split('.')[1];
+    if (!payloadSegment) return null;
+    const base64 = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { sub?: unknown; aal?: unknown };
+    if (payload.sub !== expectedUserId || typeof payload.aal !== 'string') return null;
+    return payload.aal;
+  } catch {
+    return null;
+  }
+};
+
 export const clientAddress = (request: Request): string => {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',').map((value) => value.trim()).filter(Boolean);
   return request.headers.get('cf-connecting-ip')?.trim() || request.headers.get('x-real-ip')?.trim() || forwarded?.at(-1) || 'unknown';
