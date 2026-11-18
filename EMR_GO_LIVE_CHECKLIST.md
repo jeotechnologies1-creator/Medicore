@@ -2,6 +2,8 @@
 
 This application is a clinical-record system. Repository implementation is not operational evidence. Do not describe it as certified, compliant, or production-ready until controls have been tested in the target environment and approved by responsible clinical, privacy, and security leaders. The [evidence tracker](docs/status/evidence-tracker.md) assigns an owner and records current status for each control; all controls are presently unverified against live Supabase.
 
+Use the step-by-step [launch remediation guide](docs/deployment/launch-remediation-guide.md) to complete the deployment, clinical, integration, recovery, and approval gates below.
+
 ## Interoperability and clinical data
 
 - Validate the existing FHIR R4 endpoint and mapping against [HL7 FHIR](https://hl7.org/fhir/overview.html) resources, including Patient, Practitioner, Encounter, Appointment, Observation, AllergyIntolerance, Condition, MedicationRequest, DiagnosticReport, ServiceRequest, Procedure, DocumentReference, Consent, and AuditEvent.

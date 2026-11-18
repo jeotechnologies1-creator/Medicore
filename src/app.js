@@ -43,7 +43,7 @@ import { getStoreValue, setStoreValue } from './js/store.js';
             });
 
             const { user, logout, hasModuleAccess } = useAuth();
-            const supabaseStatus = window.OneMedSupabase?.getStatus?.() || { configured: false, mode: 'local' };
+            const supabaseStatus = window.OneMedSupabase?.getStatus?.() || { configured: false, mode: 'unconfigured' };
 
             useEffect(() => {
                 try {

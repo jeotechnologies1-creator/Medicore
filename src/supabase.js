@@ -6,8 +6,11 @@ const OneMedSupabase = (() => {
 
     const getConfig = () => {
         const override = window.__ONEMED_SUPABASE__ || {};
-        const url = String(override.url || import.meta.env.VITE_SUPABASE_URL || 'https://wlarlseefitzcnfigyib.supabase.co/').trim();
-        const anonKey = String(override.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsYXJsc2VlZml0emNuZmlneWliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0Mzk1NzYsImV4cCI6MjEwNDAxNTU3Nn0.m1kSYgGQ6_ZovLljVHZkm14vkhSmqaQIwWnRB7Tm6TE').trim();
+        // Do not silently bind a deployment to a repository owner's project.
+        // Both values must come from this environment's build configuration or
+        // an explicit host-provided runtime override.
+        const url = String(override.url || import.meta.env.VITE_SUPABASE_URL || '').trim();
+        const anonKey = String(override.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
         return {
             url,
@@ -28,17 +31,24 @@ const OneMedSupabase = (() => {
 
     const isConfigured = () => {
         const { url, anonKey } = getConfig();
-        return Boolean(url && anonKey);
+        if (!url || !anonKey) return false;
+        try {
+            const endpoint = new URL(url);
+            const localDevelopmentEndpoint = import.meta.env.DEV && ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+            return endpoint.protocol === 'https:' || (localDevelopmentEndpoint && endpoint.protocol === 'http:');
+        } catch {
+            return false;
+        }
     };
 
     const getStatus = () => ({
         configured: isConfigured(),
-        mode: isConfigured() ? 'supabase' : 'local'
+        mode: isConfigured() ? 'supabase' : 'unconfigured'
     });
 
     const getClient = () => {
         const { url, anonKey } = getConfig();
-        if (!url || !anonKey) return null;
+        if (!isConfigured()) return null;
         const signature = `${url}:${anonKey}`;
         if (client && clientSignature === signature) return client;
         client = createClient(url, anonKey, {
@@ -284,7 +294,7 @@ const OneMedSupabase = (() => {
         try {
             const client = getClient();
             if (!client) {
-                return null;
+                throw new Error('Supabase is not configured for this environment. Contact the system administrator.');
             }
             const { data: authData, error: authError } = await client.auth.signInWithPassword({
                 email: normalizedEmail,

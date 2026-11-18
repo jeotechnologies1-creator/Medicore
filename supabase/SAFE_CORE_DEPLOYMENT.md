@@ -20,7 +20,7 @@ notify pgrst, 'reload schema';
 
 Apply the updated `safe_core_multibranch.sql` to the same project the app uses, then reload the app after the SQL Editor query completes.
 
-If the table, insert grant, policy, and trigger checks all pass but the app still reports `PGRST205`, run `notify pgrst, 'reload schema';` as a separate SQL Editor query. Verify the SQL Editor project is the one configured by the app and that `public` is enabled under the project's API exposed schemas. The repository's `index.html` currently points to project ref `wlarlseefitzcnfigyib`.
+If the table, insert grant, policy, and trigger checks all pass but the app still reports `PGRST205`, run `notify pgrst, 'reload schema';` as a separate SQL Editor query. Verify the SQL Editor project is the same project configured in that environment's `VITE_SUPABASE_URL` and that `public` is enabled under the project's API exposed schemas.
 
 To confirm the direct-write policy and actor-stamping trigger are installed, run:
 
