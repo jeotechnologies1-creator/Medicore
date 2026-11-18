@@ -360,6 +360,16 @@
                 if (client) await client.auth.signOut();
             }, []);
 
+            const gateForMfa = useCallback(async (profile) => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !await requiresMfa(profile, client)) return false;
+                const { data: assurance, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+                if (!error && assurance?.currentLevel === 'aal2') return false;
+                await setMfaChallenge(profile, client);
+                setUser(null);
+                return true;
+            }, [requiresMfa, setMfaChallenge]);
+
             useEffect(() => {
                 if (!user?.id) return undefined;
                 let active = true;
@@ -683,7 +693,7 @@
             }, [user, roleMatrix]);
 
             return (
-                <AuthContext.Provider value={{ user, login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, hasPermission, hasModuleAccess, getRolePermissions }}>
+                <AuthContext.Provider value={{ user, login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa, hasPermission, hasModuleAccess, getRolePermissions }}>
                     {children}
                 </AuthContext.Provider>
             );
@@ -701,15 +711,94 @@
         const LoginPage = ({ onLogin }) => {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
             const [error, setError] = useState('');
+            const [inviteMode, setInviteMode] = useState(() => {
+                const params = new URLSearchParams(window.location.search);
+                const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+                return params.get('type') === 'invite' || hashParams.get('type') === 'invite';
+            });
+            const [inviteSessionReady, setInviteSessionReady] = useState(false);
+            const [inviteSessionChecked, setInviteSessionChecked] = useState(false);
+            const [invitePasswordBusy, setInvitePasswordBusy] = useState(false);
             const [showPassword, setShowPassword] = useState(false);
-            const { login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa } = useAuth();
+            const { login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa } = useAuth();
             const [mfaCode, setMfaCode] = useState('');
             const [mfaBusy, setMfaBusy] = useState(false);
             const [captchaToken, setCaptchaToken] = useState('');
             const [captchaError, setCaptchaError] = useState('');
             const [noticeAccepted, setNoticeAccepted] = useState(false);
             const captchaWidgetId = useRef(null);
+
+            useEffect(() => {
+                if (!inviteMode) return undefined;
+                let active = true;
+                const checkInviteSession = async () => {
+                    const client = window.OneMedSupabase?.getClient?.();
+                    if (!client) {
+                        if (active) {
+                            setError('Account setup is unavailable. Refresh this invitation page or contact your administrator.');
+                            setInviteSessionChecked(true);
+                        }
+                        return;
+                    }
+                    const { data, error: sessionError } = await client.auth.getSession();
+                    if (!active) return;
+                    setInviteSessionChecked(true);
+                    if (sessionError || !data?.session?.user) {
+                        setError('This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
+                        return;
+                    }
+                    setInviteSessionReady(true);
+                    setEmail(data.session.user.email || '');
+                };
+                void checkInviteSession();
+                return () => { active = false; };
+            }, [inviteMode]);
+
+            const handleInvitePassword = async (event) => {
+                event.preventDefault();
+                setError('');
+                if (!noticeAccepted) {
+                    setError('Review and acknowledge the draft privacy notice and terms to continue.');
+                    return;
+                }
+                if (password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+                    setError('Use at least 12 characters with lowercase and uppercase letters, a number, and a symbol.');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    setError('The passwords do not match.');
+                    return;
+                }
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) {
+                    setError('Account setup is unavailable. Refresh this page or contact your administrator.');
+                    return;
+                }
+                setInvitePasswordBusy(true);
+                try {
+                    const { data: sessionData, error: sessionError } = await client.auth.getSession();
+                    if (sessionError || !sessionData?.session?.user) throw new Error('This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
+                    const { error: updateError } = await client.auth.updateUser({ password });
+                    if (updateError) throw updateError;
+                    setInviteMode(false);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    setPassword('');
+                    setConfirmPassword('');
+                    const { data: profile, error: profileError } = await client.from('profiles').select('*').eq('auth_user_id', sessionData.session.user.id).maybeSingle();
+                    if (profileError || !profile || profile.status !== 'active') throw new Error('Your account could not be verified. Contact your administrator.');
+                    // Clinician roles must finish the same MFA gate as a normal
+                    // sign-in before the app marks this session authenticated.
+                    if (await gateForMfa(profile)) return;
+                    await recordNoticeAcceptance();
+                    onLogin();
+                } catch (inviteError) {
+                    setError(inviteError?.message || 'Your password could not be saved. Try again or request a new invitation.');
+                } finally {
+                    setInvitePasswordBusy(false);
+                }
+            };
 
             const recordNoticeAcceptance = async () => {
                 const client = window.OneMedSupabase?.getClient?.();
@@ -835,7 +924,28 @@
                                         {error}
                                     </div>
                                 )}
-                                {mfaGate ? (
+                                {inviteMode ? (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-slate-900">Accept your OneMed invitation</h2>
+                                            <p className="mt-1 text-sm text-slate-600">{email ? `Set a password for ${email} to finish setting up your account.` : 'Set a password to finish setting up your account.'}</p>
+                                        </div>
+                                        {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{error}</div>}
+                                        {!inviteSessionChecked ? <p role="status" className="text-sm text-slate-600">Checking your invitation link…</p> : !inviteSessionReady ? <p role="status" className="text-sm text-slate-600">A valid invitation session is required to continue.</p> : <>
+                                            <label className="block text-sm font-medium text-slate-700">New password
+                                                <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" required />
+                                            </label>
+                                            <p className="-mt-2 text-xs text-slate-600">At least 12 characters, including uppercase and lowercase letters, a number, and a symbol.</p>
+                                            <label className="block text-sm font-medium text-slate-700">Confirm password
+                                                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" required />
+                                            </label>
+                                            <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={noticeAccepted} onChange={(event) => setNoticeAccepted(event.target.checked)} /><span>I have reviewed the <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">draft privacy notice</a> and <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">draft terms</a>. They are pending facility legal review.</span></label>
+                                            <Button type="button" variant="primary" size="lg" className="w-full justify-center" onClick={handleInvitePassword} disabled={invitePasswordBusy} aria-busy={invitePasswordBusy}>
+                                                {invitePasswordBusy ? 'Saving password…' : 'Accept invitation and set password'}
+                                            </Button>
+                                        </>}
+                                    </div>
+                                ) : mfaGate ? (
                                     <div className="space-y-4">
                                         <div>
                                             <h2 className="text-lg font-semibold text-slate-900">{mfaGate.mode === 'challenge' ? 'Verify your authenticator' : 'Set up an authenticator'}</h2>
