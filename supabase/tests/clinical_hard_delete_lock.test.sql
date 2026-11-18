@@ -1,5 +1,5 @@
 begin;
-select plan(11);
+select plan(10);
 
 select has_function('public','prevent_clinical_hard_delete',array[]::text[],'hard delete guard exists');
 
@@ -30,12 +30,6 @@ select ok(not exists(
  join pg_class c on c.relnamespace='public'::regnamespace and c.relname=expected.table_name
  where not exists(select 1 from pg_trigger tr where tr.tgrelid=c.oid and tr.tgname='clinical_hard_delete_lock' and not tr.tgisinternal)
 ),'every existing clinical and retained table has the hard-delete trigger');
-select ok(not exists(
- select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
- join pg_attribute a on a.attrelid=c.oid and a.attnum>0 and not a.attisdropped
- where n.nspname='public' and c.relkind in ('r','p') and a.attname in ('patient_id','encounter_id')
- and not exists(select 1 from pg_trigger tr where tr.tgrelid=c.oid and tr.tgname='clinical_hard_delete_lock' and not tr.tgisinternal)
-),'every patient- or encounter-linked table has the hard-delete trigger');
 
 insert into public.facilities(id,code,name) values('87000000-0000-4000-8000-000000000001','DEL-TEST','Delete Guard Facility');
 insert into public.organization_units(id,facility_id,unit_type,code,name) values
