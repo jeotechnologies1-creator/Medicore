@@ -19,13 +19,16 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
     const [returns, setReturns] = useState([]);
     const [performance, setPerformance] = useState([]);
     const [formulary, setFormulary] = useState([]);
+    const [formularySearch, setFormularySearch] = useState('');
+    const [formularyLoading, setFormularyLoading] = useState(true);
+    const [formularyError, setFormularyError] = useState('');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [busy, setBusy] = useState(false);
     const [locationDraft, setLocationDraft] = useState({ code: '', name: '' });
     const [itemDraft, setItemDraft] = useState({ code: '', name: '', unit: '' });
     const [movementDraft, setMovementDraft] = useState({ item: '', type: 'receipt', quantity: '', direction: 'in', source: '', destination: '', reason: '', reference: '' });
-    const [pharmacyDraft, setPharmacyDraft] = useState({ formulary: '', name: '', category: '', quantity: '', reorder: '0', price: '', expiry: '', batch: '', barcode: '', supplier: '', location: '' });
+    const [pharmacyDraft, setPharmacyDraft] = useState({ formulary: '', name: '', category: '', quantity: '', reorder: '0', price: '', expiry: '', batch: '', barcode: '', nafdacRegistrationNumber: '', supplier: '', location: '' });
     const [supplierDraft, setSupplierDraft] = useState({ name: '', contact: '' });
     const [tierDraft, setTierDraft] = useState({ minimum: '0', maximum: '', approvals: '1', role: 'accountant' });
     const [poDraft, setPoDraft] = useState({ supplier: '', number: '', item: '', quantity: '', cost: '' });
@@ -51,11 +54,26 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
             }
         });
     }, [client, globalAdmin]);
-    useEffect(() => {
-        if (!client) return;
-        client.from('formulary_items').select('id,generic_name,form,strength,route').eq('active', true).order('generic_name')
-            .then(({ data }) => setFormulary(data || []));
+    const loadFormulary = useCallback(async () => {
+        if (!client) { setFormularyLoading(false); setFormularyError('Supabase is unavailable.'); return; }
+        setFormularyLoading(true);
+        const { data, error: loadError } = await client.from('formulary_items')
+            .select('id,generic_name,form,strength,route').eq('active', true).order('generic_name');
+        if (loadError) {
+            setFormulary([]);
+            setFormularyError(loadError.message || 'Approved formulary items could not be loaded.');
+        } else {
+            setFormulary(data || []);
+            setFormularyError('');
+        }
+        setFormularyLoading(false);
     }, [client]);
+    useEffect(() => { loadFormulary(); }, [loadFormulary]);
+
+    const visibleFormulary = formulary.filter((entry) => {
+        const search = formularySearch.trim().toLowerCase();
+        return !search || [entry.generic_name, entry.form, entry.strength, entry.route].some((value) => String(value || '').toLowerCase().includes(search));
+    });
 
     const refresh = useCallback(async () => {
         if (!client || !facilityId) { setError('Select an active facility to view its stock and procurement records.'); return; }
@@ -145,7 +163,9 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
             generic_name: chosen.generic_name, category: pharmacyDraft.category || null, stock_quantity: 0,
             reorder_level: Number(pharmacyDraft.reorder || 0), unit_price: Number(pharmacyDraft.price || 0),
             expiry_date: pharmacyDraft.expiry || null, batch_number: pharmacyDraft.batch || null,
-            barcode: pharmacyDraft.barcode || null, supplier: pharmacyDraft.supplier || null, status: 'low_stock'
+            barcode: pharmacyDraft.barcode || null,
+            nafdac_registration_number: pharmacyDraft.nafdacRegistrationNumber.trim() || null,
+            supplier: pharmacyDraft.supplier || null, status: 'low_stock'
         }).select('id').single();
         if (insertError || !lot) { setBusy(false); setError(failText(insertError?.message)); return; }
         const { data: movementId, error: movementError } = await client.rpc('record_store_stock_movement', {
@@ -156,7 +176,7 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
         setBusy(false);
         if (movementError || !movementId) { setError(failText(movementError?.message || 'No ledger movement was recorded. The zero-balance lot remains available for reconciliation.')); return; }
         setNotice('Pharmacy lot created and opening receipt recorded in the stock ledger.');
-        setPharmacyDraft({ formulary: '', name: '', category: '', quantity: '', reorder: '0', price: '', expiry: '', batch: '', barcode: '', supplier: '', location: '' });
+        setPharmacyDraft({ formulary: '', name: '', category: '', quantity: '', reorder: '0', price: '', expiry: '', batch: '', barcode: '', nafdacRegistrationNumber: '', supplier: '', location: '' });
         await refresh();
     };
     const addSupplier = async (event) => {
@@ -228,9 +248,10 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
                         <Button type="submit" disabled={busy}>Post movement</Button>
                     </form>
                 </Card></div>
-            <Card title="Receive pharmacy lot into ledger" subtitle="New pharmacy stock is created at zero; the opening quantity is added as a receipt movement.">
+            <Card title="Receive pharmacy lot into ledger" subtitle="New pharmacy stock is created at zero; the opening quantity is added as a receipt movement. Select a product from the active approved formulary.">
                 <form className="grid gap-3 md:grid-cols-3" onSubmit={addPharmacyLot}>
-                    <label className="text-sm">Formulary item<select required className="mt-1 w-full rounded border p-2" value={pharmacyDraft.formulary} onChange={(e) => { const selected = formulary.find((entry) => entry.id === e.target.value); setPharmacyDraft({ ...pharmacyDraft, formulary: e.target.value, name: selected?.generic_name || '' }); }}><option value="">Choose active formulary item</option>{formulary.map((entry) => <option key={entry.id} value={entry.id}>{entry.generic_name} · {entry.strength} {entry.form}</option>)}</select></label>
+                    <label className="text-sm">Search generic name<input type="search" className="mt-1 w-full rounded border p-2" value={formularySearch} onChange={(event) => { setFormularySearch(event.target.value); setPharmacyDraft((current) => ({ ...current, formulary: '', name: '' })); }} placeholder="Type a generic name, strength, or form" aria-label="Search approved formulary" /></label>
+                    <label className="text-sm">Approved formulary item<select required className="mt-1 w-full rounded border p-2" value={pharmacyDraft.formulary} onChange={(e) => { const selected = formulary.find((entry) => entry.id === e.target.value); setPharmacyDraft({ ...pharmacyDraft, formulary: e.target.value, name: selected?.generic_name || '' }); }}><option value="">{formularyLoading ? 'Loading approved medicines…' : visibleFormulary.length ? 'Choose a medicine' : 'No matching medicines'}</option>{visibleFormulary.map((entry) => <option key={entry.id} value={entry.id}>{entry.generic_name} · {entry.strength} {entry.form}{entry.route ? ` · ${entry.route}` : ''}</option>)}</select>{formularyError && <span className="mt-1 block text-xs text-red-700" role="alert">{formularyError} <button type="button" className="underline" onClick={loadFormulary}>Retry</button></span>}{!formularyLoading && !formularyError && formulary.length === 0 && <span className="mt-1 block text-xs text-amber-800">No active formulary medicines are configured. Load the facility-approved licensed formulary before receiving stock.</span>}{!formularyLoading && formulary.length > 0 && !visibleFormulary.length && <span className="mt-1 block text-xs text-slate-600">No approved medicine matches that search.</span>}</label>
                     <label className="text-sm">Lot name<input required className="mt-1 w-full rounded border p-2" value={pharmacyDraft.name} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, name: e.target.value })} /></label>
                     <label className="text-sm">Category<input className="mt-1 w-full rounded border p-2" value={pharmacyDraft.category} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, category: e.target.value })} /></label>
                     <label className="text-sm">Opening quantity<input required type="number" min="1" step="1" className="mt-1 w-full rounded border p-2" value={pharmacyDraft.quantity} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, quantity: e.target.value })} /></label>
@@ -239,6 +260,7 @@ const StockProcurementModule = ({ initialView = 'stock' }) => {
                     <label className="text-sm">Expiry date<input type="date" className="mt-1 w-full rounded border p-2" value={pharmacyDraft.expiry} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, expiry: e.target.value })} /></label>
                     <label className="text-sm">Batch / lot reference<input className="mt-1 w-full rounded border p-2" value={pharmacyDraft.batch} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, batch: e.target.value })} /></label>
                     <label className="text-sm">Barcode<input className="mt-1 w-full rounded border p-2" value={pharmacyDraft.barcode} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, barcode: e.target.value })} /></label>
+                    <label className="text-sm">NAFDAC registration number<input className="mt-1 w-full rounded border p-2" value={pharmacyDraft.nafdacRegistrationNumber} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, nafdacRegistrationNumber: e.target.value })} maxLength={80} autoComplete="off" placeholder="As printed on the product pack" /><span className="mt-1 block text-xs text-slate-500">Enter the code from this product lot. OneMed stores it but does not verify it with NAFDAC.</span></label>
                     <label className="text-sm">Supplier<input className="mt-1 w-full rounded border p-2" value={pharmacyDraft.supplier} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, supplier: e.target.value })} /></label>
                     <label className="text-sm">Destination location<select required className="mt-1 w-full rounded border p-2" value={pharmacyDraft.location} onChange={(e) => setPharmacyDraft({ ...pharmacyDraft, location: e.target.value })}><option value="">Select location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.location_name}</option>)}</select></label>
                     <div className="flex items-end"><Button type="submit" disabled={busy || !locations.length}>Create lot & post receipt</Button></div>

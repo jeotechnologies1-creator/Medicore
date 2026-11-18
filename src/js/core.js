@@ -124,6 +124,7 @@
             unitPrice: row.unit_price ?? row.unitPrice ?? 0,
             expiryDate: row.expiry_date || row.expiryDate,
             batchNumber: row.batch_number || row.batchNumber,
+            nafdacRegistrationNumber: row.nafdac_registration_number || row.nafdacRegistrationNumber || '',
             barcode: row.barcode || row.bar_code || '',
             supplier: row.supplier,
             location: row.location,

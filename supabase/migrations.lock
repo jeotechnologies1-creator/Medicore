@@ -90,7 +90,8 @@
     "20261117000087_clinical_hard_delete_lock.sql": "3d232c0bd6a915247e65c489e910bd71cf78ffe7a73f6eb6ca6c9f2c7567d0fc",
     "20261118000088_retention_super_admin_facility_scope.sql": "79d5dc11af7138345ef8e7f36eccad64e15bc74bd4c8760a84dacf46361b9c0d",
     "20261118000089_reviewed_clinical_delete_lock_and_import_seal.sql": "9bdd7471ea96cd2bd3d2b99d46e3f1577afce0427c1500e7a920e1c45cb72f3b",
-    "20261118000090_revoke_public_anon_default_function_execute.sql": "0ddf79d3e96cf4063db8f1af321b6749c054e3581c3941b55acf5ad4686006f4"
+    "20261118000090_revoke_public_anon_default_function_execute.sql": "0ddf79d3e96cf4063db8f1af321b6749c054e3581c3941b55acf5ad4686006f4",
+    "20261118000091_pharmacy_nafdac_registration_search.sql": "7f05482c1543dfa3237357fe5a996bdeac6455525d52fb62ee5bb71dd3815223"
   },
   "unlocks": []
 }

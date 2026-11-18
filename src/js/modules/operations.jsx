@@ -572,6 +572,8 @@ const AssetMaintenancePanel = () => {
             const [activeTab, setActiveTab] = useState(initialTab);
             const [searchQuery, setSearchQuery] = useState('');
             const [inventory, setInventory] = useState([]);
+            const [activeFormulary, setActiveFormulary] = useState([]);
+            const [formularySearchError, setFormularySearchError] = useState('');
             const [inventoryLoading, setInventoryLoading] = useState(true);
             const [prescriptions, setPrescriptions] = useState([]);
             const [prescriptionsTotal, setPrescriptionsTotal] = useState(0);
@@ -630,6 +632,28 @@ const AssetMaintenancePanel = () => {
                 }).finally(() => { if (current) setInventoryLoading(false); });
                 return () => { current = false; };
             }, [facilityId]);
+
+            useEffect(() => {
+                let current = true;
+                setActiveFormulary([]);
+                if (!client || !facilityId) return () => { current = false; };
+                client.from('formulary_items')
+                    .select('id,generic_name,form,strength,route')
+                    .eq('active', true)
+                    .order('generic_name')
+                    .then(({ data, error }) => {
+                        if (!current) return;
+                        if (error) {
+                            setFormularySearchError(`Active formulary could not be searched: ${error.message}`);
+                            return;
+                        }
+                        setActiveFormulary(data || []);
+                        setFormularySearchError('');
+                    }).catch((error) => {
+                        if (current) setFormularySearchError(`Active formulary could not be searched: ${error?.message || 'Connection failed.'}`);
+                    });
+                return () => { current = false; };
+            }, [client, facilityId]);
 
             useEffect(() => {
                 let current = true;
@@ -716,11 +740,22 @@ const AssetMaintenancePanel = () => {
                 return () => { current = false; };
             }, [client, directoryKey]);
 
-            const filteredDrugs = (inventory || []).filter(d => 
+            const filteredDrugs = (inventory || []).filter(d =>
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (d.genericName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (d.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                String(d.barcode || d.bar_code || '').toLowerCase().includes(searchQuery.toLowerCase())
+                String(d.barcode || d.bar_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                String(d.nafdacRegistrationNumber || '').toLowerCase().includes(searchQuery.toLowerCase())
             );
+
+            const matchingActiveFormulary = activeFormulary.filter((item) => {
+                const search = quickSearch.trim().toLowerCase();
+                if (!search) return true;
+                const lots = inventory.filter((lot) => lot.formulary_item_id === item.id);
+                return [item.generic_name, item.form, item.strength, item.route,
+                    ...lots.flatMap((lot) => [lot.nafdacRegistrationNumber, lot.barcode])]
+                    .some((value) => String(value || '').toLowerCase().includes(search));
+            }).slice(0, 8);
 
             const tabs = [
                 { id: 'dispensary', label: 'Dispensary' },
@@ -889,19 +924,24 @@ const AssetMaintenancePanel = () => {
                                     { key: 'created_at', title: 'Requested' }
                                 ]} data={controlledApprovals} actions={(row) => <Button disabled={dispensing || !safetyChecksReady} variant="primary" size="sm" onClick={() => handleVerifyControlledDispense(row)}>Verify & dispense</Button>} /></div>}
                             </Card>
-                            <Card title="Quick inventory lookup">
+                            <Card title="Search active medicines" subtitle="Only active formulary entries are searchable. Stock and NAFDAC details are shown for received lots.">
                                 <div className="space-y-4">
-                                    <SearchBar value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="Search medication..." ariaLabel="Search quick dispense inventory" />
+                                    <SearchBar value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="Search generic name, strength, form, or NAFDAC number..." ariaLabel="Search active medicines by name, strength, form, or NAFDAC registration number" />
+                                    {formularySearchError && <p className="text-sm text-red-700" role="alert">{formularySearchError}</p>}
                                     <div className="space-y-2">
-                                        {inventory.filter((drug) => `${drug.name || ''} ${drug.genericName || ''} ${drug.barcode || ''}`.toLowerCase().includes(quickSearch.toLowerCase())).slice(0, 5).map(drug => (
-                                            <div key={drug.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                                        {matchingActiveFormulary.map((medicine) => {
+                                            const lots = inventory.filter((lot) => lot.formulary_item_id === medicine.id);
+                                            const stock = lots.reduce((sum, lot) => sum + Math.max(0, Number(lot.stockQuantity) || 0), 0);
+                                            const codes = [...new Set(lots.map((lot) => lot.nafdacRegistrationNumber).filter(Boolean))];
+                                            return <div key={medicine.id} className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-slate-50">
                                                 <div>
-                                                    <p className="text-sm font-medium text-slate-900">{drug.name}</p>
-                                                    <p className="text-xs text-slate-500">{drug.category} - Stock: {drug.stockQuantity}</p>
+                                                    <p className="text-sm font-medium text-slate-900">{medicine.generic_name} · {medicine.strength} · {medicine.form}</p>
+                                                    <p className="text-xs text-slate-500">{medicine.route} · Stock: {stock}{codes.length ? ` · NAFDAC: ${codes.join(', ')}` : ' · NAFDAC code not recorded'}</p>
                                                 </div>
-                                                <Button variant="ghost" size="sm" aria-label={`View ${drug.name} in inventory`} onClick={() => focusInventorySearch(drug.name)}>View stock</Button>
-                                            </div>
-                                        ))}
+                                                <Button variant="ghost" size="sm" aria-label={`View stock for ${medicine.generic_name}`} onClick={() => focusInventorySearch(medicine.generic_name)}>View stock</Button>
+                                            </div>;
+                                        })}
+                                        {!inventoryLoading && !formularySearchError && !matchingActiveFormulary.length && <p className="text-sm text-slate-500">{activeFormulary.length ? 'No active medicine matches that search.' : 'No active medicines are available in the formulary.'}</p>}
                                     </div>
                                 </div>
                             </Card>
@@ -923,6 +963,7 @@ const AssetMaintenancePanel = () => {
                                 columns={[
                                     { key: 'name', title: 'Drug Name' },
                                     { key: 'genericName', title: 'Generic Name' },
+                                    { key: 'nafdacRegistrationNumber', title: 'NAFDAC registration' },
                                     { key: 'category', title: 'Category' },
                                     { key: 'stockQuantity', title: 'Ledger stock', render: (row) => !row.ledgerLinked ? <span className="text-amber-800">Not linked to stock ledger</span> : (
                                         <div className="flex items-center gap-2">
