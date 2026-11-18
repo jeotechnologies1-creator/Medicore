@@ -382,10 +382,9 @@
                     } catch (error) {
                         window.OneMedFacilityTimezone = 'Africa/Lagos';
                     }
-                    const timeout = Number(settings.sessionTimeoutMinutes);
                     setSessionSecurity({
-                        timeoutMinutes: Number.isFinite(timeout) ? Math.min(1440, Math.max(5, timeout)) : 30,
-                        autoLogoutIdle: settings.autoLogoutIdle !== false
+                        timeoutMinutes: 30,
+                        autoLogoutIdle: true
                     });
                 };
                 const loadSettings = async () => {

@@ -723,7 +723,10 @@ import { getStoreValue } from '../store.js';
                             const remoteSettings = await window.OneMedSupabase.loadSystemSettings();
                             if (remoteSettings && Object.keys(remoteSettings).length) {
                                 const { roleMatrix: remoteRoleMatrix, ...remoteOnlySettings } = remoteSettings;
-                                setSettings(prev => ({ ...prev, ...remoteOnlySettings }));
+                                setSettings(prev => ({ ...prev, ...remoteOnlySettings,
+                                    sessionTimeoutMinutes: 30,
+                                    autoLogoutIdle: true
+                                }));
                                 if (Array.isArray(remoteRoleMatrix) && remoteRoleMatrix.length) {
                                     const normalizedRemote = completeMatrixRows(remoteRoleMatrix);
                                     setRoleMatrix(normalizedRemote);
@@ -749,7 +752,8 @@ import { getStoreValue } from '../store.js';
             }, []);
 
             const updateSetting = (key, value) => {
-                setSettings(prev => ({ ...prev, [key]: value }));
+                const safeValue = key === 'sessionTimeoutMinutes' ? 30 : key === 'autoLogoutIdle' ? true : value;
+                setSettings(prev => ({ ...prev, [key]: safeValue }));
             };
 
             const addBankAccount = () => {
@@ -1068,13 +1072,12 @@ import { getStoreValue } from '../store.js';
 
                         <Card title="Security & Access Control">
                             <div className="space-y-4">
-                                <Input label="Session timeout (minutes)" type="number" min={5} max={1440} value={settings.sessionTimeoutMinutes} onChange={(e) => updateSetting('sessionTimeoutMinutes', Math.min(1440, Math.max(5, Number(e.target.value) || 30)))} />
+                                <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">Automatic logout is enabled after 30 minutes without activity.</p>
                                 <Input label="Password minimum length" type="number" value={settings.passwordMinLength} onChange={(e) => updateSetting('passwordMinLength', Number(e.target.value || 8))} />
                                 <Input label="Failed attempts before lock" type="number" value={settings.lockAfterFailedAttempts} onChange={(e) => updateSetting('lockAfterFailedAttempts', Number(e.target.value || 5))} />
                                 <Input label="Audit retention (days)" type="number" value={settings.auditRetentionDays} onChange={(e) => updateSetting('auditRetentionDays', Number(e.target.value || 2555))} />
                                 <div className="space-y-3">
                                     <ToggleRow label="Require MFA for staff" description="Strongly recommended for admin and clinical roles" checked={settings.requireMfa} onChange={(value) => updateSetting('requireMfa', value)} />
-                                    <ToggleRow label="Auto logout idle users" description="Protects patient data when a browser is left open" checked={settings.autoLogoutIdle} onChange={(value) => updateSetting('autoLogoutIdle', value)} />
                                     <ToggleRow label="Role-based access enforcement" description="Restrict organization and clinical access by role" checked={settings.roleBasedAccess} onChange={(value) => updateSetting('roleBasedAccess', value)} />
                                     <ToggleRow label="Keep system audit trail" description="Required for traceability and regulatory review" checked={settings.enableAuditTrail} onChange={(value) => updateSetting('enableAuditTrail', value)} />
                                 </div>
