@@ -23,6 +23,12 @@
 
 Serve the security headers in [`public/_headers`](../../public/_headers) from the public frontend host, including the Content Security Policy. Set the exact deployed origins in the server-side `ALLOWED_ORIGINS` configuration for the Edge Functions that enforce origin checks. `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_TURNSTILE_SITE_KEY` are public build-time values; `SUPABASE_SERVICE_ROLE_KEY`, Turnstile secret, and SMTP credentials are server-side secrets only.
 
+### Staff invitation email
+
+The invitation template is [`supabase/templates/invite.html`](../../supabase/templates/invite.html). For a hosted Supabase project, copy its subject and HTML body into **Authentication → Email Templates → Invite user**; local `config.toml` settings do not update hosted templates. The template congratulates the invitee and links to `{{ .ConfirmationURL }}`.
+
+Set the hosted **Site URL** and the `AUTH_INVITE_REDIRECT_URL` Edge Function secret to the deployed app's actual HTTPS origin, and add that exact origin to **Redirect URLs**. The origin must resolve to a currently deployed frontend: changing Supabase's redirect setting cannot make a missing or mistyped Vercel domain reachable. Open the origin directly in a browser before sending a new invite. Previously sent invitations retain their original redirect destination.
+
 ## Public verification
 
 Run the checker against each environment after deploying the frontend and configuring Auth:

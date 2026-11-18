@@ -1,0 +1,16 @@
+<h2>Congratulations, {{ .Data.full_name }}!</h2>
+
+<p>Your OneMed account has been created. To get started, accept the invitation
+using the button below and continue with account setup.</p>
+
+<p>
+  <a href="{{ .ConfirmationURL }}"
+     style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">
+    Accept your OneMed invitation
+  </a>
+</p>
+
+<p>If the button does not work, copy and paste this link into your browser:</p>
+<p><a href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a></p>
+
+<p>If you were not expecting this invitation, you can ignore this email.</p>

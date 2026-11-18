@@ -249,10 +249,12 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Staff and patient portal invitations use this template when deploying the
+# local Supabase stack. Copy the subject/body into Authentication > Email
+# Templates > Invite user for hosted projects.
+[auth.email.template.invite]
+subject = "Congratulations, {{ .Data.full_name }} — your OneMed account is ready"
+content_path = "./supabase/templates/invite.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
