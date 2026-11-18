@@ -545,7 +545,7 @@
             medication_reconciliations: { appTable: 'medicationReconciliations', mapper: normalizeMedicationReconciliations, order: 'created_at', descending: true }
         };
         const moduleTables = {
-            patients: ['patients'], records: ['patients'], laboratory: ['lab_orders'], radiology: ['radiology_orders'], pharmacy: ['prescriptions','pharmacy_inventory'],
+            patients: ['patients'], records: ['patients'], vital_registry: ['patients'], laboratory: ['lab_orders'], radiology: ['radiology_orders'], pharmacy: ['prescriptions','pharmacy_inventory'],
             billing: ['billing','payment_submissions'], payments: ['payment_submissions'], admissions: ['admissions'], surgeries: ['surgeries'],
             clinical_safety: ['clinical_alerts','vital_signs'], vitals: ['vital_signs'], nursing: ['admissions','wards','encounters','profiles'], consultations: ['consultations','encounters'],
             appointments: ['appointments'], documents: ['patient_documents'], upload: ['patient_documents'], audit: ['audit_logs'], reports: ['billing','appointments','lab_orders'],
