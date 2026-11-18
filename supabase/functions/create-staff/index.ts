@@ -18,14 +18,18 @@ Deno.serve(async (request) => {
   const accessToken = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!accessToken) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
   const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
-  // This client has no persisted browser session. Pass the bearer token
-  // explicitly so Auth validates the caller's token instead of looking for a
-  // session in the function's empty local storage.
-  const { data: { user }, error: userError } = await requesterClient.auth.getUser(accessToken);
-  if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+  // Verify the asymmetric JWT using the project's JWKS, without a second
+  // Auth API user lookup.
+  const { data: claimData, error: claimsError } = await requesterClient.auth.getClaims(accessToken);
+  const claims = claimData?.claims;
+  const userId = typeof claims?.sub === 'string' ? claims.sub : '';
+  const expectedIssuer = `${url.replace(/\/$/, '')}/auth/v1`;
+  if (claimsError || !claims || !userId || claims.iss !== expectedIssuer || claims.role !== 'authenticated') {
+    return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+  }
   const adminClient = createClient(url, serviceKey);
   try {
-    if (!await checkRateLimit(adminClient, request, 'create-staff', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
+    if (!await checkRateLimit(adminClient, request, 'create-staff', userId, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
   } catch (error) {
     await reportSafeEdgeError('staff', error);
     return Response.json({ error: 'Rate limiting is temporarily unavailable.' }, { status: 503, headers: corsHeaders });
@@ -33,14 +37,14 @@ Deno.serve(async (request) => {
   const { data: mfaSetting, error: mfaSettingError } = await adminClient.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle();
   const enforceMfa = mfaSettingError || mfaSetting?.setting_value?.enabled !== false;
   if (enforceMfa) {
-    if (assuranceLevelFromVerifiedAccessToken(accessToken, user.id) !== 'aal2') {
+    if (assuranceLevelFromVerifiedAccessToken(accessToken, userId) !== 'aal2') {
       return Response.json({ error: 'Complete authenticator verification before creating staff accounts.' }, { status: 403, headers: corsHeaders });
     }
   }
   const { data: requesterProfile, error: requesterProfileError } = await adminClient
     .from('profiles')
     .select('role, status')
-    .eq('auth_user_id', user.id)
+    .eq('auth_user_id', userId)
     .maybeSingle();
   if (requesterProfileError) return Response.json({ error: 'Unable to verify the administrator profile.' }, { status: 500, headers: corsHeaders });
   if (requesterProfile?.role !== 'super_admin' || requesterProfile?.status !== 'active') {
@@ -75,7 +79,7 @@ Deno.serve(async (request) => {
   const inviteOptions = { data: { full_name: fullName }, ...(redirectTo ? { redirectTo } : {}) };
   const { data: created, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
   if (createError || !created.user) {
-    await recordAccountAudit(adminClient, user.id, null, email, role, 'failure', { stage: 'invite', error: createError?.message || 'invite_failed' });
+    await recordAccountAudit(adminClient, userId, null, email, role, 'failure', { stage: 'invite', error: createError?.message || 'invite_failed' });
     return Response.json({ error: createError?.message || 'Unable to create account.' }, { status: 400, headers: corsHeaders });
   }
 
@@ -87,10 +91,10 @@ Deno.serve(async (request) => {
     .single();
   if (profileError) {
     await adminClient.auth.admin.deleteUser(created.user.id);
-    await recordAccountAudit(adminClient, user.id, created.user.id, email, role, 'failure', { stage: 'profile', error: profileError.message });
+    await recordAccountAudit(adminClient, userId, created.user.id, email, role, 'failure', { stage: 'profile', error: profileError.message });
     return Response.json({ error: profileError.message }, { status: 500, headers: corsHeaders });
   }
-  await recordAccountAudit(adminClient, user.id, created.user.id, email, role, 'success');
+  await recordAccountAudit(adminClient, userId, created.user.id, email, role, 'success');
   return Response.json({ staff: profile }, { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     await reportSafeEdgeError('staff', error);

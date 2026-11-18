@@ -713,10 +713,17 @@
             const [password, setPassword] = useState('');
             const [confirmPassword, setConfirmPassword] = useState('');
             const [error, setError] = useState('');
+            const [inviteLinkError, setInviteLinkError] = useState(() => {
+                const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+                const code = hashParams.get('error_code');
+                return code === 'otp_expired'
+                    ? 'This invitation link has expired or was already used. Ask your administrator to send a new invitation.'
+                    : '';
+            });
             const [inviteMode, setInviteMode] = useState(() => {
                 const params = new URLSearchParams(window.location.search);
                 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-                return params.get('type') === 'invite' || hashParams.get('type') === 'invite';
+                return params.get('type') === 'invite' || hashParams.get('type') === 'invite' || hashParams.get('error_code') === 'otp_expired';
             });
             const [inviteSessionReady, setInviteSessionReady] = useState(false);
             const [inviteSessionChecked, setInviteSessionChecked] = useState(false);
@@ -732,6 +739,10 @@
 
             useEffect(() => {
                 if (!inviteMode) return undefined;
+                if (inviteLinkError) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    return undefined;
+                }
                 let active = true;
                 const checkInviteSession = async () => {
                     const client = window.OneMedSupabase?.getClient?.();
@@ -746,7 +757,9 @@
                     if (!active) return;
                     setInviteSessionChecked(true);
                     if (sessionError || !data?.session?.user) {
-                        setError('This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
+                        const message = 'This invitation link is invalid or expired. Ask your administrator to send a new invitation.';
+                        setInviteLinkError(message);
+                        setError(message);
                         return;
                     }
                     setInviteSessionReady(true);
@@ -754,7 +767,7 @@
                 };
                 void checkInviteSession();
                 return () => { active = false; };
-            }, [inviteMode]);
+            }, [inviteMode, inviteLinkError]);
 
             const handleInvitePassword = async (event) => {
                 event.preventDefault();
@@ -931,7 +944,7 @@
                                             <p className="mt-1 text-sm text-slate-600">{email ? `Set a password for ${email} to finish setting up your account.` : 'Set a password to finish setting up your account.'}</p>
                                         </div>
                                         {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{error}</div>}
-                                        {!inviteSessionChecked ? <p role="status" className="text-sm text-slate-600">Checking your invitation link…</p> : !inviteSessionReady ? <p role="status" className="text-sm text-slate-600">A valid invitation session is required to continue.</p> : <>
+                                        {inviteLinkError ? <><p role="status" className="text-sm text-slate-600">Wait for the email sending limit to clear, then have your administrator send a fresh invitation. Use the newest email link.</p><Button type="button" variant="ghost" className="w-full justify-center" onClick={() => { setInviteMode(false); setInviteLinkError(''); setError(''); }}>Return to sign in</Button></> : !inviteSessionChecked ? <p role="status" className="text-sm text-slate-600">Checking your invitation link…</p> : !inviteSessionReady ? <p role="status" className="text-sm text-slate-600">A valid invitation session is required to continue.</p> : <>
                                             <label className="block text-sm font-medium text-slate-700">New password
                                                 <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" required />
                                             </label>
