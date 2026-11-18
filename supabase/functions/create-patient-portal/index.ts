@@ -12,10 +12,13 @@ Deno.serve(async (request) => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !anonKey || !serviceKey) return Response.json({ error: 'create-patient-portal is not configured.' }, { status: 500, headers: corsHeaders });
-  const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
-  const { data: { user }, error: userError } = await requesterClient.auth.getUser();
-  if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
   const accessToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!accessToken) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+  const requesterClient = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
+  // This client has no persisted browser session, so validate the request's
+  // bearer token explicitly instead of looking for a local Auth session.
+  const { data: { user }, error: userError } = await requesterClient.auth.getUser(accessToken);
+  if (userError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
   const adminClient = createClient(url, serviceKey);
   try {
     if (!await checkRateLimit(adminClient, request, 'create-patient-portal', user.id, 10, 3600)) return Response.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: corsHeaders });
