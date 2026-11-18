@@ -705,6 +705,9 @@ import { getStoreValue } from '../store.js';
 
             const [settings, setSettings] = useState(defaultSettings);
             const [saveMessage, setSaveMessage] = useState('');
+            const [passwordResetEmail, setPasswordResetEmail] = useState('');
+            const [passwordResetMessage, setPasswordResetMessage] = useState('');
+            const [passwordResetBusy, setPasswordResetBusy] = useState(false);
             const [bankAccountDraft, setBankAccountDraft] = useState({ bankName: '', accountName: '', accountNumber: '', department: '' });
             const [roleMatrix, setRoleMatrix] = useState(() => completeMatrixRows(initialRoleMatrix));
             const [departments, setDepartments] = useState(initialDepartments);
@@ -754,6 +757,42 @@ import { getStoreValue } from '../store.js';
             const updateSetting = (key, value) => {
                 const safeValue = key === 'sessionTimeoutMinutes' ? 30 : key === 'autoLogoutIdle' ? true : value;
                 setSettings(prev => ({ ...prev, [key]: safeValue }));
+            };
+
+            const requestPasswordReset = async (event) => {
+                event.preventDefault();
+                if (user?.role !== 'super_admin') {
+                    setPasswordResetMessage('Only a Super Admin can request password reset emails.');
+                    return;
+                }
+                const email = passwordResetEmail.trim().toLowerCase();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    setPasswordResetMessage('Enter the account email address.');
+                    return;
+                }
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client) {
+                    setPasswordResetMessage('Supabase is not available. Try again when the service is connected.');
+                    return;
+                }
+                setPasswordResetBusy(true);
+                setPasswordResetMessage('');
+                try {
+                    const { data, error } = await client.functions.invoke('request-password-reset', { body: { email } });
+                    if (error) {
+                        let message = error.message || 'Password reset request failed.';
+                        if (error.context?.clone) {
+                            try { message = (await error.context.clone().json())?.error || message; } catch { /* use the SDK message */ }
+                        }
+                        throw new Error(message);
+                    }
+                    setPasswordResetMessage(data?.message || 'If the account exists, a password reset link has been sent to its email address.');
+                    setPasswordResetEmail('');
+                } catch (resetError) {
+                    setPasswordResetMessage(resetError?.message || 'Password reset request failed.');
+                } finally {
+                    setPasswordResetBusy(false);
+                }
             };
 
             const addBankAccount = () => {
@@ -1083,6 +1122,14 @@ import { getStoreValue } from '../store.js';
                                 </div>
                             </div>
                         </Card>
+                        {user?.role === 'super_admin' && <Card title="Send password reset request" subtitle="The account holder receives a one-use reset link by email and chooses their own new password.">
+                            <form className="space-y-3" onSubmit={requestPasswordReset}>
+                                <Input label="Account email" type="email" autoComplete="off" value={passwordResetEmail} onChange={(event) => setPasswordResetEmail(event.target.value)} placeholder="staff@hospital.org" required />
+                                <p className="text-xs text-slate-600">No password is shown to or set by the administrator. The reset email is sent only to the account address.</p>
+                                <Button type="submit" variant="secondary" disabled={passwordResetBusy}>{passwordResetBusy ? 'Sending reset email…' : 'Send password reset email'}</Button>
+                                {passwordResetMessage && <p role="status" className="text-sm text-slate-700">{passwordResetMessage}</p>}
+                            </form>
+                        </Card>}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

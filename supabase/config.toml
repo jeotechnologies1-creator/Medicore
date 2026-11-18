@@ -399,6 +399,9 @@ verify_jwt = true
 [functions.create-patient-portal]
 verify_jwt = true
 
+[functions.request-password-reset]
+verify_jwt = true
+
 [functions.notification-dispatch]
 verify_jwt = true
 

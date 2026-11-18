@@ -293,6 +293,11 @@
             const [roleMatrix, setRoleMatrix] = useState(defaultRoleMatrix);
             const [loading, setLoading] = useState(false);
             const [mfaGate, setMfaGate] = useState(null);
+            const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(() => {
+                const query = new URLSearchParams(window.location.search);
+                const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+                return query.get('type') === 'recovery' || hash.get('type') === 'recovery';
+            });
             const [sessionSecurity, setSessionSecurity] = useState({ timeoutMinutes: 30, autoLogoutIdle: true });
 
             const requiresMfa = useCallback(async (profile, client) => {
@@ -490,6 +495,10 @@
                         clearSignedOutState();
                         return;
                     }
+                    if (passwordRecoveryPending) {
+                        setUser(null);
+                        return;
+                    }
                     const { data, error } = await client.from('profiles').select('*').eq('auth_user_id', session.user.id).maybeSingle();
                     if (!active || revision !== sessionRevision) return;
                     // A transient Data API/network failure is not proof that an
@@ -528,7 +537,12 @@
                     }
                 };
                 client.auth.getSession().then(({ data }) => applySession(data.session));
-                const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
+                const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+                    if (event === 'PASSWORD_RECOVERY') {
+                        setPasswordRecoveryPending(true);
+                        setUser(null);
+                        return;
+                    }
                     if (!session?.user) {
                         sessionRevision += 1;
                         clearSignedOutState();
@@ -542,7 +556,20 @@
                     }, 0);
                 });
                 return () => { active = false; subscription.subscription.unsubscribe(); };
-            }, [requiresMfa, setMfaChallenge]);
+            }, [requiresMfa, setMfaChallenge, passwordRecoveryPending]);
+
+            const completePasswordRecovery = useCallback(async (profile) => {
+                setPasswordRecoveryPending(false);
+                if (await gateForMfa(profile)) return false;
+                setMfaGate(null);
+                setUser({
+                    ...profile,
+                    name: String(profile.full_name || profile.name || profile.email || '').trim() || 'User',
+                    role: String(profile.role || 'receptionist').trim().toLowerCase().replace(/[\s-]+/g, '_'),
+                    patientId: profile.patient_id || null
+                });
+                return true;
+            }, [gateForMfa]);
 
             useEffect(() => {
                 const hydrateRoleMatrix = async () => {
@@ -692,7 +719,7 @@
             }, [user, roleMatrix]);
 
             return (
-                <AuthContext.Provider value={{ user, login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa, hasPermission, hasModuleAccess, getRolePermissions }}>
+            <AuthContext.Provider value={{ user, login, logout, loading, mfaGate, passwordRecoveryPending, completePasswordRecovery, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa, hasPermission, hasModuleAccess, getRolePermissions }}>
                     {children}
                 </AuthContext.Provider>
             );
@@ -716,7 +743,7 @@
                 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
                 const code = hashParams.get('error_code');
                 return code === 'otp_expired'
-                    ? 'This invitation link has expired or was already used. Ask your administrator to send a new invitation.'
+                    ? 'This OneMed email link has expired or was already used. Ask your Super Admin for a fresh invitation or password reset email.'
                     : '';
             });
             const [inviteMode, setInviteMode] = useState(() => {
@@ -724,11 +751,17 @@
                 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
                 return params.get('type') === 'invite' || hashParams.get('type') === 'invite' || hashParams.get('error_code') === 'otp_expired';
             });
+            const [recoveryMode, setRecoveryMode] = useState(() => {
+                const params = new URLSearchParams(window.location.search);
+                const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+                return params.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
+            });
             const [inviteSessionReady, setInviteSessionReady] = useState(false);
             const [inviteSessionChecked, setInviteSessionChecked] = useState(false);
             const [invitePasswordBusy, setInvitePasswordBusy] = useState(false);
             const [showPassword, setShowPassword] = useState(false);
-            const { login, logout, loading, mfaGate, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa } = useAuth();
+            const { login, logout, loading, mfaGate, passwordRecoveryPending, beginMfaEnrollment, verifyMfa, cancelMfa, gateForMfa, completePasswordRecovery } = useAuth();
+            const passwordSetupMode = inviteMode || recoveryMode || passwordRecoveryPending;
             const [mfaCode, setMfaCode] = useState('');
             const [mfaBusy, setMfaBusy] = useState(false);
             const [captchaToken, setCaptchaToken] = useState('');
@@ -737,7 +770,11 @@
             const captchaWidgetId = useRef(null);
 
             useEffect(() => {
-                if (!inviteMode) return undefined;
+                if (passwordRecoveryPending) setRecoveryMode(true);
+            }, [passwordRecoveryPending]);
+
+            useEffect(() => {
+                if (!passwordSetupMode) return undefined;
                 if (inviteLinkError) {
                     window.history.replaceState({}, document.title, window.location.pathname);
                     return undefined;
@@ -756,7 +793,9 @@
                     if (!active) return;
                     setInviteSessionChecked(true);
                     if (sessionError || !data?.session?.user) {
-                        const message = 'This invitation link is invalid or expired. Ask your administrator to send a new invitation.';
+                        const message = recoveryMode
+                            ? 'This password reset link is invalid or expired. Ask your administrator to send another reset email.'
+                            : 'This invitation link is invalid or expired. Ask your administrator to send a new invitation.';
                         setInviteLinkError(message);
                         setError(message);
                         return;
@@ -766,12 +805,12 @@
                 };
                 void checkInviteSession();
                 return () => { active = false; };
-            }, [inviteMode, inviteLinkError]);
+            }, [passwordSetupMode, recoveryMode, inviteLinkError]);
 
             const handleInvitePassword = async (event) => {
                 event.preventDefault();
                 setError('');
-                if (!noticeAccepted) {
+                if (!recoveryMode && !noticeAccepted) {
                     setError('Review and acknowledge the draft privacy notice and terms to continue.');
                     return;
                 }
@@ -791,15 +830,22 @@
                 setInvitePasswordBusy(true);
                 try {
                     const { data: sessionData, error: sessionError } = await client.auth.getSession();
-                    if (sessionError || !sessionData?.session?.user) throw new Error('This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
+                    if (sessionError || !sessionData?.session?.user) throw new Error(recoveryMode
+                        ? 'This password reset link is invalid or expired. Ask your administrator to send another reset email.'
+                        : 'This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
                     const { error: updateError } = await client.auth.updateUser({ password });
                     if (updateError) throw updateError;
                     setInviteMode(false);
+                    setRecoveryMode(false);
                     window.history.replaceState({}, document.title, window.location.pathname);
                     setPassword('');
                     setConfirmPassword('');
                     const { data: profile, error: profileError } = await client.from('profiles').select('*').eq('auth_user_id', sessionData.session.user.id).maybeSingle();
                     if (profileError || !profile || profile.status !== 'active') throw new Error('Your account could not be verified. Contact your administrator.');
+                    if (recoveryMode) {
+                        if (await completePasswordRecovery(profile)) onLogin();
+                        return;
+                    }
                     // Clinician roles must finish the same MFA gate as a normal
                     // sign-in before the app marks this session authenticated.
                     if (await gateForMfa(profile)) return;
@@ -936,14 +982,14 @@
                                         {error}
                                     </div>
                                 )}
-                                {inviteMode ? (
+                                {passwordSetupMode ? (
                                     <div className="space-y-4">
                                         <div>
-                                            <h2 className="text-lg font-semibold text-slate-900">Accept your OneMed invitation</h2>
-                                            <p className="mt-1 text-sm text-slate-600">{email ? `Set a password for ${email} to finish setting up your account.` : 'Set a password to finish setting up your account.'}</p>
+                                            <h2 className="text-lg font-semibold text-slate-900">{recoveryMode ? 'Reset your OneMed password' : 'Accept your OneMed invitation'}</h2>
+                                            <p className="mt-1 text-sm text-slate-600">{email ? `${recoveryMode ? 'Choose a new password for' : 'Set a password for'} ${email}.` : recoveryMode ? 'Choose a new password for your OneMed account.' : 'Set a password to finish setting up your account.'}</p>
                                         </div>
                                         {error && <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">{error}</div>}
-                                        {inviteLinkError ? <><p role="status" className="text-sm text-slate-600">Wait for the email sending limit to clear, then have your administrator send a fresh invitation. Use the newest email link.</p><Button type="button" variant="ghost" className="w-full justify-center" onClick={() => { setInviteMode(false); setInviteLinkError(''); setError(''); }}>Return to sign in</Button></> : !inviteSessionChecked ? <p role="status" className="text-sm text-slate-600">Checking your invitation link…</p> : !inviteSessionReady ? <p role="status" className="text-sm text-slate-600">A valid invitation session is required to continue.</p> : <>
+                                        {inviteLinkError ? <><p role="status" className="text-sm text-slate-600">Ask your Super Admin to send a fresh invitation or password reset email, then use the newest link.</p><Button type="button" variant="ghost" className="w-full justify-center" onClick={() => { setInviteMode(false); setRecoveryMode(false); setInviteLinkError(''); setError(''); }}>Return to sign in</Button></> : !inviteSessionChecked ? <p role="status" className="text-sm text-slate-600">Checking your {recoveryMode ? 'password reset' : 'invitation'} link…</p> : !inviteSessionReady ? <p role="status" className="text-sm text-slate-600">A valid {recoveryMode ? 'password reset' : 'invitation'} session is required to continue.</p> : <>
                                             <label className="block text-sm font-medium text-slate-700">New password
                                                 <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" required />
                                             </label>
@@ -951,9 +997,9 @@
                                             <label className="block text-sm font-medium text-slate-700">Confirm password
                                                 <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm" required />
                                             </label>
-                                            <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={noticeAccepted} onChange={(event) => setNoticeAccepted(event.target.checked)} /><span>I have reviewed the <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">draft privacy notice</a> and <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">draft terms</a>. They are pending facility legal review.</span></label>
+                                            {!recoveryMode && <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={noticeAccepted} onChange={(event) => setNoticeAccepted(event.target.checked)} /><span>I have reviewed the <a className="text-medical-700 underline" href="/privacy-notice.html" target="_blank" rel="noreferrer">draft privacy notice</a> and <a className="text-medical-700 underline" href="/terms.html" target="_blank" rel="noreferrer">draft terms</a>. They are pending facility legal review.</span></label>}
                                             <Button type="button" variant="primary" size="lg" className="w-full justify-center" onClick={handleInvitePassword} disabled={invitePasswordBusy} aria-busy={invitePasswordBusy}>
-                                                {invitePasswordBusy ? 'Saving password…' : 'Accept invitation and set password'}
+                                                {invitePasswordBusy ? 'Saving password…' : recoveryMode ? 'Save new password' : 'Accept invitation and set password'}
                                             </Button>
                                         </>}
                                     </div>
