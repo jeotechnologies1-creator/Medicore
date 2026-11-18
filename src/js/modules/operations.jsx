@@ -574,21 +574,19 @@ const AssetMaintenancePanel = () => {
             const [controlledApprovals, setControlledApprovals] = useState([]);
             const [formulary, setFormulary] = useState([]);
             const [safetyChecksReady, setSafetyChecksReady] = useState(false);
-            const [showAddStock, setShowAddStock] = useState(false);
-            const [stockForm, setStockForm] = useState({ formularyItemId: '', name: '', genericName: '', category: 'General', stockQuantity: 0, reorderLevel: 0, unitPrice: 0, expiryDate: '', batchNumber: '', barcode: '', supplier: '' });
             const [stockMessage, setStockMessage] = useState('');
+            const [quickSearch, setQuickSearch] = useState('');
+            const [dispensing, setDispensing] = useState(false);
 
             useEffect(() => {
                 setActiveTab(initialTab);
             }, [initialTab]);
-            useEffect(() => {
-                if (!canManageCatalogue && activeTab === 'ledger') setActiveTab('invoices');
-            }, [canManageCatalogue, activeTab]);
 
             useEffect(() => {
                 let current = true;
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client || !facilityId) return () => { current = false; };
+                setStockMessage('');
                 loadPharmacyInventoryFromLedger(client, facilityId).then((rows) => {
                     if (current) { setInventory(rows); setStoreValue("pharmacyInventory", rows); }
                 }).catch((error) => {
@@ -600,12 +598,15 @@ const AssetMaintenancePanel = () => {
             useEffect(() => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return;
-                client.rpc('clinical_safety_status').then(({ data, error }) => setSafetyChecksReady(!error && data?.interactions_ready && data?.dose_limits_ready));
+                let current = true;
+                client.rpc('clinical_safety_status').then(({ data, error }) => {
+                    if (current) setSafetyChecksReady(!error && data?.interactions_ready && data?.dose_limits_ready);
+                }).catch(() => { if (current) setSafetyChecksReady(false); });
                 client.from('formulary_items').select('id,generic_name,form,strength,unit,route,controlled').eq('active', true).order('generic_name')
-                    .then(({ data, error }) => { if (!error && data) setFormulary(data); });
+                    .then(({ data, error }) => { if (current && !error && data) setFormulary(data); });
                 client.from('prescription_items').select('id,prescription_id,formulary_item_id,dose,dose_unit,frequency,route,duration,quantity,formulary_items(generic_name,strength,form,controlled)')
                     .then(({ data, error }) => {
-                        if (error || !data) return;
+                        if (!current || error || !data) return;
                         setPrescriptionItems(data.reduce((map, item) => {
                             map[item.prescription_id] ||= [];
                             map[item.prescription_id].push(item);
@@ -613,8 +614,9 @@ const AssetMaintenancePanel = () => {
                         }, {}));
                     });
                 client.from('controlled_drug_dispense_approvals').select('id,prescription_id,requested_by,created_at,prescriptions(patient_id,diagnosis)').eq('status', 'pending').order('created_at')
-                    .then(({ data, error }) => { if (!error && data) setControlledApprovals(data); });
-            }, []);
+                    .then(({ data, error }) => { if (current && !error && data) setControlledApprovals(data); });
+                return () => { current = false; };
+            }, [facilityId]);
 
             const filteredDrugs = (inventory || []).filter(d => 
                 (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -629,7 +631,7 @@ const AssetMaintenancePanel = () => {
                 { id: 'purchase', label: 'Purchase Orders' },
             ];
             const inventoryValue = inventory.reduce(
-                (total, item) => total + Math.max(0, Number(item.stockQuantity) || 0) * Math.max(0, Number(item.unitPrice) || 0),
+                (total, item) => total + (item.ledgerLinked ? Math.max(0, Number(item.stockQuantity) || 0) * Math.max(0, Number(item.unitPrice) || 0) : 0),
                 0
             );
             const expiringSoonCount = inventory.filter((item) => {
@@ -643,49 +645,70 @@ const AssetMaintenancePanel = () => {
 
             const handleAddStock = () => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }));
 
+            const focusInventorySearch = (query = '') => {
+                if (query) setSearchQuery(query);
+                setActiveTab('inventory');
+                window.requestAnimationFrame(() => document.getElementById('pharmacy-inventory-search')?.focus());
+            };
+
+            const refreshInventory = async () => {
+                const client = window.OneMedSupabase?.getClient?.();
+                if (!client || !facilityId) return;
+                try {
+                    const rows = await loadPharmacyInventoryFromLedger(client, facilityId);
+                    setInventory(rows);
+                    setStoreValue('pharmacyInventory', rows);
+                } catch (error) {
+                    setStockMessage(`Inventory refresh failed: ${error?.message || 'Connection failed.'}`);
+                }
+            };
+
             const handleDispense = async (prescription) => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('dispense medication');
-                const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id, p_lots: {} });
-                if (error) return notifyPersistenceFailure('dispense medication', error);
-                if (data?.status === 'awaiting_second_verification') {
-                    const { data: pending } = await client.from('controlled_drug_dispense_approvals').select('id,prescription_id,requested_by,created_at,prescriptions(patient_id,diagnosis)').eq('status', 'pending').order('created_at');
-                    setControlledApprovals(pending || []);
-                    return;
+                if (!safetyChecksReady) return setStockMessage('Dispensing is paused until medication interaction and dose checks are active.');
+                setDispensing(true);
+                setStockMessage('');
+                try {
+                    const { data, error } = await client.rpc('dispense_prescription', { p_prescription_id: prescription.id, p_lots: {} });
+                    if (error) { setStockMessage(error.message || 'The prescription could not be dispensed.'); return; }
+                    if (data?.status === 'awaiting_second_verification') {
+                        const { data: pending, error: pendingError } = await client.from('controlled_drug_dispense_approvals').select('id,prescription_id,requested_by,created_at,prescriptions(patient_id,diagnosis)').eq('status', 'pending').order('created_at');
+                        if (pendingError) setStockMessage(`Verification was queued, but its queue could not be refreshed: ${pendingError.message}`);
+                        setControlledApprovals(pending || []);
+                        if (!pendingError) setStockMessage('Controlled medicine request queued. A different authorized staff member must verify it.');
+                        return;
+                    }
+                    if (!data?.items) { setStockMessage('The dispensing transaction did not return a result.'); return; }
+                    await refreshInventory();
+                    const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
+                    setStoreValue('prescriptions', nextPrescriptions);
+                    setStockMessage('Prescription dispensed and stock ledger refreshed.');
+                } catch (error) {
+                    setStockMessage(error?.message || 'The prescription could not be dispensed.');
+                } finally {
+                    setDispensing(false);
                 }
-                if (!data?.items) return notifyPersistenceFailure('dispense medication', new Error('The dispensing transaction did not return a result.'));
-
-                const dispensedByInventoryId = new Map(data.items.map((item) => [item.inventoryId, item]));
-                const nextInventory = inventory.map((item) => {
-                    const dispensedItem = dispensedByInventoryId.get(item.id);
-                    return dispensedItem
-                        ? { ...item, stockQuantity: dispensedItem.remainingStock, status: dispensedItem.status }
-                        : item;
-                });
-
-                setStoreValue("pharmacyInventory", nextInventory);
-                persistStoreTable('pharmacyInventory', nextInventory);
-                setInventory(nextInventory);
-                const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === prescription.id ? { ...item, status: 'dispensed' } : item);
-                persistStoreTable('prescriptions', nextPrescriptions);
             };
 
             const handleVerifyControlledDispense = async (approval) => {
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!client) return notifyPersistenceFailure('verify controlled medicine dispense');
-                const { data, error } = await client.rpc('approve_controlled_drug_dispense', { p_approval_id: approval.id });
-                if (error || data?.status !== 'dispensed') return notifyPersistenceFailure('verify controlled medicine dispense', error || new Error('The verified dispense did not complete.'));
-                setControlledApprovals((rows) => rows.filter((row) => row.id !== approval.id));
-                const byLot = new Map((data.items || []).map((item) => [item.inventoryId, item]));
-                const nextInventory = inventory.map((item) => {
-                    const result = byLot.get(item.id);
-                    return result ? { ...item, stockQuantity: result.remainingStock, status: result.status } : item;
-                });
-                setStoreValue("pharmacyInventory", nextInventory);
-                persistStoreTable('pharmacyInventory', nextInventory);
-                setInventory(nextInventory);
-                const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === approval.prescription_id ? { ...item, status: 'dispensed' } : item);
-                persistStoreTable('prescriptions', nextPrescriptions);
+                if (!safetyChecksReady) return setStockMessage('Verification is paused until medication interaction and dose checks are active.');
+                setDispensing(true);
+                try {
+                    const { data, error } = await client.rpc('approve_controlled_drug_dispense', { p_approval_id: approval.id });
+                    if (error || data?.status !== 'dispensed') { setStockMessage(error?.message || 'The verified dispense did not complete.'); return; }
+                    setControlledApprovals((rows) => rows.filter((row) => row.id !== approval.id));
+                    await refreshInventory();
+                    const nextPrescriptions = (getStoreValue("prescriptions") || []).map((item) => item.id === approval.prescription_id ? { ...item, status: 'dispensed' } : item);
+                    setStoreValue('prescriptions', nextPrescriptions);
+                    setStockMessage('Controlled medicine dispensed and stock ledger refreshed.');
+                } catch (error) {
+                    setStockMessage(error?.message || 'The verified dispense did not complete.');
+                } finally {
+                    setDispensing(false);
+                }
             };
 
             return (
@@ -697,19 +720,22 @@ const AssetMaintenancePanel = () => {
                             <p className="text-slate-500 mt-1">Medication dispensing and inventory</p>
                         </div>
                         <div className="flex gap-2">
-                            <Button variant="secondary" icon={Icons.ScanLine} onClick={() => document.getElementById('pharmacy-inventory-search')?.focus()}>Scan / Enter Barcode</Button>
+                            <Button variant="secondary" icon={Icons.RefreshCw} onClick={refreshInventory}>Refresh inventory</Button>
+                            <Button variant="secondary" icon={Icons.ScanLine} onClick={focusInventorySearch}>Scan / Enter Barcode</Button>
                             {canManageInventory && <Button variant="primary" icon={Icons.Plus} onClick={handleAddStock}>Manage Stock Ledger</Button>}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard title="Total Items" value={inventory.length} icon={Icons.Package} color="medical" />
-                        <StatCard title="Low Stock" value={inventory.filter(d => Number(d.stockQuantity || 0) <= Number(d.reorderLevel || 0)).length} icon={Icons.AlertCircle} color="amber" />
+                        <StatCard title="Low Stock" value={inventory.filter((item) => item.ledgerLinked && Number(item.stockQuantity) <= Number(item.reorderLevel || 0)).length} icon={Icons.AlertCircle} color="amber" />
                         <StatCard title="Expiring Soon" value={expiringSoonCount} icon={Icons.Clock} color="red" />
                         <StatCard title="Inventory Value" value={formatCurrency(inventoryValue)} icon={Icons.DollarSign} color="emerald" />
                     </div>
 
                     <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+                    {stockMessage && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">{stockMessage}</p>}
 
                     {activeTab === 'dispensary' && (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -725,29 +751,29 @@ const AssetMaintenancePanel = () => {
                                         { key: 'medications', title: 'Structured items', render: (row) => (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''} · ${item.quantity} · lot selected FEFO`).join('; ') || 'No structured items' },
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
-                                    data={getStoreValue("prescriptions").filter(p => p.status === 'active')}
+                                    data={(getStoreValue("prescriptions") || []).filter(p => p.status === 'active')}
                                 actions={(row) => (
-                                        <Button variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
+                                        canManageInventory && <Button disabled={dispensing || !safetyChecksReady} variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>
                                     )}
                                 />
-                                {controlledApprovals.length > 0 && <div className="mt-6"><h3 className="mb-3 font-semibold text-slate-800">Controlled medicine verification</h3><DataTable columns={[
+                                {controlledApprovals.length > 0 && canManageInventory && <div className="mt-6"><h3 className="mb-3 font-semibold text-slate-800">Controlled medicine verification</h3><DataTable columns={[
                                     { key: 'prescription_id', title: 'Prescription', className: 'font-mono text-xs' },
                                     { key: 'patient', title: 'Patient', render: (row) => { const patient = getStoreValue("patients").find((item) => item.id === row.prescriptions?.patient_id); return patient ? `${patient.firstName} ${patient.lastName}` : 'Patient record'; } },
                                     { key: 'requested_by', title: 'Requested by', render: (row) => getStoreValue("users").find((member) => member.id === row.requested_by)?.name || 'Pharmacy staff' },
                                     { key: 'created_at', title: 'Requested' }
-                                ]} data={controlledApprovals} actions={(row) => <Button variant="primary" size="sm" onClick={() => handleVerifyControlledDispense(row)}>Verify & dispense</Button>} /></div>}
+                                ]} data={controlledApprovals} actions={(row) => <Button disabled={dispensing || !safetyChecksReady} variant="primary" size="sm" onClick={() => handleVerifyControlledDispense(row)}>Verify & dispense</Button>} /></div>}
                             </Card>
                             <Card title="Quick Dispense">
                                 <div className="space-y-4">
-                                    <SearchBar placeholder="Search medication..." />
+                                    <SearchBar value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="Search medication..." ariaLabel="Search quick dispense inventory" />
                                     <div className="space-y-2">
-                                        {inventory.slice(0, 5).map(drug => (
+                                        {inventory.filter((drug) => `${drug.name || ''} ${drug.genericName || ''} ${drug.barcode || ''}`.toLowerCase().includes(quickSearch.toLowerCase())).slice(0, 5).map(drug => (
                                             <div key={drug.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
                                                 <div>
                                                     <p className="text-sm font-medium text-slate-900">{drug.name}</p>
                                                     <p className="text-xs text-slate-500">{drug.category} - Stock: {drug.stockQuantity}</p>
                                                 </div>
-                                                {canManageInventory && <Button variant="ghost" size="sm" icon={Icons.Plus} aria-label="Add stock" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }))} />}
+                                                <Button variant="ghost" size="sm" aria-label={`View ${drug.name} in inventory`} onClick={() => focusInventorySearch(drug.name)}>View stock</Button>
                                             </div>
                                         ))}
                                     </div>
@@ -780,23 +806,18 @@ const AssetMaintenancePanel = () => {
                                     )},
                                     { key: 'unitPrice', title: 'Price', render: (row) => formatCurrency(row.unitPrice) },
                                     { key: 'expiryDate', title: 'Expiry', render: (row) => {
-                                        const expiry = new Date(row.expiryDate);
+                                        const expiry = row.expiryDate ? new Date(row.expiryDate) : null;
                                         const today = new Date();
-                                        const diff = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+                                        const diff = expiry ? Math.ceil((expiry - today) / (1000 * 60 * 60 * 24)) : null;
                                         return (
-                                            <span className={diff < 90 ? 'text-red-600 font-medium' : diff < 180 ? 'text-amber-600' : 'text-slate-600'}>
-                                                {formatDate(row.expiryDate)}
+                                            <span className={diff !== null && diff < 0 ? 'text-red-600 font-medium' : diff !== null && diff < 90 ? 'text-amber-600' : 'text-slate-600'}>
+                                                {row.expiryDate ? formatDate(row.expiryDate) : 'Not recorded'}
                                             </span>
                                         );
                                     }},
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'low_stock' ? 'warning' : row.status === 'expired' ? 'danger' : 'success'}>{row.status}</Badge> }
                                 ]}
                                 data={filteredDrugs}
-                                actions={(row) => (
-                                    <>
-                                        <Button variant="ghost" size="sm" icon={Icons.Edit} />
-                                    </>
-                                )}
                             />
                         </Card>
                     )}
@@ -814,55 +835,27 @@ const AssetMaintenancePanel = () => {
                                         const doctor = getStoreValue("users").find(u => u.id === row.doctorId);
                                         return doctor?.name || 'Unknown';
                                     }},
-                                    { key: 'date', title: 'Date', render: (row) => formatDate(row.date) },
+                                    { key: 'date', title: 'Date', render: (row) => formatDate(row.prescriptionDate || row.date) },
                                     { key: 'diagnosis', title: 'Diagnosis' },
                                     { key: 'priority', title: 'Priority', render: (row) => <Badge variant={row.priority === 'emergency' ? 'danger' : row.priority === 'urgent' ? 'warning' : 'default'}>{row.priority || 'routine'}</Badge> },
-                                    { key: 'medications', title: 'Medication orders', render: (row) => (row.medications || []).map((medication) => `${medication.name} × ${medication.quantity}`).join(', ') || 'No items' },
+                                    { key: 'medications', title: 'Medication orders', render: (row) => (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''} × ${item.quantity}`).join(', ') || (row.medications || []).map((medication) => `${medication.name} × ${medication.quantity}`).join(', ') || 'No items' },
                                     { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : row.status === 'dispensed' ? 'info' : 'default'}>{row.status}</Badge> }
                                 ]}
                                 data={getStoreValue("prescriptions")}
-                                actions={(row) => <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'prescription', id: row.id, patientId: row.patientId, title: 'Prescription', author: getStoreValue("users").find((entry) => entry.id === row.doctorId)?.name, fields: [['Diagnosis', row.diagnosis], ['Date', row.prescriptionDate], ['Medications', row.medications], ['Notes', row.notes]] }).catch((error) => notifyPersistenceFailure('print prescription', error))}>Print</Button>}
+                                actions={(row) => <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({ type: 'prescription', id: row.id, patientId: row.patientId, title: 'Prescription', author: getStoreValue("users").find((entry) => entry.id === row.doctorId)?.name, fields: [['Diagnosis', row.diagnosis], ['Date', row.prescriptionDate], ['Medications', (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''}, quantity ${item.quantity}, ${item.dose} ${item.dose_unit || ''}, ${item.frequency}`).join('; ') || row.medications], ['Notes', row.notes]] }).catch((error) => notifyPersistenceFailure('print prescription', error))}>Print</Button>}
                             />
                         </Card>
                     )}
 
                     {activeTab === 'purchase' && (
-                        <Card title="Purchase Orders">
+                            <Card title="Purchase Orders">
                             <div className="text-center py-12">
                                 <Icons.ShoppingCart size={48} className="mx-auto text-slate-300 mb-4" />
-                                <p className="text-slate-500">No active purchase orders</p>
-                                <Button variant="primary" icon={Icons.Plus} className="mt-4" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'procurement' }))}>Create PO</Button>
+                                    <p className="text-slate-500">Purchase orders, approvals, and receipts are managed in the facility procurement workspace.</p>
+                                    <Button variant="primary" icon={Icons.Plus} className="mt-4" onClick={() => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'procurement' }))}>Open Procurement</Button>
                             </div>
                         </Card>
                     )}
-
-                    <Modal
-                        isOpen={showAddStock}
-                        onClose={() => { setShowAddStock(false); setStockMessage(''); }}
-                        title="Add Medical Stock"
-                        size="md"
-                        footer={
-                            <div className="flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => { setShowAddStock(false); setStockMessage(''); }}>Cancel</Button>
-                                <Button variant="primary" icon={Icons.Save} onClick={handleAddStock}>Save Stock</Button>
-                            </div>
-                        }
-                    >
-                        <div className="grid grid-cols-2 gap-4">
-                            <Select label="Formulary item" value={stockForm.formularyItemId} onChange={(e) => { const selected = formulary.find((item) => item.id === e.target.value); setStockForm((prev) => ({ ...prev, formularyItemId: e.target.value, name: selected?.generic_name || '', genericName: selected?.generic_name || '' })); }} options={[{value:'',label:formulary.length ? 'Select formulary item...' : 'No formulary items loaded'},...formulary.map((item) => ({value:item.id,label:`${item.generic_name} · ${item.strength} ${item.form} · ${item.route}${item.controlled ? ' · controlled' : ''}`}))]} className="col-span-2" />
-                            <Input label="Stock display name" value={stockForm.name} onChange={(e) => setStockForm(prev => ({ ...prev, name: e.target.value }))} className="col-span-2" />
-                            <Input label="Generic Name" value={stockForm.genericName} disabled className="col-span-2" />
-                            <Input label="Category" value={stockForm.category} onChange={(e) => setStockForm(prev => ({ ...prev, category: e.target.value }))} />
-                            <Input label="Stock Qty" type="number" value={stockForm.stockQuantity} onChange={(e) => setStockForm(prev => ({ ...prev, stockQuantity: e.target.value }))} />
-                            <Input label="Reorder Level" type="number" value={stockForm.reorderLevel} onChange={(e) => setStockForm(prev => ({ ...prev, reorderLevel: e.target.value }))} />
-                            <Input label="Unit Price" type="number" value={stockForm.unitPrice} onChange={(e) => setStockForm(prev => ({ ...prev, unitPrice: e.target.value }))} />
-                            <Input label="Expiry Date" type="date" value={stockForm.expiryDate} onChange={(e) => setStockForm(prev => ({ ...prev, expiryDate: e.target.value }))} />
-                            <Input label="Batch / Lot Number" value={stockForm.batchNumber} onChange={(e) => setStockForm(prev => ({ ...prev, batchNumber: e.target.value }))} />
-                            <Input label="Barcode" value={stockForm.barcode} onChange={(e) => setStockForm(prev => ({ ...prev, barcode: e.target.value }))} />
-                            <Input label="Supplier" value={stockForm.supplier} onChange={(e) => setStockForm(prev => ({ ...prev, supplier: e.target.value }))} className="col-span-2" />
-                            {stockMessage && <p role="alert" className="col-span-2 text-sm text-red-700">{stockMessage}</p>}
-                        </div>
-                    </Modal>
                 </div>
             );
         };
