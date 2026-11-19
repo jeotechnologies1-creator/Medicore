@@ -934,7 +934,19 @@
                         sitekey: siteKey,
                         callback: (token) => { setCaptchaToken(token); setCaptchaError(''); },
                         'expired-callback': () => setCaptchaToken(''),
-                        'error-callback': () => { setCaptchaToken(''); setCaptchaError('Turnstile verification failed. Refresh the page and try again.'); }
+                        'error-callback': (errorCode) => {
+                            setCaptchaToken('');
+                            const code = String(errorCode || '').trim();
+                            const message = code === '110200' || code === '400021'
+                                ? 'This site is not authorized for the Turnstile key. Add medicore-pi-seven.vercel.app to that key’s allowed hostnames.'
+                                : ['110100', '110110', '400020', '400070'].includes(code)
+                                    ? `The Turnstile site key is invalid or disabled${code ? ` (code ${code})` : ''}. Check the Production VITE_TURNSTILE_SITE_KEY.`
+                                    : code === '200500'
+                                        ? 'The Turnstile challenge could not load. Check browser extensions, network access, and the Content Security Policy for challenges.cloudflare.com.'
+                                        : `Turnstile verification failed${code ? ` (code ${code})` : ''}. Check the site key, allowed hostname, and network access, then refresh.`;
+                            setCaptchaError(message);
+                            return true;
+                        }
                     });
                     captchaWidgetId.current = widgetId;
                     if (timer) window.clearInterval(timer);
