@@ -1009,16 +1009,17 @@
             return (
                 <main className="login-page min-h-screen flex items-center justify-center px-4 py-8">
                     <div className="login-content w-full max-w-md">
-                        <div className="text-center mb-8">
-                            <div className="login-brand-mark inline-flex items-center justify-center w-16 h-16 rounded-2xl text-white mb-4">
-                                <Icons.HeartPulse size={32} />
-                            </div>
-                            <p className="login-eyebrow">Secure care operations</p>
-                            <h1 className="text-3xl font-bold text-slate-900">OneMed EMR</h1>
-                            <p className="text-slate-600 mt-2">Hospital Management System</p>
-                        </div>
-                        
-                        <Card className="login-card">
+                        <div className="login-bg-circle login-bg-one" aria-hidden="true" />
+                        <div className="login-bg-circle login-bg-two" aria-hidden="true" />
+                        <div className="login-bg-circle login-bg-three" aria-hidden="true" />
+                        <Card className="login-card auth-wrapper" noPadding>
+                            <div className="login-card-content">
+                                <div className="login-heading text-center">
+                                    <div className="login-brand-mark" aria-hidden="true"><Icons.Lock size={28} /></div>
+                                    <p className="login-eyebrow">OneMed EMR</p>
+                                    <h1>{passwordSetupMode ? (recoveryMode ? 'Reset password' : 'Welcome') : mfaGate ? (mfaGate.mode === 'challenge' ? 'Verify your authenticator' : 'Secure your account') : 'Welcome'}</h1>
+                                    <p className="login-subtitle">{passwordSetupMode ? 'Complete your account setup' : mfaGate ? 'Complete verification to continue' : 'Log in to continue your journey'}</p>
+                                </div>
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 {error && (
                                     <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-800">
@@ -1076,18 +1077,19 @@
                                     </div>
                                 ) : <>
                                 <Input
-                                    label="Email"
-                                    placeholder="Enter your email"
+                                    label="Email Address"
+                                    placeholder="Email Address"
                                     type="email"
                                     autoComplete="username"
                                     inputMode="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     icon={Icons.Mail}
+                                    className="login-email-field login-field"
                                     required
                                 />
                                 <div className="-mt-2 text-xs text-slate-600">Use the email and password for your hospital account.</div>
-                                <div>
+                                <div className="login-field">
                                     <label htmlFor="onemed-login-password" className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
                                     <div className="relative">
                                         <input
@@ -1096,7 +1098,7 @@
                                             autoComplete="current-password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            placeholder="Enter your password"
+                                            placeholder="Password"
                                             className="w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all pl-4 pr-12 py-2.5 text-sm"
                                             required
                                         />
@@ -1124,8 +1126,9 @@
                                 {captchaError && <p role="status" className="text-center text-xs text-red-700">{captchaError}</p>}
                                 </>}
                             </form>
+                            </div>
                         </Card>
-                        <p className="mt-5 text-center text-sm"><a className="text-medical-700 underline" href="/refund-policy.html">Refund policy</a><span className="px-2 text-slate-400">·</span><a className="text-medical-700 underline" href="/privacy-notice.html">Privacy notice</a><span className="px-2 text-slate-400">·</span><a className="text-medical-700 underline" href="/terms.html">Terms</a></p>
+                        <p className="login-footer mt-5 text-center text-sm"><a href="/refund-policy.html">Refund policy</a><span aria-hidden="true">·</span><a href="/privacy-notice.html">Privacy notice</a><span aria-hidden="true">·</span><a href="/terms.html">Terms</a></p>
 
                     </div>
                 </main>
