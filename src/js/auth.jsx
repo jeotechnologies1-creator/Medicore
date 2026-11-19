@@ -1015,10 +1015,10 @@
                         <Card className="login-card auth-wrapper" noPadding>
                             <div className="login-card-content">
                                 <div className="login-heading text-center">
-                                    <div className="login-brand-mark" aria-hidden="true"><Icons.Lock size={28} /></div>
-                                    <p className="login-eyebrow">OneMed EMR</p>
-                                    <h1>{passwordSetupMode ? (recoveryMode ? 'Reset password' : 'Welcome') : mfaGate ? (mfaGate.mode === 'challenge' ? 'Verify your authenticator' : 'Secure your account') : 'Welcome'}</h1>
-                                    <p className="login-subtitle">{passwordSetupMode ? 'Complete your account setup' : mfaGate ? 'Complete verification to continue' : 'Log in to continue your journey'}</p>
+                                    <div className="login-brand-mark" aria-hidden="true"><Icons.HeartPulse size={28} /></div>
+                                    <p className="login-eyebrow">Secure care operations</p>
+                                    <h1>OneMed EMR</h1>
+                                    <p className="login-subtitle">Hospital Management System</p>
                                 </div>
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 {error && (
@@ -1077,8 +1077,8 @@
                                     </div>
                                 ) : <>
                                 <Input
-                                    label="Email Address"
-                                    placeholder="Email Address"
+                                    label="Email"
+                                    placeholder="Enter your email"
                                     type="email"
                                     autoComplete="username"
                                     inputMode="email"
@@ -1098,7 +1098,7 @@
                                             autoComplete="current-password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            placeholder="Password"
+                                            placeholder="Enter your password"
                                             className="w-full rounded-lg border border-slate-300 focus:border-medical-500 focus:ring-2 focus:ring-medical-200 focus:ring-opacity-50 outline-none transition-all pl-4 pr-12 py-2.5 text-sm"
                                             required
                                         />

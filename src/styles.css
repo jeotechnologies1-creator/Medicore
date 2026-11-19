@@ -611,15 +611,23 @@
 /* Login-only neumorphic skin. Authentication state, handlers, and the rest of
    the application keep their existing styles and behavior. */
 .login-page {
-    --bg: #e6eaf0;
-    --shadow-dark: #c3c9d4;
-    --shadow-light: #ffffff;
-    --accent: #1a6fe0;
-    --text-dark: #2b2f3a;
-    --text-muted: #8b91a0;
-    --raised: 8px 8px 18px var(--shadow-dark), -8px -8px 18px var(--shadow-light);
-    --raised-sm: 5px 5px 11px var(--shadow-dark), -5px -5px 11px var(--shadow-light);
-    --inset: inset 4px 4px 9px var(--shadow-dark), inset -4px -4px 9px var(--shadow-light);
+    --neu-bg: #e7ebf1;
+    --neu-shadow-dark: rgba(163, 177, 198, .62);
+    --neu-shadow-light: rgba(255, 255, 255, .92);
+    --neu-raised: 12px 12px 28px var(--neu-shadow-dark), -12px -12px 28px var(--neu-shadow-light);
+    --neu-inset: inset 6px 6px 12px rgba(163, 177, 198, .56), inset -6px -6px 12px rgba(255, 255, 255, .92);
+    --neu-text: #2d3748;
+    --neu-muted: #596579;
+    --neu-accent: #2563eb;
+    --bg: var(--neu-bg);
+    --shadow-dark: var(--neu-shadow-dark);
+    --shadow-light: var(--neu-shadow-light);
+    --accent: var(--neu-accent);
+    --text-dark: var(--neu-text);
+    --text-muted: var(--neu-muted);
+    --raised: var(--neu-raised);
+    --raised-sm: 6px 6px 14px var(--neu-shadow-dark), -6px -6px 14px var(--neu-shadow-light);
+    --inset: var(--neu-inset);
     position: relative;
     isolation: isolate;
     min-height: 100vh;
@@ -629,17 +637,18 @@
     padding: 2rem 1rem;
     background: var(--bg);
     color: var(--text-dark);
-    font-family: 'Poppins', var(--font-body), sans-serif;
+    font-family: var(--font-body), system-ui, sans-serif;
 }
 .login-content {
-    width: min(380px, 90vw);
-    max-width: 90vw;
+    width: min(440px, calc(100vw - 2rem));
+    max-width: 440px;
     margin: auto;
+    position: relative;
     z-index: 1;
 }
 .login-bg-circle {
     position: fixed;
-    z-index: -1;
+    z-index: 0;
     display: block;
     aspect-ratio: 1;
     border-radius: 50%;
@@ -648,28 +657,28 @@
     pointer-events: none;
     animation: login-float 7s ease-in-out infinite alternate;
 }
-.login-bg-one { top: 4vh; left: 1.5vw; width: 20vw; max-width: 200px; animation-duration: 8s; }
-.login-bg-two { top: 24vh; left: 81vw; width: 5.5vw; max-width: 56px; animation-duration: 6s; }
-.login-bg-three { right: 3vw; bottom: 10vh; width: 12.5vw; max-width: 125px; animation-duration: 9s; }
+.login-bg-one { top: 4vh; left: -2vw; width: clamp(120px, 18vw, 200px); animation-duration: 8s; }
+.login-bg-two { top: 23vh; right: 7vw; width: clamp(42px, 5vw, 58px); animation-duration: 6s; }
+.login-bg-three { right: 2vw; bottom: 8vh; width: clamp(88px, 12vw, 132px); animation-duration: 9s; }
 @keyframes login-float { from { transform: translateY(-10px); } to { transform: translateY(10px); } }
 .login-card,
 .theme-dark .login-page .login-card {
-    min-height: 580px;
+    min-height: 0;
     overflow: visible;
     border: 0 !important;
-    border-radius: 38px !important;
+    border-radius: 32px !important;
     background: var(--bg) !important;
-    box-shadow: 14px 14px 34px var(--shadow-dark), -14px -14px 34px var(--shadow-light) !important;
+    box-shadow: var(--neu-raised) !important;
     animation: login-card-enter 700ms ease-out both;
 }
 .login-card::before { display: none !important; }
-.theme-dark .login-page { background: var(--bg) !important; }
-.login-card-content { padding: 2.25rem 2.25rem 2rem; }
-.login-heading { margin-bottom: 1.65rem; }
+.theme-dark .login-page { background: var(--neu-bg) !important; }
+.login-card-content { padding: 2.25rem 2.5rem 2rem; }
+.login-heading { margin-bottom: 1.45rem; }
 .login-brand-mark {
     display: grid;
-    width: 68px;
-    height: 68px;
+    width: 62px;
+    height: 62px;
     place-items: center;
     margin: 0 auto 1rem;
     border-radius: 50%;
@@ -677,14 +686,13 @@
     color: var(--accent);
     box-shadow: var(--raised-sm);
 }
-.login-eyebrow { margin: 0 0 .35rem; color: var(--text-muted); font-size: .62rem; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; }
+.login-eyebrow { margin: 0 0 .35rem; color: var(--accent); font-size: .62rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
 .login-heading h1 { margin: 0; color: var(--text-dark) !important; font-size: 1.7rem; font-weight: 700; line-height: 1.25; }
 .login-subtitle { margin: .45rem 0 0; color: var(--text-muted) !important; font-size: .7rem; }
 .login-card form { display: flex; flex-direction: column; gap: 1rem; }
 .login-card form > * { margin-top: 0 !important; }
 .login-card .login-field > label,
 .login-card .login-email-field > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-.login-card .login-email-field > div > div { display: none; }
 .login-card input:not([type="checkbox"]):not([type="radio"]),
 .theme-dark .login-page .login-card input:not([type="checkbox"]):not([type="radio"]) {
     width: 100%;
@@ -693,16 +701,21 @@
     border-radius: 14px !important;
     background: var(--bg) !important;
     box-shadow: var(--inset) !important;
-    padding: 0 20px;
+    padding: 0 18px;
     color: var(--text-dark) !important;
-    font: 400 .78rem 'Poppins', var(--font-body), sans-serif;
+    font: 400 .83rem var(--font-body), system-ui, sans-serif;
     outline: none !important;
     transition: box-shadow .3s ease, background-color .3s ease;
 }
 .login-card input::placeholder { color: var(--text-muted); opacity: 1; }
-.login-card input:focus {
-    background: #e8edf5 !important;
-    box-shadow: inset 5px 5px 10px #c3c9d4, inset -5px -5px 10px #fff, 0 0 0 2px rgb(26 111 224 / 14%) !important;
+.login-card .login-email-field input { padding-left: 3rem !important; }
+.login-card #onemed-login-password { padding-right: 3.25rem !important; }
+.login-card input:focus-visible:not([type="checkbox"]),
+.login-card button:focus-visible {
+    background: var(--neu-bg) !important;
+    box-shadow: var(--neu-inset), 0 0 0 3px var(--neu-accent) !important;
+    outline: 2px solid var(--neu-accent) !important;
+    outline-offset: 3px;
 }
 .login-card button.bg-medical-600,
 .login-card button.bg-medical-600:hover,
@@ -716,26 +729,65 @@
     background: var(--bg) !important;
     box-shadow: var(--raised-sm) !important;
     color: var(--accent) !important;
-    font: 700 .85rem 'Poppins', var(--font-body), sans-serif;
+    font: 700 .9rem var(--font-body), system-ui, sans-serif;
     transition: transform .3s ease, box-shadow .3s ease;
 }
 .login-card button.bg-medical-600:hover { transform: translateY(-2px); box-shadow: 7px 9px 16px var(--shadow-dark), -7px -9px 16px var(--shadow-light) !important; }
 .login-card button.bg-medical-600:active { transform: translateY(0); box-shadow: var(--inset) !important; }
+.login-card button.bg-medical-600:disabled { opacity: .58; box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light) !important; cursor: not-allowed; transform: none; }
 .login-card .password-toggle { right: .4rem; min-height: 2.5rem; color: #5a606e !important; }
 .login-card label { color: var(--text-dark); }
-.login-card input[type="checkbox"] { accent-color: var(--accent); }
+.login-card input[type="checkbox"] {
+    appearance: none;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--neu-bg);
+    box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+    cursor: pointer;
+}
+.login-card input[type="checkbox"]:checked { background: var(--accent); box-shadow: none; }
+.login-card input[type="checkbox"]:checked::after { content: ""; display: block; width: 4px; height: 7px; margin: 2px 0 0 5px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.login-card input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .login-card .login-field { position: relative; }
+.login-page #onemed-turnstile-widget { width: 100%; margin: .25rem auto 0; }
+.login-card .login-email-field svg { color: #66758b; }
 .login-card .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
 .login-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: .6rem; color: var(--text-muted); font-size: .65rem; }
 .login-footer a { color: var(--text-muted); text-decoration: none; }
 .login-footer a:hover { color: var(--accent); text-decoration: underline; }
+.login-footer a:focus-visible { color: var(--accent); outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 @keyframes login-card-enter { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 480px) {
     .login-page { align-items: center; padding: max(1.25rem, env(safe-area-inset-top)) 1rem max(1.25rem, env(safe-area-inset-bottom)); }
-    .login-content { width: min(90vw, 360px); max-width: 360px; }
-    .login-card, .theme-dark .login-page .login-card { min-height: 0; border-radius: 30px !important; }
-    .login-card-content { padding: 1.7rem 1.4rem 1.5rem; }
+    .login-content { width: min(calc(100vw - 2rem), 400px); max-width: 400px; }
+    .login-card, .theme-dark .login-page .login-card { min-height: 0; border-radius: 28px !important; }
+    .login-card-content { padding: 1.6rem 1.5rem 1.45rem; }
+    .login-bg-circle { opacity: .5; }
+    .login-bg-one { width: 100px; top: 1vh; left: -38px; }
+    .login-bg-two { width: 34px; top: 10vh; right: 3vw; }
+    .login-bg-three { width: 72px; right: -20px; bottom: 2vh; }
 }
+@media (max-width: 360px) {
+    .login-card-content { padding: 1.35rem 1.15rem 1.25rem; }
+    .login-bg-circle { display: none; }
+}
+body.theme-dark .login-page {
+    --neu-bg: #1f2430;
+    --neu-shadow-dark: rgba(0, 0, 0, .5);
+    --neu-shadow-light: rgba(255, 255, 255, .055);
+    --neu-text: #e7eaf0;
+    --neu-muted: #c0c7d4;
+    --neu-accent: #76a9ff;
+    color-scheme: dark;
+}
+body.theme-dark .login-card .login-field > label,
+body.theme-dark .login-card .login-email-field > label { color: var(--neu-text); }
+body.theme-dark .login-card input:not([type="checkbox"]):not([type="radio"]) { color: var(--neu-text) !important; }
+body.theme-dark .login-card .password-toggle { color: var(--neu-muted) !important; }
 @media (prefers-reduced-motion: reduce) {
     .login-bg-circle { animation: none; }
     .login-card { animation: none; }
