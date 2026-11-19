@@ -616,7 +616,7 @@
     --shadow-light: #ffffff;
     --accent: #1a6fe0;
     --text-dark: #2b2f3a;
-    --text-muted: #737b8c;
+    --text-muted: #8b91a0;
     --raised: 8px 8px 18px var(--shadow-dark), -8px -8px 18px var(--shadow-light);
     --raised-sm: 5px 5px 11px var(--shadow-dark), -5px -5px 11px var(--shadow-light);
     --inset: inset 4px 4px 9px var(--shadow-dark), inset -4px -4px 9px var(--shadow-light);
@@ -693,7 +693,7 @@
     border-radius: 14px !important;
     background: var(--bg) !important;
     box-shadow: var(--inset) !important;
-    padding: 0 1rem;
+    padding: 0 20px;
     color: var(--text-dark) !important;
     font: 400 .78rem 'Poppins', var(--font-body), sans-serif;
     outline: none !important;
@@ -735,9 +735,6 @@
     .login-content { width: min(90vw, 360px); max-width: 360px; }
     .login-card, .theme-dark .login-page .login-card { min-height: 0; border-radius: 30px !important; }
     .login-card-content { padding: 1.7rem 1.4rem 1.5rem; }
-    .login-bg-one { width: 18vw; }
-    .login-bg-two { width: 7vw; }
-    .login-bg-three { width: 14vw; }
 }
 @media (prefers-reduced-motion: reduce) {
     .login-bg-circle { animation: none; }
