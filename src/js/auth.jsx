@@ -306,7 +306,8 @@
             const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(() => {
                 const query = new URLSearchParams(window.location.search);
                 const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-                return query.get('type') === 'recovery' || hash.get('type') === 'recovery';
+                return globalThis.__ONEMED_AUTH_LINK_TYPE__ === 'recovery'
+                    || query.get('type') === 'recovery' || hash.get('type') === 'recovery';
             });
             const [sessionSecurity, setSessionSecurity] = useState({ timeoutMinutes: 30, autoLogoutIdle: true });
 
@@ -789,12 +790,14 @@
             const [inviteMode, setInviteMode] = useState(() => {
                 const params = new URLSearchParams(window.location.search);
                 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-                return params.get('type') === 'invite' || hashParams.get('type') === 'invite' || hashParams.get('error_code') === 'otp_expired';
+                return globalThis.__ONEMED_AUTH_LINK_TYPE__ === 'invite'
+                    || params.get('type') === 'invite' || hashParams.get('type') === 'invite' || hashParams.get('error_code') === 'otp_expired';
             });
             const [recoveryMode, setRecoveryMode] = useState(() => {
                 const params = new URLSearchParams(window.location.search);
                 const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-                return params.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
+                return globalThis.__ONEMED_AUTH_LINK_TYPE__ === 'recovery'
+                    || params.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
             });
             const [inviteSessionReady, setInviteSessionReady] = useState(false);
             const [inviteSessionChecked, setInviteSessionChecked] = useState(false);
@@ -875,13 +878,14 @@
                         : 'This invitation link is invalid or expired. Ask your administrator to send a new invitation.');
                     const { error: updateError } = await client.auth.updateUser({ password });
                     if (updateError) throw updateError;
+                    const { data: profile, error: profileError } = await client.from('profiles').select('*').eq('auth_user_id', sessionData.session.user.id).maybeSingle();
+                    if (profileError || !profile || profile.status !== 'active') throw new Error('Your account could not be verified. Contact your administrator.');
                     setInviteMode(false);
                     setRecoveryMode(false);
+                    globalThis.__ONEMED_AUTH_LINK_TYPE__ = '';
                     window.history.replaceState({}, document.title, window.location.pathname);
                     setPassword('');
                     setConfirmPassword('');
-                    const { data: profile, error: profileError } = await client.from('profiles').select('*').eq('auth_user_id', sessionData.session.user.id).maybeSingle();
-                    if (profileError || !profile || profile.status !== 'active') throw new Error('Your account could not be verified. Contact your administrator.');
                     if (recoveryMode) {
                         if (await completePasswordRecovery(profile)) onLogin();
                         return;

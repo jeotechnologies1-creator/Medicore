@@ -19,6 +19,17 @@ Object.assign(globalThis, {
 });
 globalThis.__ONEMED_CAPTCHA_SITE_KEY__ = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
+// Supabase may consume the auth callback URL while restoring the invite
+// session. Preserve its flow type first so the password setup screen can take
+// precedence over MFA enrollment on the initial render.
+const initialAuthQuery = new URLSearchParams(window.location.search);
+const initialAuthHash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+globalThis.__ONEMED_AUTH_LINK_TYPE__ = initialAuthQuery.get('type')
+  || initialAuthHash.get('type')
+  || initialAuthQuery.get('token_type')
+  || initialAuthHash.get('token_type')
+  || '';
+
 // Keep diagnostics opt-in and text-only in development. Supabase errors can
 // include request payloads, so never forward object arguments to the console.
 for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
