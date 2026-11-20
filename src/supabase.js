@@ -143,6 +143,12 @@ const OneMedSupabase = (() => {
             return {};
         }
 
+        // Public login screens should not request protected settings with the
+        // anonymous key. Apart from generating expected 401s, those requests
+        // add latency and obscure actual authentication/Turnstile failures.
+        const { data: { session } = {} } = await client.auth.getSession();
+        if (!session?.user) return { requireMfa: true };
+
         const [{ data, error }, { data: mfaSetting, error: mfaError }] = await Promise.all([
             client.from('system_settings').select('*').eq('setting_key', 'hospital_core_settings').maybeSingle(),
             client.from('system_settings').select('setting_value').eq('setting_key', 'mfa_enforcement').maybeSingle()

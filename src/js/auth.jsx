@@ -613,6 +613,7 @@
             }, [gateForMfa]);
 
             useEffect(() => {
+                if (!user?.id) return undefined;
                 const hydrateRoleMatrix = async () => {
                     try {
                         if (window.OneMedSupabase && typeof window.OneMedSupabase.loadSystemSettings === 'function') {
@@ -629,7 +630,8 @@
                 };
 
                 hydrateRoleMatrix();
-            }, []);
+                return undefined;
+            }, [user?.id]);
 
             useEffect(() => {
                 const refreshAccessPolicy = (event) => {
