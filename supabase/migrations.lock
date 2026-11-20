@@ -94,7 +94,8 @@
     "20261118000091_pharmacy_nafdac_registration_search.sql": "7f05482c1543dfa3237357fe5a996bdeac6455525d52fb62ee5bb71dd3815223",
     "20261118000092_password_reset_rate_limit_scope.sql": "323660a4ccbd7805a898fdb1651bcf9d0424ba48b93850e20f92f9cd9c91b5dd",
     "20261118000093_mfa_24_hour_device_window.sql": "0b81efcdc80d05b30e2c99edcda248cdf3797f9f35c76482bde2e5f75f5f1614",
-    "20261119000094_pharmacy_order_alert_realtime.sql": "eb997609f9d68d283d567b59fbc82ffb135e0e9e3e0430cbc78a5dd29775ba72"
+    "20261119000094_pharmacy_order_alert_realtime.sql": "eb997609f9d68d283d567b59fbc82ffb135e0e9e3e0430cbc78a5dd29775ba72",
+    "20261120000095_pharmacy_prescription_billing_and_sales.sql": "0200d5105e12b36786132c176410a4f998d0af73e9fc34183b398478c801e0b7"
   },
   "unlocks": []
 }

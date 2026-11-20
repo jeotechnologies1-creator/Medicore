@@ -586,6 +586,15 @@ const AssetMaintenancePanel = () => {
             const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
             const announcedPrescriptionIds = useRef(new Set());
             const pharmacyAudioContext = useRef(null);
+            const [patientHistory, setPatientHistory] = useState({ patientId: '', patientName: '', prescriptions: [], staffNames: {} });
+            const [patientHistoryOpen, setPatientHistoryOpen] = useState(false);
+            const [patientHistoryLoading, setPatientHistoryLoading] = useState(false);
+            const [patientHistoryError, setPatientHistoryError] = useState('');
+            const [pharmacyInvoices, setPharmacyInvoices] = useState({});
+            const [invoiceBusyId, setInvoiceBusyId] = useState('');
+            const [salesSummary, setSalesSummary] = useState(null);
+            const [salesLoading, setSalesLoading] = useState(false);
+            const [salesMessage, setSalesMessage] = useState('');
             const [safetyChecksReady, setSafetyChecksReady] = useState(false);
             const [stockMessage, setStockMessage] = useState('');
             const [queueMessage, setQueueMessage] = useState('');
@@ -597,6 +606,95 @@ const AssetMaintenancePanel = () => {
             const patientIds = [...new Set(prescriptions.map((row) => row.patientId).filter(Boolean))];
             const doctorIds = [...new Set(prescriptions.map((row) => row.doctorId).filter(Boolean))];
             const directoryKey = `${patientIds.join(',')}|${doctorIds.join(',')}`;
+
+            const loadPharmacySales = async () => {
+                if (!client || !facilityId) {
+                    setSalesMessage('Select a facility to load pharmacy sales.');
+                    return;
+                }
+                setSalesLoading(true);
+                setSalesMessage('');
+                try {
+                    const { data, error } = await client.rpc('get_pharmacy_sales', { p_facility_id: facilityId });
+                    if (error) throw error;
+                    setSalesSummary(data || null);
+                } catch (error) {
+                    setSalesMessage(error?.message || 'Pharmacy sales could not be loaded.');
+                } finally {
+                    setSalesLoading(false);
+                }
+            };
+
+            const openPatientPrescriptionHistory = async (prescription) => {
+                setPatientHistoryOpen(true);
+                setPatientHistoryLoading(true);
+                setPatientHistoryError('');
+                setPatientHistory({ patientId: prescription.patient_id || prescription.patientId, patientName: patientNames[prescription.patient_id || prescription.patientId] || 'Patient record', prescriptions: [], staffNames: {} });
+                try {
+                    const patientId = prescription.patient_id || prescription.patientId;
+                    const historyResult = await client.from('prescriptions')
+                        .select('id,patient_id,doctor_id,diagnosis,medications,status,prescription_date,notes,priority,created_at,prescription_items(id,dose,dose_unit,frequency,route,duration,quantity,instructions,formulary_items(generic_name,strength,form))')
+                        .eq('patient_id', patientId)
+                        .order('created_at', { ascending: false });
+                    if (historyResult.error) throw historyResult.error;
+                    const history = historyResult.data || [];
+                    const doctorIds = [...new Set(history.map((row) => row.doctor_id).filter(Boolean))];
+                    const [patientResult, staffResult] = await Promise.all([
+                        client.from('patients').select('first_name,last_name').eq('id', patientId).maybeSingle(),
+                        doctorIds.length ? client.from('profiles').select('id,full_name,email').in('id', doctorIds) : Promise.resolve({ data: [], error: null })
+                    ]);
+                    if (patientResult.error || staffResult.error) throw patientResult.error || staffResult.error;
+                    setPatientHistory({
+                        patientId,
+                        patientName: `${patientResult.data?.first_name || ''} ${patientResult.data?.last_name || ''}`.trim() || 'Patient record',
+                        prescriptions: history,
+                        staffNames: Object.fromEntries((staffResult.data || []).map((staff) => [staff.id, staff.full_name || staff.email || 'Clinical staff']))
+                    });
+                } catch (error) {
+                    setPatientHistoryError(error?.message || 'The patient prescription history could not be loaded.');
+                } finally {
+                    setPatientHistoryLoading(false);
+                }
+            };
+
+            const printPrescriptionCostEstimate = (prescription) => {
+                const items = prescriptionItems[prescription.id] || [];
+                if (!items.length) {
+                    setQueueMessage('Medication details are still loading or unavailable; the cost estimate was not printed.');
+                    return;
+                }
+                const costLines = [];
+                for (const item of items) {
+                    const lot = inventory.filter((candidate) => candidate.formulary_item_id === item.formulary_item_id
+                        && Number(candidate.stockQuantity) >= Number(item.quantity)
+                        && Number(candidate.unitPrice) > 0
+                        && (!candidate.expiryDate || candidate.expiryDate >= formatFacilityDate()))
+                        .sort((left, right) => String(left.expiryDate || '9999-12-31').localeCompare(String(right.expiryDate || '9999-12-31')))[0];
+                    const medicine = item.formulary_items || {};
+                    if (!lot) {
+                        setQueueMessage(`No in-stock priced lot can be found for ${medicine.generic_name || 'a prescribed item'}; no cost estimate was printed.`);
+                        return;
+                    }
+                    const unitPrice = Number(lot.unitPrice);
+                    const quantity = Number(item.quantity);
+                    costLines.push({ item, medicine, quantity, unitPrice, total: unitPrice * quantity });
+                }
+                const total = costLines.reduce((sum, line) => sum + line.total, 0);
+                const author = staffNames[prescription.doctor_id || prescription.doctorId] || user?.name;
+                window.printEMRDocument({
+                    type: 'prescription', id: prescription.id, patientId: prescription.patient_id || prescription.patientId,
+                    title: 'Medication Cost Estimate — Not a Paid Invoice', author,
+                    fields: [
+                        ['Patient', patientNames[prescription.patient_id || prescription.patientId] || 'Patient record'],
+                        ['Prescriber', author || 'Clinical staff'], ['Diagnosis', prescription.diagnosis],
+                        ['Prescription date', formatDate(prescription.prescription_date || prescription.prescriptionDate)],
+                        ['Doctor’s note', prescription.notes || 'No additional note recorded.'],
+                        ['Medication estimate', costLines.map(({ medicine, quantity, unitPrice, total: lineTotal }) => `${medicine.generic_name || 'Medication'} ${medicine.strength || ''} (${medicine.form || ''}) · Qty ${quantity} · ${formatCurrency(unitPrice)} each · ${formatCurrency(lineTotal)}`).join('\n')],
+                        ['Estimated total', formatCurrency(total)],
+                        ['Notice', 'Cost estimate only. This is not a receipt or proof of payment. External purchase does not authorize dispensing from OneMed pharmacy stock.']
+                    ]
+                }).catch((error) => notifyPersistenceFailure('print medication cost estimate', error));
+            };
 
             const playPharmacyOrderChime = () => {
                 const audio = pharmacyAudioContext.current;
@@ -618,6 +716,23 @@ const AssetMaintenancePanel = () => {
                 });
             };
 
+            useEffect(() => {
+                if (!client || !prescriptionIds.length) return undefined;
+                let active = true;
+                const refreshStatuses = async () => {
+                    const { data, error } = await client.rpc('get_pharmacy_prescription_invoice_status', { p_prescription_ids: prescriptionIds });
+                    if (!active || error) return;
+                    setPharmacyInvoices(Object.fromEntries((data || []).map((invoice) => [invoice.prescription_id, invoice])));
+                };
+                refreshStatuses();
+                const timer = window.setInterval(refreshStatuses, 15_000);
+                return () => { active = false; window.clearInterval(timer); };
+            }, [client, prescriptionKey]);
+
+            useEffect(() => {
+                if (activeTab === 'sales') loadPharmacySales();
+            }, [activeTab, facilityId]);
+
             const enablePharmacyOrderSound = async () => {
                 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContextClass) {
@@ -636,6 +751,34 @@ const AssetMaintenancePanel = () => {
                     }
                 } catch {
                     setQueueMessage('Browser audio is blocked. Allow sound for this site, then enable pharmacy order sounds again.');
+                }
+            };
+
+            const attachPrescriptionInvoice = async (prescription) => {
+                if (!client) return setQueueMessage('The billing service is unavailable. No invoice was created.');
+                setInvoiceBusyId(prescription.id);
+                setQueueMessage('');
+                try {
+                    const { data, error } = await client.rpc('create_pharmacy_prescription_invoice', { p_prescription_id: prescription.id });
+                    if (error) throw error;
+                    if (!data?.invoice_id) throw new Error('The pharmacy invoice was not returned.');
+                    setPharmacyInvoices((current) => ({
+                        ...current,
+                        [prescription.id]: {
+                            prescription_id: prescription.id,
+                            invoice_id: data.invoice_id,
+                            invoice_number: data.invoice_number,
+                            status: data.status,
+                            total: data.total,
+                            paid: data.paid,
+                            balance: data.balance
+                        }
+                    }));
+                    setQueueMessage(`Invoice ${data.invoice_number} attached to the patient account for payment and Accounts verification.`);
+                } catch (error) {
+                    setQueueMessage(error?.message || 'The pharmacy invoice could not be attached.');
+                } finally {
+                    setInvoiceBusyId('');
                 }
             };
 
@@ -861,8 +1004,9 @@ const AssetMaintenancePanel = () => {
 
             const tabs = [
                 { id: 'dispensary', label: 'Dispensary' },
-                { id: 'inventory', label: 'Inventory' },
-                { id: 'prescriptions', label: 'Prescriptions' },
+                { id: 'store', label: 'Store' },
+                { id: 'prescriptions', label: 'Prescription History' },
+                { id: 'sales', label: 'Sales' },
                 { id: 'purchase', label: 'Purchase Orders' },
             ];
             const inventoryValue = inventory.reduce(
@@ -878,11 +1022,11 @@ const AssetMaintenancePanel = () => {
                 return !Number.isNaN(expiry.valueOf()) && expiry >= today && expiry <= threeMonths;
             }).length;
 
-            const handleAddStock = () => window.dispatchEvent(new CustomEvent('onemed:navigate', { detail: 'inventory' }));
+            const handleAddStock = () => setActiveTab('store');
 
             const focusInventorySearch = (query = '') => {
                 if (query) setSearchQuery(query);
-                setActiveTab('inventory');
+                setActiveTab('store');
                 window.requestAnimationFrame(() => document.getElementById('pharmacy-inventory-search')?.focus());
             };
 
@@ -924,6 +1068,10 @@ const AssetMaintenancePanel = () => {
 
             const handleDispense = async (prescription) => {
                 if (!client) return notifyPersistenceFailure('dispense medication');
+                const invoice = pharmacyInvoices[prescription.id];
+                if (!invoice || invoice.status !== 'paid' || Number(invoice.balance) > 0) {
+                    return setStockMessage('Accounts must verify full payment on the attached pharmacy invoice before this prescription can be dispensed.');
+                }
                 if (!safetyChecksReady) return setStockMessage('Dispensing is paused until medication interaction and dose checks are active.');
                 setDispensing(true);
                 setStockMessage('');
@@ -952,6 +1100,10 @@ const AssetMaintenancePanel = () => {
 
             const handleVerifyControlledDispense = async (approval) => {
                 if (!client) return notifyPersistenceFailure('verify controlled medicine dispense');
+                const invoice = pharmacyInvoices[approval.prescription_id];
+                if (!invoice || invoice.status !== 'paid' || Number(invoice.balance) > 0) {
+                    return setStockMessage('Accounts must verify full payment before the independent controlled-medicine verification can dispense this order.');
+                }
                 if (!safetyChecksReady) return setStockMessage('Verification is paused until medication interaction and dose checks are active.');
                 setDispensing(true);
                 try {
@@ -1008,15 +1160,26 @@ const AssetMaintenancePanel = () => {
                                         { key: 'patient', title: 'Patient', render: (row) => {
                                             return patientNames[row.patientId] || 'Patient record';
                                         }},
+                                        { key: 'doctor', title: 'Requested by', render: (row) => staffNames[row.doctorId] || 'Clinical staff' },
                                         { key: 'diagnosis', title: 'Diagnosis' },
                                         { key: 'medications', title: 'Structured items', render: (row) => (prescriptionItems[row.id] || []).map((item) => `${item.formulary_items?.generic_name || item.formulary_item_id} ${item.formulary_items?.strength || ''} · ${item.quantity} · FEFO`).join('; ') || (prescriptionItemsReady ? 'Missing structured medication details' : 'Loading medication details…') },
+                                        { key: 'payment', title: 'Payment', render: (row) => {
+                                            const invoice = pharmacyInvoices[row.id];
+                                            if (!invoice) return <span className="text-amber-800">Bill not attached</span>;
+                                            return <span className={invoice.status === 'paid' && Number(invoice.balance) <= 0 ? 'font-medium text-emerald-700' : 'text-amber-800'}>{invoice.invoice_number} · {invoice.status} · Due {formatCurrency(invoice.balance)}</span>;
+                                        }},
                                         { key: 'status', title: 'Status', render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'default'}>{row.status}</Badge> }
                                     ]}
                                     data={prescriptions.filter((prescription) => prescription.status === 'active')}
                                     loading={prescriptionsLoading && prescriptions.length === 0}
                                     emptyMessage="No active prescriptions are waiting in this pharmacy queue."
                                 actions={(row) => (
-                                        canManageInventory && <Button disabled={dispensing || !safetyChecksReady || !prescriptionItemsReady || !(prescriptionItems[row.id] || []).length} variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>{!prescriptionItemsReady ? 'Loading…' : !(prescriptionItems[row.id] || []).length ? 'Details needed' : 'Dispense'}</Button>
+                                        <div className="flex flex-wrap gap-1">
+                                            <Button variant="secondary" size="sm" onClick={() => openPatientPrescriptionHistory(row)}>Patient history</Button>
+                                            <Button variant="secondary" size="sm" disabled={!prescriptionItemsReady || !(prescriptionItems[row.id] || []).length} onClick={() => printPrescriptionCostEstimate(row)}>Print cost</Button>
+                                            {canManageInventory && !pharmacyInvoices[row.id] && <Button variant="secondary" size="sm" disabled={invoiceBusyId === row.id || !prescriptionItemsReady || !(prescriptionItems[row.id] || []).length} onClick={() => attachPrescriptionInvoice(row)}>{invoiceBusyId === row.id ? 'Attaching…' : 'Attach bill'}</Button>}
+                                            {canManageInventory && <Button disabled={dispensing || !safetyChecksReady || !prescriptionItemsReady || !(prescriptionItems[row.id] || []).length || pharmacyInvoices[row.id]?.status !== 'paid' || Number(pharmacyInvoices[row.id]?.balance) > 0} variant="primary" size="sm" icon={Icons.Check} onClick={() => handleDispense(row)}>Dispense</Button>}
+                                        </div>
                                     )}
                                 />
                                 {prescriptions.length < prescriptionsTotal && <div className="mt-3 flex justify-center"><Button variant="secondary" disabled={prescriptionsLoading} onClick={loadMorePrescriptions}>{prescriptionsLoading ? 'Loading…' : `Load more prescriptions (${prescriptions.length} of ${prescriptionsTotal})`}</Button></div>}
@@ -1051,7 +1214,7 @@ const AssetMaintenancePanel = () => {
                         </div>
                     )}
 
-                    {activeTab === 'inventory' && (
+                    {activeTab === 'store' && (
                         <Card>
                             <div className="mb-4">
                                 <SearchBar
@@ -1120,6 +1283,32 @@ const AssetMaintenancePanel = () => {
                         </Card>
                     )}
 
+                    {activeTab === 'sales' && (
+                        <Card title="Pharmacy sales" subtitle="Read-only totals from Accounts-verified pharmacy payments and posted refunds. Amounts are not editable here.">
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm text-slate-500">{salesSummary?.as_of_date ? `As of ${formatDate(salesSummary.as_of_date)} · Africa/Lagos` : 'Choose Refresh to load the latest verified sales.'}</p>
+                                <Button variant="secondary" icon={Icons.RefreshCw} disabled={salesLoading} onClick={loadPharmacySales}>{salesLoading ? 'Refreshing…' : 'Refresh sales'}</Button>
+                            </div>
+                            {salesMessage && <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">{salesMessage}</p>}
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {[['Today', salesSummary?.today], ['This month', salesSummary?.month]].map(([label, period]) => (
+                                    <section key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-5" aria-label={`${label} pharmacy sales`}>
+                                        <h3 className="font-semibold text-slate-900">{label}</h3>
+                                        {salesLoading && !period ? <p className="mt-3 text-sm text-slate-500">Loading verified totals…</p> : period ? (
+                                            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                                                <dt className="text-slate-600">Confirmed payments</dt><dd className="text-right font-medium text-slate-900">{formatCurrency(period.paid)}</dd>
+                                                <dt className="text-slate-600">Refunds</dt><dd className="text-right font-medium text-slate-900">{formatCurrency(period.refunded)}</dd>
+                                                <dt className="border-t border-slate-200 pt-2 font-semibold text-slate-900">Net sales</dt><dd className="border-t border-slate-200 pt-2 text-right font-semibold text-slate-900">{formatCurrency(period.net)}</dd>
+                                                <dt className="text-slate-600">Verified payments</dt><dd className="text-right text-slate-800">{Number(period.payments || 0)}</dd>
+                                            </dl>
+                                        ) : <p className="mt-3 text-sm text-slate-500">No verified sales data loaded.</p>}
+                                    </section>
+                                ))}
+                            </div>
+                            <p className="mt-4 text-xs text-slate-500">Sales totals include pharmacy invoices only. Payment submissions awaiting Accounts review are excluded.</p>
+                        </Card>
+                    )}
+
                     {activeTab === 'purchase' && (
                             <Card title="Purchase Orders">
                             <div className="text-center py-12">
@@ -1129,6 +1318,44 @@ const AssetMaintenancePanel = () => {
                             </div>
                         </Card>
                     )}
+
+                    <Modal
+                        isOpen={patientHistoryOpen}
+                        onClose={() => setPatientHistoryOpen(false)}
+                        title={`Prescription history · ${patientHistory.patientName}`}
+                        size="xl"
+                    >
+                        <p className="mb-4 text-sm text-slate-600">Past orders, prescribers, medication directions, and doctors’ notes for this patient.</p>
+                        {patientHistoryError && <p className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{patientHistoryError}</p>}
+                        {patientHistoryLoading ? <p className="text-sm text-slate-500">Loading patient history…</p> : patientHistory.prescriptions.length ? (
+                            <div className="space-y-4">
+                                {patientHistory.prescriptions.map((historyRx) => {
+                                    const author = patientHistory.staffNames[historyRx.doctor_id] || 'Clinical staff';
+                                    const medicineDetails = (historyRx.prescription_items || []).map((item) => {
+                                        const medicine = item.formulary_items || {};
+                                        return `${medicine.generic_name || 'Medication'} ${medicine.strength || ''} (${medicine.form || ''}) · ${item.dose} ${item.dose_unit || ''} · ${item.frequency} · ${item.route} · Qty ${item.quantity}${item.duration ? ` · ${item.duration}` : ''}${item.instructions ? ` · ${item.instructions}` : ''}`;
+                                    }).join('\n') || (historyRx.medications || []).map((item) => `${item.name || 'Medication'} · Qty ${item.quantity || 'not recorded'}`).join('\n') || 'No medication details recorded.';
+                                    return (
+                                        <article key={historyRx.id} className="rounded-xl border border-slate-200 p-4">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div>
+                                                    <h3 className="font-semibold text-slate-900">{formatDate(historyRx.prescription_date || historyRx.created_at)} · {historyRx.status}</h3>
+                                                    <p className="mt-1 text-sm text-slate-600">Prescriber: {author} · Diagnosis: {historyRx.diagnosis || 'Not recorded'}</p>
+                                                </div>
+                                                <Button size="sm" variant="secondary" onClick={() => window.printEMRDocument({
+                                                    type: 'prescription', id: historyRx.id, patientId: historyRx.patient_id,
+                                                    title: 'Prescription and Clinical Note', author,
+                                                    fields: [['Prescriber', author], ['Date', formatDate(historyRx.prescription_date || historyRx.created_at)], ['Diagnosis', historyRx.diagnosis], ['Medication details', medicineDetails], ['Doctor’s note', historyRx.notes || 'No additional note recorded.'], ['Status', historyRx.status]]
+                                                }).catch((error) => notifyPersistenceFailure('print prescription history', error))}>Print details</Button>
+                                            </div>
+                                            <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800"><strong>Medicines and directions:</strong>{'\n'}{medicineDetails}</p>
+                                            <p className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><strong>Doctor’s note:</strong>{'\n'}{historyRx.notes || 'No additional note recorded.'}</p>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        ) : !patientHistoryError ? <p className="text-sm text-slate-500">No past prescriptions were found for this patient.</p> : null}
+                    </Modal>
                 </div>
             );
         };
