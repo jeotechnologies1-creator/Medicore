@@ -24,6 +24,8 @@ Keep the script order in `index.html`, because each file deliberately uses the s
 
 ## Database migrations and staging deployment
 
+Production releases are automated by [the production continuous-deployment workflow](docs/deployment/production-continuous-deployment.md). It deploys only a successful `main`/`master` CI revision after the configured GitHub `production` environment approval; local or feature-branch work is never silently released to the EMR.
+
 `supabase/migrations/` is the only authoritative schema-change stream. Supabase applies timestamped migrations in order; do not apply migration SQL by hand or use the hosted SQL Editor. The old SQL snapshots are retained under [`supabase/legacy/`](supabase/legacy/README.md) for reference only.
 
 Link this checkout to the staging project and push the pending migrations there first:
