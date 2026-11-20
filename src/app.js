@@ -123,6 +123,32 @@ import { getStoreValue, setStoreValue } from './js/store.js';
             }, [isAuthenticated, user?.id]);
 
             useEffect(() => {
+                if (!isAuthenticated || !['pharmacist', 'super_admin'].includes(user?.role)) return undefined;
+                const receivePharmacyOrder = (event) => {
+                    const detail = event.detail || {};
+                    if (!detail.prescriptionId || !detail.title || !detail.message) return;
+                    const notice = {
+                        id: `pharmacy-order-${detail.prescriptionId}`,
+                        type: 'pharmacy_order',
+                        title: detail.title,
+                        message: detail.message,
+                        timestamp: detail.createdAt || new Date().toISOString(),
+                        priority: detail.priority || 'medium',
+                        read: false,
+                        localOnly: true
+                    };
+                    setNotifications((current) => {
+                        if (current.some((item) => item.id === notice.id)) return current;
+                        const next = [notice, ...current];
+                        setStoreValue('notifications', next);
+                        return next;
+                    });
+                };
+                window.addEventListener('onemed:pharmacy-order', receivePharmacyOrder);
+                return () => window.removeEventListener('onemed:pharmacy-order', receivePharmacyOrder);
+            }, [isAuthenticated, user?.role]);
+
+            useEffect(() => {
                 setIsAuthenticated(Boolean(user));
                 if (!user) {
                     setNotifications([]);
@@ -162,8 +188,12 @@ import { getStoreValue, setStoreValue } from './js/store.js';
                         ]);
                         if (cancelled) return;
                         if (notificationResult?.data) {
-                            setStoreValue("notifications", normalizeNotifications(notificationResult.data));
-                            setNotifications(getStoreValue("notifications").slice());
+                            const serverNotices = normalizeNotifications(notificationResult.data);
+                            const localNotices = (getStoreValue('notifications') || []).filter((notice) => notice.localOnly);
+                            const serverIds = new Set(serverNotices.map((notice) => notice.id));
+                            const mergedNotices = [...localNotices.filter((notice) => !serverIds.has(notice.id)), ...serverNotices];
+                            setStoreValue("notifications", mergedNotices);
+                            setNotifications(mergedNotices.slice());
                         }
                         setDataLoad({ loading: false, failures: result?.failures || [] });
                         setDataVersion((value) => value + 1);
@@ -189,10 +219,13 @@ import { getStoreValue, setStoreValue } from './js/store.js';
                 const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
                 const client = window.OneMedSupabase?.getClient?.();
                 if (!ids.length) return null;
-                if (!client) return notifyPersistenceFailure('update notification status');
-                const { error } = await client.from('notifications').update({ read }).in('id', ids);
-                if (error) return notifyPersistenceFailure('update notification status', error);
                 const idSet = new Set(ids);
+                const serverIds = ids.filter((id) => !notifications.some((notification) => notification.id === id && notification.localOnly));
+                if (serverIds.length) {
+                    if (!client) return notifyPersistenceFailure('update notification status');
+                    const { error } = await client.from('notifications').update({ read }).in('id', serverIds);
+                    if (error) return notifyPersistenceFailure('update notification status', error);
+                }
                 const next = (getStoreValue("notifications") || []).map((notification) =>
                     idSet.has(notification.id) ? { ...notification, read } : notification
                 );
@@ -349,6 +382,7 @@ import { getStoreValue, setStoreValue } from './js/store.js';
                                 onNotificationClick={(notif) => {
                                     persistNotificationReadState(notif.id);
                                     if (notif.type === 'critical_lab_result') setActiveModule('laboratory');
+                                    if (notif.type === 'pharmacy_order') setActiveModule('pharmacy');
                                 }}
                                 onMarkAllNotificationsRead={() => persistNotificationReadState(notifications.filter((n) => !n.read).map((n) => n.id))}
                                 onLogout={handleLogout}

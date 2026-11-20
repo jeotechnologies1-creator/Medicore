@@ -583,6 +583,9 @@ const AssetMaintenancePanel = () => {
             const [controlledApprovals, setControlledApprovals] = useState([]);
             const [patientNames, setPatientNames] = useState({});
             const [staffNames, setStaffNames] = useState({});
+            const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
+            const announcedPrescriptionIds = useRef(new Set());
+            const pharmacyAudioContext = useRef(null);
             const [safetyChecksReady, setSafetyChecksReady] = useState(false);
             const [stockMessage, setStockMessage] = useState('');
             const [queueMessage, setQueueMessage] = useState('');
@@ -594,6 +597,105 @@ const AssetMaintenancePanel = () => {
             const patientIds = [...new Set(prescriptions.map((row) => row.patientId).filter(Boolean))];
             const doctorIds = [...new Set(prescriptions.map((row) => row.doctorId).filter(Boolean))];
             const directoryKey = `${patientIds.join(',')}|${doctorIds.join(',')}`;
+
+            const playPharmacyOrderChime = () => {
+                const audio = pharmacyAudioContext.current;
+                if (!audio || audio.state !== 'running') return;
+                const startAt = audio.currentTime;
+                [880, 1174].forEach((frequency, index) => {
+                    const offset = index * 0.14;
+                    const oscillator = audio.createOscillator();
+                    const gain = audio.createGain();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.value = frequency;
+                    gain.gain.setValueAtTime(0.0001, startAt + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.12, startAt + offset + 0.025);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.24);
+                    oscillator.connect(gain);
+                    gain.connect(audio.destination);
+                    oscillator.start(startAt + offset);
+                    oscillator.stop(startAt + offset + 0.25);
+                });
+            };
+
+            const enablePharmacyOrderSound = async () => {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) {
+                    setQueueMessage('This browser does not support pharmacy order alert sounds. The bell notification will still appear.');
+                    return;
+                }
+                try {
+                    const audio = pharmacyAudioContext.current?.state !== 'closed'
+                        ? pharmacyAudioContext.current
+                        : new AudioContextClass();
+                    pharmacyAudioContext.current = audio || new AudioContextClass();
+                    await pharmacyAudioContext.current.resume();
+                    if (pharmacyAudioContext.current.state === 'running') {
+                        setOrderSoundEnabled(true);
+                        playPharmacyOrderChime();
+                    }
+                } catch {
+                    setQueueMessage('Browser audio is blocked. Allow sound for this site, then enable pharmacy order sounds again.');
+                }
+            };
+
+            useEffect(() => {
+                if (!client || !facilityId || !['pharmacist', 'super_admin'].includes(user?.role)) return undefined;
+                let active = true;
+                const channel = client.channel(`onemed-pharmacy-orders-${user.id}-${facilityId}`)
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'prescriptions' }, async (payload) => {
+                        const prescriptionId = payload.new?.id;
+                        if (!active || !prescriptionId || announcedPrescriptionIds.current.has(prescriptionId)) return;
+                        announcedPrescriptionIds.current.add(prescriptionId);
+                        try {
+                            const { data: prescription, error: prescriptionError } = await client.from('prescriptions')
+                                .select('id,patient_id,doctor_id,priority,status,prescription_date,created_at,patients!inner(home_facility_id)')
+                                .eq('id', prescriptionId)
+                                .eq('patients.home_facility_id', facilityId)
+                                .maybeSingle();
+                            if (!active || prescriptionError || !prescription || prescription.status !== 'active') return;
+                            const [patientResult, requesterResult, itemsResult] = await Promise.all([
+                                client.from('patients').select('first_name,last_name').eq('id', prescription.patient_id).maybeSingle(),
+                                prescription.doctor_id
+                                    ? client.from('profiles').select('full_name,email').eq('id', prescription.doctor_id).maybeSingle()
+                                    : Promise.resolve({ data: null, error: null }),
+                                client.from('prescription_items')
+                                    .select('quantity,formulary_items(generic_name,strength,form)')
+                                    .eq('prescription_id', prescription.id)
+                            ]);
+                            if (!active) return;
+                            const patient = `${patientResult.data?.first_name || ''} ${patientResult.data?.last_name || ''}`.trim() || 'Patient record';
+                            const requester = requesterResult.data?.full_name || requesterResult.data?.email || 'Clinical staff';
+                            const medicines = (itemsResult.data || []).map((item) => {
+                                const medicine = item.formulary_items || {};
+                                return `${medicine.generic_name || 'Medication'}${medicine.strength ? ` ${medicine.strength}` : ''}${medicine.form ? ` (${medicine.form})` : ''} × ${item.quantity}`;
+                            });
+                            const medicationText = medicines.length ? medicines.join(', ') : 'Medication details are in the pharmacy queue';
+                            const noticeMessage = `Requested by ${requester}. Patient: ${patient}. Medicine: ${medicationText}.`;
+                            setPrescriptions((current) => current.some((row) => row.id === prescription.id)
+                                ? current
+                                : [{ ...prescription, patientId: prescription.patient_id, doctorId: prescription.doctor_id, prescriptionDate: prescription.prescription_date }, ...current]);
+                            setPrescriptionsTotal((current) => current + 1);
+                            window.dispatchEvent(new CustomEvent('onemed:pharmacy-order', {
+                                detail: {
+                                    prescriptionId: prescription.id,
+                                    title: 'New medication order',
+                                    message: noticeMessage,
+                                    priority: prescription.priority === 'emergency' ? 'urgent' : 'high',
+                                    createdAt: prescription.created_at || new Date().toISOString()
+                                }
+                            }));
+                            if (orderSoundEnabled) playPharmacyOrderChime();
+                        } catch {
+                            announcedPrescriptionIds.current.delete(prescriptionId);
+                        }
+                    })
+                    .subscribe();
+                return () => {
+                    active = false;
+                    client.removeChannel(channel);
+                };
+            }, [client, facilityId, user?.id, user?.role, orderSoundEnabled]);
 
             useEffect(() => {
                 setActiveTab(initialTab);
@@ -878,6 +980,7 @@ const AssetMaintenancePanel = () => {
                         </div>
                         <div className="flex gap-2">
                             {user?.role === 'super_admin' && <label className="text-sm text-slate-600">Facility<select className="ml-2 rounded-lg border border-slate-300 px-3 py-2" aria-label="Pharmacy facility" value={facilityId} onChange={(event) => setFacilityId(event.target.value)}><option value="">Select facility</option>{facilityOptions.map((facility) => <option key={facility.id} value={facility.id}>{facility.name} · {facility.code}</option>)}</select></label>}
+                            <Button variant={orderSoundEnabled ? 'secondary' : 'primary'} icon={Icons.Bell} onClick={enablePharmacyOrderSound}>{orderSoundEnabled ? 'Order sound on' : 'Enable order sound'}</Button>
                             <Button variant="secondary" icon={Icons.RefreshCw} disabled={inventoryRefreshing} onClick={refreshInventory}>{inventoryRefreshing ? 'Refreshing…' : 'Refresh inventory'}</Button>
                             <Button variant="secondary" icon={Icons.ScanLine} onClick={focusInventorySearch}>Scan / Enter Barcode</Button>
                             {canManageInventory && <Button variant="primary" icon={Icons.Plus} onClick={handleAddStock}>Manage Stock Ledger</Button>}
